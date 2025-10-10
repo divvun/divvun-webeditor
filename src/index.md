@@ -7,10 +7,11 @@ layout: layout.vto
   <div class="control-group">
     <label for="language-select">Language:</label>
     <select id="language-select">
-      <option value="se">Davvisámegiella (Northern Sami)</option>
-      <option value="sma">Åarjelsaemien (Southern Sami)</option>
-      <option value="smj">Julevsámegiella (Lule Sami)</option>
-      <option value="fao">Føroyskt (Faroese)</option>
+      <option value="se">Davvisámegiella (Northern sami)</option>
+      <option value="sma">Åarjelsaemien (Southern sami)</option>
+      <option value="smj">Julevsámegiella (Lule sami)</option>
+      <option value="smn">Anarâškielâ (Inari sami)</option>
+      <option value="sms">Nuõrttsääʹmǩiõll  (Skolt sami)</option>
     </select>
   </div>
   <div class="control-group">
