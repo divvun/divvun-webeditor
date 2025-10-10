@@ -22,11 +22,13 @@
         min-height: calc(100vh - 120px);
       }
       .header {
-        background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
-        color: white;
+        background: #f8f9fa;
+        color: #333;
         padding: 20px;
         display: flex;
         align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #e9ecef;
       }
       .logo {
         width: 250px;
@@ -36,6 +38,20 @@
       .header-content {
         flex: 1;
         text-align: center;
+      }
+      .search {
+        display: flex;
+        align-items: center;
+      }
+      .search form {
+        margin: 0;
+      }
+      .search-input {
+        padding: 8px 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+        width: 200px;
       }
       .header h1 {
         font-size: 2em;
@@ -1089,6 +1105,11 @@
         <h1>{{ title }}</h1>
         <p>{{ description }}</p>
       </div>
+      <div class="search">
+        <form action="https://www.google.com/search" method="get">
+          <input type="search" name="q" placeholder="Search Divvun..." class="search-input">
+        </form>
+      </div>
     </div>
     <div class="container">
       <div class="sidebar">
@@ -1307,6 +1328,12 @@
           statusText.textContent = "Ready";
         });
       }
+    </script>
+    <script>
+      document.querySelector('.search form').addEventListener('submit', function(e) {
+        const input = this.querySelector('input');
+        input.value = 'site:divvun.no ' + input.value;
+      });
     </script>
   </body>
 </html>
