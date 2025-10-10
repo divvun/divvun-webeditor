@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -12,7 +11,8 @@
         padding: 0;
       }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
         padding: 20px;
@@ -50,6 +50,18 @@
       .quill-editor {
         height: 320px;
       }
+
+      /* Quill error highlight */
+      .ql-editor .grammar-typo {
+        text-decoration: underline;
+        text-decoration-color: red;
+        text-decoration-style: wavy;
+      }
+      .ql-editor .grammar-other {
+        text-decoration: underline;
+        text-decoration-color: blue;
+        text-decoration-style: wavy;
+      }
       .status-bar {
         padding: 15px 20px;
         background: #f8f9fa;
@@ -70,7 +82,10 @@
         }
       }
     </style>
-    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet" />
+    <link
+      href="https://cdn.quilljs.com/1.3.7/quill.snow.css"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div class="container">
@@ -81,59 +96,101 @@
       {{ content }}
     </div>
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-    {% if title == "Quill Editor Demo" %}
+    <script src="quill-bridge.js"></script>
     <script>
-      const quill = new Quill("#editor", {
-        theme: "snow",
-      });
-
-      const checkBtn = document.getElementById("check-btn");
-      const clearBtn = document.getElementById("clear-btn");
-      const statusText = document.getElementById("status-text");
-      const errorCount = document.getElementById("error-count");
-      const languageSelect = document.getElementById("language-select");
-
-      async function checkGrammar(text, lang) {
-        if (!text.trim()) {
-          return { text, errs: [] };
-        }
-
-        const response = await fetch("https://api-giellalt.uit.no/grammar/" + lang, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ text }),
+      if (document.getElementById("editor")) {
+        const quill = QuillBridge.create("#editor", {
+          theme: "snow",
         });
 
-        if (!response.ok) {
-          throw new Error(`API request failed with status ${response.status}`);
+        quill.root.setAttribute("spellcheck", "false");
+
+        const checkBtn = document.getElementById("check-btn");
+        const clearBtn = document.getElementById("clear-btn");
+        const statusText = document.getElementById("status-text");
+        const errorCount = document.getElementById("error-count");
+        const languageSelect = document.getElementById("language-select");
+
+        async function checkGrammar(text, lang) {
+          if (!text.trim()) {
+            return { text, errs: [] };
+          }
+
+          const response = await fetch(
+            "https://api-giellalt.uit.no/grammar/" + lang,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ text }),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              `API request failed with status ${response.status}`
+            );
+          }
+
+          return await response.json();
         }
 
-        return await response.json();
-      }
+        function clearHighlights() {
+          const length = quill.getLength();
+          quill.formatText(0, length, "grammar-typo", false);
+          quill.formatText(0, length, "grammar-other", false);
+        }
 
-      checkBtn.addEventListener("click", async () => {
-        statusText.textContent = "Checking...";
-        const text = quill.getText();
-        const lang = languageSelect.value;
-        try {
-          const result = await checkGrammar(text, lang);
-          let count = result.errs?.length || 0;
-          errorCount.textContent = `${count} error${count !== 1 ? "s" : ""}`;
-          statusText.textContent = "Complete";
-        } catch (e) {
-          statusText.textContent = "Error";
+        function highlightErrors(errs) {
+          console.log("highlightErrors called with errs:", errs);
+          errs.forEach((err) => {
+            const start = err.start_index;
+            const len = err.end_index - start;
+            const isTypo =
+              err.error_code === "typo" ||
+              (err.title && err.title.toLowerCase().includes("typo"));
+            const format = isTypo ? "grammar-typo" : "grammar-other";
+            console.log("applying format", format, "at", start, "len", len);
+            quill.formatText(start, len, format, true);
+          });
+          console.log('HTML after highlighting:', quill.root.innerHTML);
+        }
+
+        checkBtn.addEventListener("click", async () => {
+          statusText.textContent = "Checking...";
+          const text = quill.getText();
+          const lang = languageSelect.value;
+          console.log(
+            "checking text:",
+            JSON.stringify(text),
+            "length:",
+            text.length,
+            "quill length:",
+            quill.getLength()
+          );
+          try {
+            clearHighlights();
+            const result = await checkGrammar(text, lang);
+            console.log("result:", result);
+            highlightErrors(result.errs);
+            let count = result.errs?.length || 0;
+            errorCount.textContent = `${count} error${count !== 1 ? "s" : ""}`;
+            statusText.textContent = "Complete";
+          } catch (e) {
+            console.error("error:", e);
+            statusText.textContent = "Error";
+            errorCount.textContent = "0 errors";
+          }
+        });
+
+        clearBtn.addEventListener("click", () => {
+          quill.setText("");
+          clearHighlights();
           errorCount.textContent = "0 errors";
-        }
-      });
-
-      clearBtn.addEventListener("click", () => {
-        quill.setText("");
-        errorCount.textContent = "0 errors";
-        statusText.textContent = "Ready";
-      });
+          statusText.textContent = "Ready";
+        });
+      }
     </script>
-    {% endif %}
   </body>
 </html>
