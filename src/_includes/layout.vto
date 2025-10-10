@@ -53,6 +53,15 @@
         font-size: 14px;
         width: 200px;
       }
+      .language-switcher {
+        margin-left: 20px;
+      }
+      .language-switcher select {
+        padding: 8px 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+      }
       .header h1 {
         font-size: 2em;
         margin-bottom: 10px;
@@ -1110,16 +1119,23 @@
           <input type="search" name="q" placeholder="Search Divvun..." class="search-input">
         </form>
       </div>
+      <div class="language-switcher">
+        <select id="lang-select">
+          <option value="nb">Norsk</option>
+          <option value="se">Davvisámegiella</option>
+          <option value="sma">Åarjelsaemie</option>
+        </select>
+      </div>
     </div>
     <div class="container">
       <div class="sidebar">
         <nav>
           <ul>
-            <li><a href="/">Divvuns forside</a></li>
-            <li><a href="/coop/">Coop</a></li>
-            <li><a href="/editor/">Grammar Checker</a></li>
-            <li><a href="/privacy/">Privacy</a></li>
-            <li><a href="/tos/">Terms of Service</a></li>
+            <li><a href="{{ url.includes('/se/') ? '/se/' : url.includes('/sma/') ? '/sma/' : '/' }}">Divvuns forside</a></li>
+            <li><a href="{{ url.includes('/se/') ? '/se/coop/' : url.includes('/sma/') ? '/sma/coop/' : '/coop/' }}">Coop</a></li>
+            <li><a href="{{ url.includes('/se/') ? '/se/editor/' : url.includes('/sma/') ? '/sma/editor/' : '/editor/' }}">Grammar Checker</a></li>
+            <li><a href="{{ url.includes('/se/') ? '/se/privacy/' : url.includes('/sma/') ? '/sma/privacy/' : '/privacy/' }}">Privacy</a></li>
+            <li><a href="{{ url.includes('/se/') ? '/se/tos/' : url.includes('/sma/') ? '/sma/tos/' : '/tos/' }}">Terms of Service</a></li>
           </ul>
         </nav>
         <img src="/static/uit-logo.svg" alt="UIT Logo" class="uit-logo">
@@ -1335,5 +1351,6 @@
         input.value = 'site:divvun.no ' + input.value;
       });
     </script>
+    <script src="/static/language-switcher.js"></script>
   </body>
 </html>
