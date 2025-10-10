@@ -52,13 +52,15 @@
       }
 
       /* Quill error highlight */
-      .ql-editor [style*="background-color: #ffebee"] {
-        text-decoration-style: wavy !important;
-        text-decoration-color: red !important;
+      .ql-editor .grammar-typo {
+        text-decoration: underline;
+        text-decoration-color: red;
+        text-decoration-style: wavy;
       }
-      .ql-editor [style*="background-color: #e3f2fd"] {
-        text-decoration-style: wavy !important;
-        text-decoration-color: blue !important;
+      .ql-editor .grammar-other {
+        text-decoration: underline;
+        text-decoration-color: blue;
+        text-decoration-style: wavy;
       }
       .status-bar {
         padding: 15px 20px;
@@ -96,6 +98,37 @@
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
     <script src="quill-bridge.js"></script>
     <script>
+      // Register custom Quill blots for error highlighting
+      const Inline = Quill.import('blots/inline');
+      class GrammarTypoBlot extends Inline {
+        static create(value) {
+          let node = super.create();
+          node.classList.add('grammar-typo');
+          return node;
+        }
+        static formats(node) {
+          return 'grammar-typo';
+        }
+      }
+      GrammarTypoBlot.blotName = 'grammar-typo';
+      GrammarTypoBlot.tagName = 'span';
+
+      class GrammarOtherBlot extends Inline {
+        static create(value) {
+          let node = super.create();
+          node.classList.add('grammar-other');
+          return node;
+        }
+        static formats(node) {
+          return 'grammar-other';
+        }
+      }
+      GrammarOtherBlot.blotName = 'grammar-other';
+      GrammarOtherBlot.tagName = 'span';
+
+      Quill.register(GrammarTypoBlot);
+      Quill.register(GrammarOtherBlot);
+
       if (document.getElementById("editor")) {
         const quill = new Quill("#editor", {
           theme: "snow",
@@ -136,8 +169,8 @@
 
         function clearHighlights() {
           const length = quill.getLength();
-          quill.formatText(0, length, "background", false);
-          quill.formatText(0, length, "underline", false);
+          quill.formatText(0, length, "grammar-typo", false);
+          quill.formatText(0, length, "grammar-other", false);
         }
 
         function highlightErrors(errs) {
@@ -148,10 +181,9 @@
             const isTypo =
               err.error_code === "typo" ||
               (err.title && err.title.toLowerCase().includes("typo"));
-            const bgColor = isTypo ? "#ffebee" : "#e3f2fd";
-            console.log("applying background", bgColor, "and underline at", start, "len", len);
-            quill.formatText(start, len, "background", bgColor);
-            quill.formatText(start, len, "underline", true);
+            const format = isTypo ? "grammar-typo" : "grammar-other";
+            console.log("applying format", format, "at", start, "len", len);
+            quill.formatText(start, len, format, true);
           });
           console.log('HTML after highlighting:', quill.root.innerHTML);
         }
