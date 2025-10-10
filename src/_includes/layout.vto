@@ -136,6 +136,28 @@
 
         quill.root.setAttribute("spellcheck", "false");
 
+        let debounceTimer;
+
+        quill.on('text-change', (delta, oldDelta, source) => {
+          if (source === 'user') {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+              const text = quill.getText();
+              const lang = languageSelect.value;
+              try {
+                clearHighlights();
+                const result = await checkGrammar(text, lang);
+                highlightErrors(result.errs);
+                let count = result.errs?.length || 0;
+                errorCount.textContent = `${count} error${count !== 1 ? "s" : ""}`;
+              } catch (e) {
+                console.error("error:", e);
+                errorCount.textContent = "0 errors";
+              }
+            }, 800);
+          }
+        });
+
         const checkBtn = document.getElementById("check-btn");
         const clearBtn = document.getElementById("clear-btn");
         const statusText = document.getElementById("status-text");
@@ -216,6 +238,7 @@
         });
 
         clearBtn.addEventListener("click", () => {
+          clearTimeout(debounceTimer);
           quill.setText("");
           clearHighlights();
           errorCount.textContent = "0 errors";
