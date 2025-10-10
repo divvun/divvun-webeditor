@@ -256,7 +256,6 @@
         }
 
         function highlightErrors(errs) {
-          console.log("highlightErrors called with errs:", errs);
           currentErrs = errs;
           errs.forEach((err) => {
             const start = err.start_index;
@@ -265,28 +264,17 @@
               err.error_code === "typo" ||
               (err.title && err.title.toLowerCase().includes("typo"));
             const format = isTypo ? "grammar-typo" : "grammar-other";
-            console.log("applying format", format, "at", start, "len", len);
             quill.formatText(start, len, format, true);
           });
-          console.log('HTML after highlighting:', quill.root.innerHTML);
         }
 
         checkBtn.addEventListener("click", async () => {
           statusText.textContent = "Checking...";
           const text = quill.getText();
           const lang = languageSelect.value;
-          console.log(
-            "checking text:",
-            JSON.stringify(text),
-            "length:",
-            text.length,
-            "quill length:",
-            quill.getLength()
-          );
           try {
             clearHighlights();
             const result = await checkGrammar(text, lang);
-            console.log("result:", result);
             highlightErrors(result.errs);
             let count = result.errs?.length || 0;
             errorCount.textContent = `${count} error${count !== 1 ? "s" : ""}`;

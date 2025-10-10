@@ -271,8 +271,6 @@ export class GrammarChecker {
       const errorCount = response.errs.length;
       this.updateStatus("Ready", false);
       this.updateErrorCount(errorCount);
-
-      console.log(`Grammar check completed. Found ${errorCount} errors.`);
     } catch (error) {
       console.error("Grammar check failed:", error);
       this.updateStatus("Error checking grammar", false);
@@ -300,10 +298,10 @@ export class GrammarChecker {
     // Robust formatting: try index-based formatting first; if that fails, fallback to text search
     const docText = this.editor.getText();
     const docLen = docText.length;
-    console.debug("highlightErrors: docLen", docLen, "errors", errors.length);
 
     errors.forEach((error, idx) => {
-      const start = typeof error.start_index === "number" ? error.start_index : null;
+      const start =
+        typeof error.start_index === "number" ? error.start_index : null;
       const end = typeof error.end_index === "number" ? error.end_index : null;
       const len = start !== null && end !== null ? Math.max(0, end - start) : 0;
       const isTypo =
@@ -314,7 +312,6 @@ export class GrammarChecker {
       let applied = false;
       if (start !== null && len > 0 && start < docLen) {
         try {
-          console.debug(`formatText attempt #${idx}`, { start, len, formatName });
           this.editor.formatText(start, len, formatName, true);
           applied = true;
         } catch (_err) {
@@ -328,20 +325,18 @@ export class GrammarChecker {
           if (needle.length > 0) {
             const foundIndex = docText.indexOf(needle);
             if (foundIndex !== -1) {
-              console.debug("fallback search hit", { needle, foundIndex, formatName });
-              this.editor.formatText(foundIndex, needle.length, formatName, true);
+              this.editor.formatText(
+                foundIndex,
+                needle.length,
+                formatName,
+                true
+              );
               applied = true;
-            } else {
-              console.debug("fallback search missed", { needle });
             }
           }
         } catch (_err) {
           // ignore
         }
-      }
-
-      if (!applied) {
-        console.debug("Could not apply formatting for error", { idx, error });
       }
     });
   }
