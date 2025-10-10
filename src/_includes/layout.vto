@@ -52,15 +52,13 @@
       }
 
       /* Quill error highlight */
-      .ql-editor .grammar-typo {
-        text-decoration: underline;
-        text-decoration-color: red;
-        text-decoration-style: wavy;
+      .ql-editor [style*="background-color: #ffebee"] {
+        text-decoration-style: wavy !important;
+        text-decoration-color: red !important;
       }
-      .ql-editor .grammar-other {
-        text-decoration: underline;
-        text-decoration-color: blue;
-        text-decoration-style: wavy;
+      .ql-editor [style*="background-color: #e3f2fd"] {
+        text-decoration-style: wavy !important;
+        text-decoration-color: blue !important;
       }
       .status-bar {
         padding: 15px 20px;
@@ -138,8 +136,8 @@
 
         function clearHighlights() {
           const length = quill.getLength();
-          quill.formatText(0, length, "grammar-typo", false);
-          quill.formatText(0, length, "grammar-other", false);
+          quill.formatText(0, length, "background", false);
+          quill.formatText(0, length, "underline", false);
         }
 
         function highlightErrors(errs) {
@@ -150,9 +148,10 @@
             const isTypo =
               err.error_code === "typo" ||
               (err.title && err.title.toLowerCase().includes("typo"));
-            const format = isTypo ? "grammar-typo" : "grammar-other";
-            console.log("applying format", format, "at", start, "len", len);
-            quill.formatText(start, len, format, true);
+            const bgColor = isTypo ? "#ffebee" : "#e3f2fd";
+            console.log("applying background", bgColor, "and underline at", start, "len", len);
+            quill.formatText(start, len, "background", bgColor);
+            quill.formatText(start, len, "underline", true);
           });
           console.log('HTML after highlighting:', quill.root.innerHTML);
         }
