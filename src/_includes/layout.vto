@@ -135,6 +135,7 @@
         });
 
         quill.root.setAttribute("spellcheck", "false");
+        quill.root.oncontextmenu = (e) => e.preventDefault();
 
         let debounceTimer;
 
