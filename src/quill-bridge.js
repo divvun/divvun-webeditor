@@ -12,25 +12,6 @@
     return;
   }
 
-  // Register a minimal inline blot for error highlighting
-  try {
-    const Inline = Q.import("blots/inline");
-    class GrammarTypoBlot extends Inline {
-      static blotName = "grammar-typo";
-      static className = "grammar-typo";
-      static tagName = "span";
-    }
-    class GrammarOtherBlot extends Inline {
-      static blotName = "grammar-other";
-      static className = "grammar-other";
-      static tagName = "span";
-    }
-    Q.register(GrammarTypoBlot);
-    Q.register(GrammarOtherBlot);
-  } catch (_e) {
-    // ignore if registration fails
-  }
-
   const bridge = {
     create(container, options) {
       const el =
