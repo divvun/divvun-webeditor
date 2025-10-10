@@ -1,7 +1,6 @@
 ---
 title: Divvun grammar and spell checker
 layout: layout.vto
-url: /editor.html
 ---
 
 <div class="controls">
