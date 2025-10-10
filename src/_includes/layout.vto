@@ -144,10 +144,26 @@
               const index = quill.getIndex(blot) + caret.offset;
               const err = currentErrs.find(e => e.start_index <= index && index < e.end_index);
               if (err && err.suggestions && err.suggestions.length > 0) {
-                showSuggestionsMenu(e.clientX, e.clientY, err.suggestions, (suggestion) => {
+                showSuggestionsMenu(e.clientX, e.clientY, err.suggestions, async (suggestion) => {
                   quill.formatText(err.start_index, err.end_index - err.start_index, err.error_code === 'typo' ? 'grammar-typo' : 'grammar-other', false);
                   quill.deleteText(err.start_index, err.end_index - err.start_index);
                   quill.insertText(err.start_index, suggestion);
+                  
+                  // Re-run grammar check immediately after correction to update error positions
+                  setTimeout(async () => {
+                    const text = quill.getText();
+                    const lang = languageSelect.value;
+                    try {
+                      clearHighlights();
+                      const result = await checkGrammar(text, lang);
+                      highlightErrors(result.errs);
+                      let count = result.errs?.length || 0;
+                      errorCount.textContent = `${count} error${count !== 1 ? "s" : ""}`;
+                    } catch (e) {
+                      console.error("error:", e);
+                      errorCount.textContent = "0 errors";
+                    }
+                  }, 100);
                 });
               }
             }
