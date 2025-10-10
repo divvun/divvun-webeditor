@@ -1,6 +1,5 @@
 ---
-title: Quill Editor Demo
-description: Advanced grammar and spell checking for Sami languages and Faroese
+title: Divvun grammar and spell checker
 layout: layout.vto
 url: /editor.html
 ---
