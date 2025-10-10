@@ -49,12 +49,10 @@ export class GrammarChecker {
   // DOM elements
   private editor: QuillBridgeInstance; // Quill instance
   private languageSelect: HTMLSelectElement;
-  private checkButton: HTMLButtonElement;
   private clearButton: HTMLButtonElement;
   private statusText: HTMLElement;
   private statusDisplay: HTMLElement;
   private errorCount: HTMLElement;
-  private testButtons: { [key: string]: HTMLButtonElement };
 
   constructor() {
     this.config = {
@@ -107,12 +105,6 @@ export class GrammarChecker {
       "status-display"
     ) as HTMLElement;
     this.errorCount = document.getElementById("error-count") as HTMLElement;
-
-    this.testButtons = {
-      user: document.getElementById("test-user") as HTMLButtonElement,
-      grammar: document.getElementById("test-grammar") as HTMLButtonElement,
-      mixed: document.getElementById("test-mixed") as HTMLButtonElement,
-    };
 
     // Populate language options from API and then wire up events
     this.populateLanguageOptions();
@@ -171,27 +163,9 @@ export class GrammarChecker {
       this.setLanguage(target.value as SupportedLanguage);
     });
 
-    // Manual check button
-    this.checkButton.addEventListener("click", () => {
-      this.checkGrammar();
-    });
-
     // Clear button
     this.clearButton.addEventListener("click", () => {
       this.clearEditor();
-    });
-
-    // Test buttons
-    this.testButtons.user.addEventListener("click", () => {
-      this.testUserExample();
-    });
-
-    this.testButtons.grammar.addEventListener("click", () => {
-      this.testGrammarErrors();
-    });
-
-    this.testButtons.mixed.addEventListener("click", () => {
-      this.testMixedErrors();
     });
 
     // Click outside to close tooltips
@@ -256,7 +230,6 @@ export class GrammarChecker {
 
     this.state.isChecking = true;
     this.updateStatus("Checking...", true);
-    this.checkButton.disabled = true;
 
     try {
       const response = await this.api.checkText(
@@ -279,7 +252,6 @@ export class GrammarChecker {
       );
     } finally {
       this.state.isChecking = false;
-      this.checkButton.disabled = false;
     }
   }
 
