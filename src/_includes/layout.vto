@@ -81,5 +81,59 @@
       {{ content }}
     </div>
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    {% if title == "Quill Editor Demo" %}
+    <script>
+      const quill = new Quill("#editor", {
+        theme: "snow",
+      });
+
+      const checkBtn = document.getElementById("check-btn");
+      const clearBtn = document.getElementById("clear-btn");
+      const statusText = document.getElementById("status-text");
+      const errorCount = document.getElementById("error-count");
+      const languageSelect = document.getElementById("language-select");
+
+      async function checkGrammar(text, lang) {
+        if (!text.trim()) {
+          return { text, errs: [] };
+        }
+
+        const response = await fetch("https://api-giellalt.uit.no/grammar/" + lang, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ text }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        return await response.json();
+      }
+
+      checkBtn.addEventListener("click", async () => {
+        statusText.textContent = "Checking...";
+        const text = quill.getText();
+        const lang = languageSelect.value;
+        try {
+          const result = await checkGrammar(text, lang);
+          let count = result.errs?.length || 0;
+          errorCount.textContent = `${count} error${count !== 1 ? "s" : ""}`;
+          statusText.textContent = "Complete";
+        } catch (e) {
+          statusText.textContent = "Error";
+          errorCount.textContent = "0 errors";
+        }
+      });
+
+      clearBtn.addEventListener("click", () => {
+        quill.setText("");
+        errorCount.textContent = "0 errors";
+        statusText.textContent = "Ready";
+      });
+    </script>
+    {% endif %}
   </body>
 </html>

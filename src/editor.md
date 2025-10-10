@@ -29,39 +29,3 @@ url: /editor.html
   </div>
   <div class="error-count" id="error-count">0 errors</div>
 </div>
-<script type="module">
-  import { checkGrammar } from "./api.ts";
-
-  const quill = new Quill("#editor", {
-    theme: "snow",
-  });
-
-  const checkBtn = document.getElementById("check-btn");
-  const clearBtn = document.getElementById("clear-btn");
-  const statusText = document.getElementById("status-text");
-  const errorCount = document.getElementById("error-count");
-  const languageSelect = document.getElementById("language-select");
-
-  checkBtn.addEventListener("click", async () => {
-    statusText.textContent = "Checking...";
-    const text = quill.getText();
-    const lang = languageSelect.value;
-    try {
-      const result = await checkGrammar(text, lang);
-      // Example: result.errors = [{offset, length, type}]
-      let count = result.errors?.length || 0;
-      errorCount.textContent = `${count} error${count !== 1 ? "s" : ""}`;
-      statusText.textContent = "Complete";
-      // Highlight errors in Quill (implement as needed)
-    } catch (e) {
-      statusText.textContent = "Error";
-      errorCount.textContent = "0 errors";
-    }
-  });
-
-  clearBtn.addEventListener("click", () => {
-    quill.setText("");
-    errorCount.textContent = "0 errors";
-    statusText.textContent = "Ready";
-  });
-</script>
