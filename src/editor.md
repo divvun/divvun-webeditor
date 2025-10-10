@@ -15,7 +15,6 @@ url: /editor.html
     </select>
   </div>
   <div class="control-group">
-    <button id="check-btn">Check Grammar</button>
     <button id="clear-btn">Clear</button>
   </div>
 </div>

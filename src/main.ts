@@ -99,9 +99,6 @@ export class GrammarChecker {
     this.languageSelect = document.getElementById(
       "language-select"
     ) as HTMLSelectElement;
-    this.checkButton = document.getElementById(
-      "check-btn"
-    ) as HTMLButtonElement;
     this.clearButton = document.getElementById(
       "clear-btn"
     ) as HTMLButtonElement;
