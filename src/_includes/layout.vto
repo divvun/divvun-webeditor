@@ -135,7 +135,65 @@
         });
 
         quill.root.setAttribute("spellcheck", "false");
-        quill.root.oncontextmenu = (e) => e.preventDefault();
+        quill.root.oncontextmenu = (e) => {
+          e.preventDefault();
+          const caret = document.caretPositionFromPoint(e.clientX, e.clientY);
+          if (caret) {
+            const blot = Quill.find(caret.offsetNode);
+            if (blot) {
+              const index = quill.getIndex(blot) + caret.offset;
+              const err = currentErrs.find(e => e.start_index <= index && index < e.end_index);
+              if (err && err.suggestions && err.suggestions.length > 0) {
+                showSuggestionsMenu(e.clientX, e.clientY, err.suggestions, (suggestion) => {
+                  quill.formatText(err.start_index, err.end_index - err.start_index, err.error_code === 'typo' ? 'grammar-typo' : 'grammar-other', false);
+                  quill.deleteText(err.start_index, err.end_index - err.start_index);
+                  quill.insertText(err.start_index, suggestion);
+                });
+              }
+            }
+          }
+        };
+
+        let currentErrs = [];
+
+        function showSuggestionsMenu(x, y, suggestions, onSelect) {
+          const existing = document.getElementById('suggestions-menu');
+          if (existing) existing.remove();
+          const menu = document.createElement('div');
+          menu.id = 'suggestions-menu';
+          menu.style.position = 'absolute';
+          menu.style.left = x + 'px';
+          menu.style.top = y + 'px';
+          menu.style.background = 'white';
+          menu.style.border = '1px solid #ccc';
+          menu.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+          menu.style.zIndex = '1000';
+          suggestions.forEach(s => {
+            const btn = document.createElement('button');
+            btn.textContent = s;
+            btn.style.display = 'block';
+            btn.style.width = '100%';
+            btn.style.padding = '5px 10px';
+            btn.style.border = 'none';
+            btn.style.background = 'none';
+            btn.style.cursor = 'pointer';
+            btn.onmouseover = () => btn.style.background = '#f0f0f0';
+            btn.onmouseout = () => btn.style.background = 'none';
+            btn.onclick = () => {
+              onSelect(s);
+              menu.remove();
+            };
+            menu.appendChild(btn);
+          });
+          document.body.appendChild(menu);
+          const close = (e) => {
+            if (!menu.contains(e.target)) {
+              menu.remove();
+              document.removeEventListener('click', close);
+            }
+          };
+          setTimeout(() => document.addEventListener('click', close), 0);
+        }
 
         let debounceTimer;
 
@@ -194,10 +252,12 @@
           const length = quill.getLength();
           quill.formatText(0, length, "grammar-typo", false);
           quill.formatText(0, length, "grammar-other", false);
+          currentErrs = [];
         }
 
         function highlightErrors(errs) {
           console.log("highlightErrors called with errs:", errs);
+          currentErrs = errs;
           errs.forEach((err) => {
             const start = err.start_index;
             const len = err.end_index - start;
