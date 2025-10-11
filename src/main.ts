@@ -271,7 +271,7 @@ export class GrammarChecker {
     const docText = this.editor.getText();
     const docLen = docText.length;
 
-    errors.forEach((error, idx) => {
+    errors.forEach((error) => {
       const start =
         typeof error.start_index === "number" ? error.start_index : null;
       const end = typeof error.end_index === "number" ? error.end_index : null;
