@@ -120,7 +120,7 @@ export class GrammarChecker {
     this.config = {
       language: "se",
       apiUrl: "https://api-giellalt.uit.no/grammar",
-      autoCheckDelay: 2000,
+      autoCheckDelay: 600,
       maxRetries: 3,
     };
 
