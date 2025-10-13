@@ -222,7 +222,6 @@ export class GrammarChecker {
       }, this.config.autoCheckDelay);
     });
 
-    
     // Handle paste events to position cursor at beginning when pasting into empty editor
     this.editor.root.addEventListener("paste", (_e: ClipboardEvent) => {
       console.debug("📋 Event: Paste detected");
@@ -242,7 +241,7 @@ export class GrammarChecker {
           this.editor.setSelection(0, 0);
         }, 10); // Small delay to let paste complete
       }
-    });    // Language selection
+    }); // Language selection
     this.languageSelect.addEventListener("change", (e) => {
       const target = e.target as HTMLSelectElement;
       this.setLanguage(target.value as SupportedLanguage);
@@ -421,16 +420,14 @@ export class GrammarChecker {
     this.updateStatus("Checking...", true);
 
     try {
-      const response = await this.api.checkText(
-        currentText,
-        this.config.language
-      );
+      // Split text into lines and process stepwise
+      const allErrors = await this.checkGrammarStepwise(currentText);
 
       this.state.lastCheckedContent = currentText;
-      this.state.errors = response.errs;
-      this.highlightErrors(response.errs);
+      this.state.errors = allErrors;
+      this.highlightErrors(allErrors);
 
-      const errorCount = response.errs.length;
+      const errorCount = allErrors.length;
       this.updateStatus("Ready", false);
       this.updateErrorCount(errorCount);
     } catch (error) {
@@ -442,6 +439,46 @@ export class GrammarChecker {
     } finally {
       this.state.isChecking = false;
     }
+  }
+
+  private async checkGrammarStepwise(text: string): Promise<DivvunError[]> {
+    // Split text by newlines, but keep the newlines in the text chunks
+    const lines = text.split("\n");
+    const allErrors: DivvunError[] = [];
+    let currentIndex = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Reconstruct the line with newline (except for the last line)
+      const lineWithNewline = i < lines.length - 1 ? line + "\n" : line;
+
+      // Only check non-empty lines
+      if (lineWithNewline.trim()) {
+        try {
+          const response = await this.api.checkText(
+            lineWithNewline,
+            this.config.language
+          );
+
+          // Adjust error indices to account for position in full text
+          const adjustedErrors = response.errs.map((error) => ({
+            ...error,
+            start_index: error.start_index + currentIndex,
+            end_index: error.end_index + currentIndex,
+          }));
+
+          allErrors.push(...adjustedErrors);
+        } catch (error) {
+          console.warn(`Error checking line ${i + 1}:`, error);
+          // Continue with next line if one line fails
+        }
+      }
+
+      // Move index forward by the length of this line including newline
+      currentIndex += lineWithNewline.length;
+    }
+
+    return allErrors;
   }
 
   private highlightErrors(errors: DivvunError[]): void {
