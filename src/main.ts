@@ -307,7 +307,41 @@ export class GrammarChecker {
         matchingError.suggestions &&
         matchingError.suggestions.length > 0
       ) {
-        this.showContextMenu(e.clientX, e.clientY, matchingError);
+        // Calculate Chrome-compatible coordinates
+        let menuX = e.clientX;
+        let menuY = e.clientY;
+
+        // Detect browser for positioning adjustments
+        const userAgent = globalThis.navigator?.userAgent || "";
+        const isChrome =
+          userAgent.includes("Chrome") && !userAgent.includes("Edg");
+
+        if (isChrome) {
+          // Chrome calculates coordinates differently - need much larger offset
+          menuX = e.clientX;
+          menuY = e.clientY + 50; // Much larger offset for Chrome
+
+          // If we have error element, use element position but with Chrome-specific offset
+          if (errorElement) {
+            const rect = errorElement.getBoundingClientRect();
+            menuX = rect.left + rect.width / 2;
+            // Use element's bottom position plus large margin for Chrome
+            menuY = rect.bottom + 20;
+          }
+        } else {
+          // Firefox and Safari: use element-based positioning when available
+          if (errorElement) {
+            const rect = errorElement.getBoundingClientRect();
+            menuX = rect.left + rect.width / 2;
+            menuY = rect.bottom + 5;
+          } else {
+            // Use mouse coordinates for Firefox/Safari
+            menuX = e.clientX;
+            menuY = e.clientY + 5;
+          }
+        }
+
+        this.showContextMenu(menuX, menuY, matchingError);
       }
     });
 
@@ -1011,9 +1045,19 @@ export class GrammarChecker {
     menu.className =
       "absolute bg-white border border-gray-300 rounded-md shadow-lg z-[1000] min-w-[120px] overflow-hidden";
 
+    // Adjust coordinates to prevent menu from appearing off-screen
+    // This helps with Chrome's different coordinate calculation
+    const viewportWidth =
+      globalThis.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight =
+      globalThis.innerHeight || document.documentElement.clientHeight;
+
+    const adjustedX = Math.max(10, Math.min(x, viewportWidth - 200));
+    const adjustedY = Math.max(10, Math.min(y, viewportHeight - 150));
+
     // Position the menu
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
+    menu.style.left = `${adjustedX}px`;
+    menu.style.top = `${adjustedY}px`;
 
     // Add title if available
     if (error.title) {
