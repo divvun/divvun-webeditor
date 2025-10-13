@@ -6,7 +6,9 @@ import {
   EditorContainer,
 } from "./components/index.ts";
 
-export const title = "Divvun grammar and spell checker";
+export const title = "Divvun Grammar and Spell Checker";
+export const description =
+  "Advanced grammar and spell checking for Sámi and other languages";
 export const layout = "layout.tsx";
 
 export default function GrammarEditor() {
