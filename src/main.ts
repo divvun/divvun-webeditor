@@ -1006,23 +1006,20 @@ export class GrammarChecker {
 
     const menu = document.createElement("div");
     menu.id = "grammar-context-menu";
-    menu.style.cssText = `
-      position: absolute;
-      left: ${x}px;
-      top: ${y}px;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-      z-index: 1000;
-      min-width: 120px;
-    `;
+
+    // Use Tailwind classes for menu styling
+    menu.className =
+      "absolute bg-white border border-gray-300 rounded-md shadow-lg z-[1000] min-w-[120px] overflow-hidden";
+
+    // Position the menu
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
 
     // Add title if available
     if (error.title) {
       const title = document.createElement("div");
-      title.style.cssText =
-        "padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #eee; font-size: 12px;";
+      title.className =
+        "px-3 py-2 font-semibold border-b border-gray-200 text-xs text-gray-700 bg-gray-50";
       title.textContent = error.title;
       menu.appendChild(title);
     }
@@ -1035,24 +1032,11 @@ export class GrammarChecker {
 
     suggestions.forEach((suggestion) => {
       const btn = document.createElement("button");
-      btn.style.cssText = `
-        display: block;
-        width: 100%;
-        padding: 8px 12px;
-        border: none;
-        background: none;
-        text-align: left;
-        cursor: pointer;
-        font-size: 14px;
-      `;
-      btn.textContent = suggestion;
 
-      btn.addEventListener("mouseover", () => {
-        btn.style.backgroundColor = "#f0f0f0";
-      });
-      btn.addEventListener("mouseout", () => {
-        btn.style.backgroundColor = "transparent";
-      });
+      // Use Tailwind classes for button styling
+      btn.className =
+        "block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors duration-150";
+      btn.textContent = suggestion;
 
       btn.addEventListener("click", () => {
         this.applySuggestion(error, suggestion);
