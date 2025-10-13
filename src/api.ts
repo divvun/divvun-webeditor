@@ -72,5 +72,5 @@ export async function checkGrammar(
   language: SupportedLanguage
 ): Promise<DivvunResponse> {
   const api = new DivvunAPI();
-  return api.checkText(text, language);
+  return await api.checkText(text, language);
 }
