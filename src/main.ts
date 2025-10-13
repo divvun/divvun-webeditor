@@ -222,7 +222,27 @@ export class GrammarChecker {
       }, this.config.autoCheckDelay);
     });
 
-    // Language selection
+    
+    // Handle paste events to position cursor at beginning when pasting into empty editor
+    this.editor.root.addEventListener("paste", (_e: ClipboardEvent) => {
+      console.debug("📋 Event: Paste detected");
+
+      // Check if editor is empty before paste
+      const currentText = this.editor.getText().trim();
+      const isEmpty = currentText === "";
+
+      if (isEmpty) {
+        console.debug(
+          "📋 Event: Pasting into empty editor, will position cursor at start"
+        );
+
+        // Let the paste happen, then position cursor at start
+        setTimeout(() => {
+          console.debug("📍 Cursor: Positioning at start after paste");
+          this.editor.setSelection(0, 0);
+        }, 10); // Small delay to let paste complete
+      }
+    });    // Language selection
     this.languageSelect.addEventListener("change", (e) => {
       const target = e.target as HTMLSelectElement;
       this.setLanguage(target.value as SupportedLanguage);
