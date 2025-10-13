@@ -222,13 +222,17 @@ export class GrammarChecker {
       }, this.config.autoCheckDelay);
     });
 
-    // Handle paste events to position cursor at beginning when pasting into empty editor
-    this.editor.root.addEventListener("paste", (_e: ClipboardEvent) => {
+    // Handle paste events for cursor positioning and intelligent checking
+    this.editor.root.addEventListener("paste", (e: ClipboardEvent) => {
       console.debug("📋 Event: Paste detected");
 
-      // Check if editor is empty before paste
-      const currentText = this.editor.getText().trim();
-      const isEmpty = currentText === "";
+      // Record cursor position before paste
+      const prePasteSelection = this.editor.getSelection();
+      const prePasteText = this.editor.getText();
+      const isEmpty = prePasteText.trim() === "";
+
+      console.debug("📋 Pre-paste cursor position:", prePasteSelection);
+      console.debug("📋 Pre-paste text length:", prePasteText.length);
 
       if (isEmpty) {
         console.debug(
@@ -239,7 +243,16 @@ export class GrammarChecker {
         setTimeout(() => {
           console.debug("📍 Cursor: Positioning at start after paste");
           this.editor.setSelection(0, 0);
-        }, 10); // Small delay to let paste complete
+        }, 10);
+      } else if (prePasteSelection) {
+        // For non-empty editor, record paste context for intelligent checking
+        setTimeout(() => {
+          this.handleIntelligentPasteCheck(
+            prePasteSelection,
+            prePasteText,
+            e.clipboardData?.getData("text") || ""
+          );
+        }, 50); // Allow paste to complete
       }
     }); // Language selection
     this.languageSelect.addEventListener("change", (e) => {
@@ -416,6 +429,237 @@ export class GrammarChecker {
         // ignore
       }
     });
+  }
+
+  private async handleIntelligentPasteCheck(
+    prePasteSelection: { index: number; length: number },
+    prePasteText: string,
+    pastedContent: string
+  ): Promise<void> {
+    try {
+      // Get current text after paste
+      const postPasteText = this.editor.getText();
+      const postPasteSelection = this.editor.getSelection();
+
+      console.debug("📋 Intelligent paste check:");
+      console.debug("  Pre-paste cursor:", prePasteSelection);
+      console.debug("  Post-paste cursor:", postPasteSelection);
+      console.debug("  Pasted content length:", pastedContent.length);
+
+      // Calculate paste boundaries
+      const pasteStartIndex = prePasteSelection.index;
+      const replacedLength = prePasteSelection.length; // Length of selected text that was replaced
+      const actualPastedLength = pastedContent.length;
+
+      console.debug("  Paste start index:", pasteStartIndex);
+      console.debug("  Replaced length:", replacedLength);
+      console.debug("  Actual pasted length:", actualPastedLength);
+
+      // Calculate net length change
+      const lengthDifference = actualPastedLength - replacedLength;
+
+      console.debug("  Net length change:", lengthDifference);
+
+      // Determine which lines need checking
+      const linesToCheck = this.calculateAffectedLines(
+        pasteStartIndex,
+        actualPastedLength,
+        prePasteText,
+        postPasteText
+      );
+
+      console.debug("  Lines to check:", linesToCheck);
+
+      // Perform intelligent checking
+      await this.checkAffectedLinesOnly(
+        linesToCheck,
+        pasteStartIndex,
+        lengthDifference,
+        postPasteText
+      );
+    } catch (error) {
+      console.error(
+        "Intelligent paste check failed, falling back to full check:",
+        error
+      );
+      // Fallback to full check
+      this.state.lastCheckedContent = "";
+      this.checkGrammar();
+    }
+  }
+
+  private calculateAffectedLines(
+    pasteStartIndex: number,
+    pastedLength: number,
+    prePasteText: string,
+    postPasteText: string
+  ): { startLine: number; endLine: number; needsIndexAdjustment: boolean } {
+    // Find which lines contain the paste
+    const preLines = prePasteText.split("\n");
+    const postLines = postPasteText.split("\n");
+
+    // Find the line where paste started
+    let currentIndex = 0;
+    let startLine = 0;
+
+    for (let i = 0; i < preLines.length; i++) {
+      const lineLength = preLines[i].length + (i < preLines.length - 1 ? 1 : 0); // +1 for newline
+      if (currentIndex + lineLength > pasteStartIndex) {
+        startLine = i;
+        break;
+      }
+      currentIndex += lineLength;
+    }
+
+    // Find the line where paste ended
+    const pasteEndIndex = pasteStartIndex + pastedLength;
+    currentIndex = 0;
+    let endLine = startLine;
+
+    for (let i = 0; i < postLines.length; i++) {
+      const lineLength =
+        postLines[i].length + (i < postLines.length - 1 ? 1 : 0);
+      if (currentIndex + lineLength >= pasteEndIndex) {
+        endLine = i;
+        break;
+      }
+      currentIndex += lineLength;
+    }
+
+    // Include one line before and after for context (if they exist)
+    const contextStartLine = Math.max(0, startLine - 1);
+    const contextEndLine = Math.min(postLines.length - 1, endLine + 1);
+
+    return {
+      startLine: contextStartLine,
+      endLine: contextEndLine,
+      needsIndexAdjustment: true, // Lines after the paste need index adjustment
+    };
+  }
+
+  private async checkAffectedLinesOnly(
+    linesToCheck: {
+      startLine: number;
+      endLine: number;
+      needsIndexAdjustment: boolean;
+    },
+    pasteStartIndex: number,
+    lengthDifference: number,
+    fullText: string
+  ): Promise<void> {
+    if (this.state.isChecking) return;
+
+    this.state.isChecking = true;
+    this.updateStatus("Checking affected lines...", true);
+
+    try {
+      const lines = fullText.split("\n");
+      const newErrors: DivvunError[] = [];
+
+      // Step 1: Remove errors from affected lines (they'll be rechecked)
+      let currentIndex = 0;
+      const affectedStartIndex = this.getLineStartIndex(
+        linesToCheck.startLine,
+        lines
+      );
+      const affectedEndIndex = this.getLineStartIndex(
+        linesToCheck.endLine + 1,
+        lines
+      );
+
+      this.state.errors = this.state.errors.filter((error) => {
+        // Remove errors that fall within the affected range
+        return !(
+          error.start_index >= affectedStartIndex &&
+          error.start_index < affectedEndIndex
+        );
+      });
+
+      // Step 2: Adjust indices of errors that come after the paste
+      if (lengthDifference !== 0) {
+        this.state.errors = this.state.errors.map((error) => {
+          if (error.start_index > pasteStartIndex) {
+            return {
+              ...error,
+              start_index: error.start_index + lengthDifference,
+              end_index: error.end_index + lengthDifference,
+            };
+          }
+          return error;
+        });
+      }
+
+      // Step 3: Check only the affected lines
+      currentIndex = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const lineWithNewline = i < lines.length - 1 ? line + "\n" : line;
+
+        if (i >= linesToCheck.startLine && i <= linesToCheck.endLine) {
+          // Check this affected line
+          if (lineWithNewline.trim()) {
+            this.updateStatus(`Checking affected line ${i + 1}...`, true);
+
+            try {
+              const response = await this.api.checkText(
+                lineWithNewline,
+                this.config.language
+              );
+
+              // Adjust error indices to account for position in full text
+              const adjustedErrors = response.errs.map((error) => ({
+                ...error,
+                start_index: error.start_index + currentIndex,
+                end_index: error.end_index + currentIndex,
+              }));
+
+              newErrors.push(...adjustedErrors);
+
+              // Highlight errors for this line immediately
+              if (adjustedErrors.length > 0) {
+                this.highlightLineErrors(adjustedErrors);
+              }
+            } catch (error) {
+              console.warn(`Error checking affected line ${i + 1}:`, error);
+            }
+          }
+        }
+
+        currentIndex += lineWithNewline.length;
+      }
+
+      // Step 4: Add new errors and update state
+      this.state.errors.push(...newErrors);
+      this.state.lastCheckedContent = fullText;
+
+      // Re-highlight all errors to ensure proper display
+      this.highlightErrors(this.state.errors);
+
+      const errorCount = this.state.errors.length;
+      this.updateStatus("Ready", false);
+      this.updateErrorCount(errorCount);
+
+      console.log(
+        `Intelligent paste check complete. Checked lines ${
+          linesToCheck.startLine + 1
+        }-${linesToCheck.endLine + 1}. Total errors: ${errorCount}`
+      );
+    } catch (error) {
+      console.error("Affected lines check failed:", error);
+      this.updateStatus("Error checking grammar", false);
+      throw error;
+    } finally {
+      this.state.isChecking = false;
+    }
+  }
+
+  private getLineStartIndex(lineNumber: number, lines: string[]): number {
+    let index = 0;
+    for (let i = 0; i < Math.min(lineNumber, lines.length); i++) {
+      if (i > 0) index += 1; // Add 1 for newline character
+      index += lines[i].length;
+    }
+    return index;
   }
 
   async checkGrammar(): Promise<void> {
