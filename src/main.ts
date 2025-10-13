@@ -14,15 +14,31 @@ interface QuillBridgeInstance {
   getText(): string;
   on(event: string, handler: (...args: unknown[]) => void): void;
   getLength(): number;
-  formatText(index: number, len: number, format: string, value: unknown): void;
+  formatText(
+    index: number,
+    len: number,
+    format: string,
+    value: unknown,
+    source?: string
+  ): void;
   setText(text: string): void;
   deleteText(index: number, len: number): void;
   insertText(index: number, text: string): void;
   focus(): void;
   findBlot?(node: Node): unknown;
   getIndex?(blot: unknown): number;
-  getSelection?(): { index: number; length: number } | null;
-  setSelection?(index: number, length: number): void;
+  getSelection(): { index: number; length: number } | null;
+  setSelection(index: number, length?: number, source?: string): void;
+  _quill?: {
+    formatText: (
+      index: number,
+      length: number,
+      format: string,
+      value: unknown,
+      source?: string
+    ) => void;
+    setSelection: (index: number, length: number, source?: string) => void;
+  };
 }
 
 // Register custom Quill blots for error highlighting
@@ -335,61 +351,483 @@ export class GrammarChecker {
   }
 
   private highlightErrors(errors: DivvunError[]): void {
-    // Clear existing error formatting across the document
+    // Safari-specific approach: Completely disable all selection events during formatting
+    const savedSelection = this.saveCursorPosition();
+
+    // Detect Safari
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+    if (isSafari) {
+      // For Safari, use a more aggressive approach
+      this.performSafariSafeHighlighting(errors, savedSelection);
+    } else {
+      // Use standard approach for other browsers
+      requestAnimationFrame(() => {
+        this.performHighlightingOperations(errors, savedSelection);
+      });
+    }
+  }
+
+  private trySafariDOMIsolation(
+    errors: DivvunError[],
+    savedSelection: { index: number; length: number } | null
+  ): boolean {
     try {
-      const docLength = this.editor.getLength();
-      this.editor.formatText(0, docLength, "grammar-typo", false);
-      this.editor.formatText(0, docLength, "grammar-other", false);
-    } catch (_err) {
-      // ignore
+      const quillInstance = this.editor._quill as unknown as {
+        container?: HTMLElement;
+      };
+      const container = quillInstance?.container;
+
+      if (!container || !container.parentNode) {
+        return false;
+      }
+
+      // Create a placeholder element
+      const placeholder = document.createComment("quill-temp-placeholder");
+      const parentNode = container.parentNode;
+
+      // Save scroll position
+      const scrollTop =
+        document.documentElement.scrollTop || document.body.scrollTop;
+      const scrollLeft =
+        document.documentElement.scrollLeft || document.body.scrollLeft;
+
+      // Remove container from DOM temporarily
+      parentNode.insertBefore(placeholder, container);
+      parentNode.removeChild(container);
+
+      // Perform formatting operations while detached from DOM
+      this.performHighlightingOperations(errors, null);
+
+      // Reattach container to DOM
+      parentNode.insertBefore(container, placeholder);
+      parentNode.removeChild(placeholder);
+
+      // Restore scroll position
+      globalThis.scrollTo(scrollLeft, scrollTop);
+
+      // Restore cursor position after a brief delay
+      setTimeout(() => {
+        if (savedSelection) {
+          const docLength = this.editor.getLength();
+          const safeIndex = Math.min(
+            savedSelection.index,
+            Math.max(0, docLength - 1)
+          );
+          const safeLength = Math.min(
+            savedSelection.length,
+            Math.max(0, docLength - safeIndex)
+          );
+
+          if (this.editor.setSelection) {
+            this.editor.setSelection(safeIndex, safeLength, "silent");
+          }
+        }
+      }, 10);
+
+      return true;
+    } catch (err) {
+      console.warn("Safari DOM isolation failed, falling back:", err);
+      return false;
+    }
+  }
+
+  private performSafariSafeHighlighting(
+    errors: DivvunError[],
+    savedSelection: { index: number; length: number } | null
+  ): void {
+    // Safari-specific implementation - try DOM isolation approach first
+    if (this.trySafariDOMIsolation(errors, savedSelection)) {
+      return;
     }
 
-    if (!errors || errors.length === 0) return;
+    // Fallback to selection method override approach
+    const quillInstance = this.editor._quill as unknown as {
+      setSelection?: (index: number, length: number, source?: string) => void;
+      updateSelection?: (source?: string) => void;
+      scrollSelectionIntoView?: () => void;
+      container?: HTMLElement;
+    };
 
-    // Robust formatting: try index-based formatting first; if that fails, fallback to text search
-    const docText = this.editor.getText();
-    const docLen = docText.length;
+    if (!quillInstance) return;
 
-    errors.forEach((error) => {
-      const start =
-        typeof error.start_index === "number" ? error.start_index : null;
-      const end = typeof error.end_index === "number" ? error.end_index : null;
-      const len = start !== null && end !== null ? Math.max(0, end - start) : 0;
-      const isTypo =
-        error.error_code === "typo" ||
-        (error.title && String(error.title).toLowerCase().includes("typo"));
-      const formatName = isTypo ? "grammar-typo" : "grammar-other";
+    // Store original selection methods
+    const originalSetSelection = quillInstance.setSelection;
+    const originalUpdateSelection = quillInstance.updateSelection;
+    const originalScrollSelectionIntoView =
+      quillInstance.scrollSelectionIntoView;
 
-      let applied = false;
-      if (start !== null && len > 0 && start < docLen) {
+    let container: HTMLElement | undefined;
+    try {
+      // Completely disable selection updates during formatting
+      if (quillInstance.setSelection) {
+        quillInstance.setSelection = () => {};
+      }
+      if (quillInstance.updateSelection) {
+        quillInstance.updateSelection = () => {};
+      }
+      if (quillInstance.scrollSelectionIntoView) {
+        quillInstance.scrollSelectionIntoView = () => {};
+      }
+
+      // Disable all events that could trigger selection changes
+      container = quillInstance.container;
+      if (container) {
+        container.style.pointerEvents = "none";
+      }
+
+      // Perform formatting operations
+      this.performHighlightingOperations(errors, null);
+
+      // Wait for DOM to settle, then restore selection
+      setTimeout(() => {
         try {
-          this.editor.formatText(start, len, formatName, true);
-          applied = true;
+          // Restore original methods
+          if (originalSetSelection) {
+            quillInstance.setSelection = originalSetSelection;
+          }
+          if (originalUpdateSelection) {
+            quillInstance.updateSelection = originalUpdateSelection;
+          }
+          if (originalScrollSelectionIntoView) {
+            quillInstance.scrollSelectionIntoView =
+              originalScrollSelectionIntoView;
+          }
+
+          // Re-enable pointer events
+          if (container) {
+            container.style.pointerEvents = "";
+          }
+
+          // Force restore selection after methods are restored
+          if (savedSelection && originalSetSelection) {
+            const docLength = this.editor.getLength();
+            const safeIndex = Math.min(
+              savedSelection.index,
+              Math.max(0, docLength - 1)
+            );
+            const safeLength = Math.min(
+              savedSelection.length,
+              Math.max(0, docLength - safeIndex)
+            );
+
+            originalSetSelection.call(
+              quillInstance,
+              safeIndex,
+              safeLength,
+              "silent"
+            );
+          }
+        } catch (err) {
+          console.warn("Safari selection restoration failed:", err);
+        }
+      }, 0);
+    } catch (err) {
+      // Restore methods in case of error
+      if (originalSetSelection) {
+        quillInstance.setSelection = originalSetSelection;
+      }
+      if (originalUpdateSelection) {
+        quillInstance.updateSelection = originalUpdateSelection;
+      }
+      if (originalScrollSelectionIntoView) {
+        quillInstance.scrollSelectionIntoView = originalScrollSelectionIntoView;
+      }
+
+      if (container) {
+        container.style.pointerEvents = "";
+      }
+
+      throw err;
+    }
+  }
+
+  private performHighlightingOperations(
+    errors: DivvunError[],
+    savedSelection: { index: number; length: number } | null
+  ): void {
+    // Batch all operations together to minimize DOM thrashing
+    const quillInstance = this.editor._quill as unknown as {
+      history?: { options?: { delay?: number } };
+      setSelection?: (index: number, length: number, source?: string) => void;
+    };
+
+    let _originalDelay: number | undefined;
+    if (quillInstance?.history?.options) {
+      _originalDelay = quillInstance.history.options.delay;
+      quillInstance.history.options.delay = 0; // Disable history during formatting
+    }
+
+    try {
+      // Clear existing error formatting across the document
+      try {
+        const docLength = this.editor.getLength();
+        // Use silent mode to prevent cursor jumps during clearing
+        if (
+          this.editor._quill &&
+          typeof this.editor._quill.formatText === "function"
+        ) {
+          this.editor._quill.formatText(
+            0,
+            docLength,
+            "grammar-typo",
+            false,
+            "silent"
+          );
+          this.editor._quill.formatText(
+            0,
+            docLength,
+            "grammar-other",
+            false,
+            "silent"
+          );
+        } else {
+          this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
+          this.editor.formatText(
+            0,
+            docLength,
+            "grammar-other",
+            false,
+            "silent"
+          );
+        }
+      } catch (_err) {
+        // ignore
+      }
+
+      if (!errors || errors.length === 0) {
+        // Restore cursor position even when no errors
+        this.restoreCursorPositionImmediate(savedSelection);
+        return;
+      }
+
+      // Robust formatting: try index-based formatting first; if that fails, fallback to text search
+      const docText = this.editor.getText();
+      const docLen = docText.length;
+
+      errors.forEach((error) => {
+        const start =
+          typeof error.start_index === "number" ? error.start_index : null;
+        const end =
+          typeof error.end_index === "number" ? error.end_index : null;
+        const len =
+          start !== null && end !== null ? Math.max(0, end - start) : 0;
+        const isTypo =
+          error.error_code === "typo" ||
+          (error.title && String(error.title).toLowerCase().includes("typo"));
+        const formatName = isTypo ? "grammar-typo" : "grammar-other";
+
+        let applied = false;
+        if (start !== null && len > 0 && start < docLen) {
+          try {
+            // Use silent mode to prevent triggering selection changes during formatting
+            if (
+              this.editor._quill &&
+              typeof this.editor._quill.formatText === "function"
+            ) {
+              this.editor._quill.formatText(
+                start,
+                len,
+                formatName,
+                true,
+                "silent"
+              );
+            } else {
+              this.editor.formatText(start, len, formatName, true, "silent");
+            }
+            applied = true;
+          } catch (_err) {
+            applied = false;
+          }
+        }
+
+        if (!applied && error.error_text) {
+          try {
+            const needle = String(error.error_text).trim();
+            if (needle.length > 0) {
+              const foundIndex = docText.indexOf(needle);
+              if (foundIndex !== -1) {
+                // Use silent mode for fallback formatting as well
+                if (
+                  this.editor._quill &&
+                  typeof this.editor._quill.formatText === "function"
+                ) {
+                  this.editor._quill.formatText(
+                    foundIndex,
+                    needle.length,
+                    formatName,
+                    true,
+                    "silent"
+                  );
+                } else {
+                  this.editor.formatText(
+                    foundIndex,
+                    needle.length,
+                    formatName,
+                    true,
+                    "silent"
+                  );
+                }
+                applied = true;
+              }
+            }
+          } catch (_err) {
+            // ignore
+          }
+        }
+      });
+
+      // Force immediate cursor restoration
+      this.restoreCursorPositionImmediate(savedSelection);
+    } finally {
+      // Re-enable history if it was disabled
+      if (quillInstance?.history?.options && _originalDelay !== undefined) {
+        quillInstance.history.options.delay = _originalDelay; // Restore original delay
+      }
+    }
+  }
+
+  private restoreCursorPositionImmediate(
+    selection: { index: number; length: number } | null
+  ): void {
+    if (!selection) return;
+
+    try {
+      // Immediate restoration without delays
+      if (this.editor.setSelection) {
+        const docLength = this.editor.getLength();
+        const safeIndex = Math.min(selection.index, docLength - 1);
+        const safeLength = Math.min(selection.length, docLength - safeIndex);
+
+        // Use 'silent' source to prevent events
+        if (
+          this.editor._quill &&
+          typeof this.editor._quill.setSelection === "function"
+        ) {
+          this.editor._quill.setSelection(
+            Math.max(0, safeIndex),
+            Math.max(0, safeLength),
+            "silent"
+          );
+        } else {
+          this.editor.setSelection(
+            Math.max(0, safeIndex),
+            Math.max(0, safeLength),
+            "silent"
+          );
+        }
+      }
+    } catch (_err) {
+      // Fallback: try regular restoration with delay for Safari
+      this.restoreCursorPosition(selection);
+    }
+  }
+
+  private saveCursorPosition(): { index: number; length: number } | null {
+    try {
+      // Try to use Quill's getSelection method if available
+      if (this.editor.getSelection) {
+        return this.editor.getSelection();
+      }
+
+      // Fallback: use browser's selection API
+      const selection = (
+        globalThis as unknown as { getSelection?: () => Selection | null }
+      ).getSelection?.();
+      if (!selection || selection.rangeCount === 0) {
+        return null;
+      }
+
+      const range = selection.getRangeAt(0);
+
+      // Find the position within the editor using Quill's methods
+      if (this.editor.findBlot && this.editor.getIndex) {
+        try {
+          const startBlot = this.editor.findBlot(range.startContainer);
+          const endBlot = this.editor.findBlot(range.endContainer);
+
+          if (startBlot && endBlot) {
+            const startIndex =
+              this.editor.getIndex(startBlot) + range.startOffset;
+            const endIndex = this.editor.getIndex(endBlot) + range.endOffset;
+
+            return {
+              index: startIndex,
+              length: endIndex - startIndex,
+            };
+          }
         } catch (_err) {
-          applied = false;
+          // Fallback to simple position
         }
       }
 
-      if (!applied && error.error_text) {
+      return null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  private restoreCursorPosition(
+    selection: { index: number; length: number } | null
+  ): void {
+    if (!selection) return;
+
+    try {
+      // Use multiple restoration attempts with different delays for Safari
+      const isSafari = /^((?!chrome|android).)*safari/i.test(
+        navigator.userAgent
+      );
+
+      const restoreAttempt = (attempt: number = 0) => {
         try {
-          const needle = String(error.error_text).trim();
-          if (needle.length > 0) {
-            const foundIndex = docText.indexOf(needle);
-            if (foundIndex !== -1) {
-              this.editor.formatText(
-                foundIndex,
-                needle.length,
-                formatName,
-                true
-              );
-              applied = true;
+          if (this.editor.setSelection) {
+            // Ensure the selection is within document bounds
+            const docLength = this.editor.getLength();
+            const safeIndex = Math.min(selection.index, docLength - 1);
+            const safeLength = Math.min(
+              selection.length,
+              docLength - safeIndex
+            );
+
+            this.editor.setSelection(
+              Math.max(0, safeIndex),
+              Math.max(0, safeLength)
+            );
+
+            // Verify the selection was actually set correctly
+            if (isSafari && attempt < 3) {
+              setTimeout(() => {
+                const currentSelection = this.editor.getSelection();
+                if (!currentSelection || currentSelection.index !== safeIndex) {
+                  restoreAttempt(attempt + 1);
+                }
+              }, 5);
             }
           }
         } catch (_err) {
-          // ignore
+          // If setSelection fails, try to at least focus the editor
+          if (attempt === 0) {
+            try {
+              this.editor.focus();
+              if (isSafari) {
+                setTimeout(() => restoreAttempt(1), 10);
+              }
+            } catch (_focusErr) {
+              // ignore
+            }
+          }
         }
+      };
+
+      // Initial attempt with delay for Safari
+      if (isSafari) {
+        setTimeout(() => restoreAttempt(0), 15);
+      } else {
+        restoreAttempt(0);
       }
-    });
+    } catch (_err) {
+      // ignore
+    }
   }
 
   private showSuggestionTooltip(
@@ -600,6 +1038,15 @@ export class GrammarChecker {
       // Replace the text
       this.editor.deleteText(start, length);
       this.editor.insertText(start, suggestion);
+
+      // Set cursor position after the replaced text
+      const newCursorPosition = start + suggestion.length;
+      try {
+        this.editor.setSelection(newCursorPosition, 0);
+      } catch (_selErr) {
+        // If selection fails, at least focus the editor
+        this.editor.focus();
+      }
 
       // Clear state and re-check grammar
       this.state.lastCheckedContent = "";

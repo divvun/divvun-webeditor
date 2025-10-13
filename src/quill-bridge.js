@@ -26,17 +26,23 @@
         getText: () => quill.getText(),
         on: (ev, handler) => quill.on(ev, handler),
         getLength: () => quill.getLength(),
-        formatText: (i, len, format, value) =>
-          quill.formatText(i, len, format, value),
+        formatText: (i, len, format, value, source) =>
+          quill.formatText(i, len, format, value, source || "api"),
         setText: (text) => {
           quill.setText(text);
         },
         deleteText: (i, len) => quill.deleteText(i, len),
         insertText: (i, text) => quill.insertText(i, text),
         focus: () => quill.focus(),
+        // Selection methods for cursor position management
+        getSelection: () => quill.getSelection(),
+        setSelection: (index, length, source) =>
+          quill.setSelection(index, length || 0, source || "api"),
         // helpers using Quill internals
         findBlot: (node) => Q.find(node),
         getIndex: (blot) => quill.getIndex(blot),
+        // Expose the underlying Quill instance for advanced operations
+        _quill: quill,
       };
     },
   };
