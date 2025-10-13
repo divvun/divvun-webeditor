@@ -244,23 +244,63 @@ export class GrammarChecker {
     // Right-click context menu for error corrections
     this.editor.root.addEventListener("contextmenu", (e: MouseEvent) => {
       e.preventDefault();
+      e.stopPropagation();
 
-      // Use caretPositionFromPoint to find the error at the cursor position
-      const caret = (
-        document as unknown as {
-          caretPositionFromPoint?: (
-            x: number,
-            y: number
-          ) => { offsetNode: Node; offset: number } | null;
+      // Try multiple methods to find the error at the cursor position
+      let matchingError: DivvunError | undefined;
+
+      // Method 1: Check if right-clicking directly on an error element
+      const target = e.target as HTMLElement;
+      const errorElement = target.closest(
+        ".grammar-typo, .grammar-other"
+      ) as HTMLElement;
+
+      if (errorElement) {
+        // Get the text content and find matching error
+        const errorText = errorElement.textContent || "";
+        matchingError = this.state.errors.find(
+          (error) =>
+            error.error_text === errorText ||
+            (error.suggestions &&
+              error.suggestions.some((s) => s.includes(errorText)))
+        );
+      }
+
+      // Method 2: Try browser-specific caret position methods
+      if (!matchingError) {
+        let clickIndex: number | null = null;
+
+        // Try caretPositionFromPoint (Chrome/Edge)
+        const caretPos = (
+          document as unknown as {
+            caretPositionFromPoint?: (
+              x: number,
+              y: number
+            ) => { offsetNode: Node; offset: number } | null;
+          }
+        ).caretPositionFromPoint?.(e.clientX, e.clientY);
+
+        if (caretPos) {
+          clickIndex = this.getCaretPosition(caretPos);
+        } else {
+          // Try caretRangeFromPoint (Safari/Firefox)
+          const range = (
+            document as unknown as {
+              caretRangeFromPoint?: (x: number, y: number) => Range | null;
+            }
+          ).caretRangeFromPoint?.(e.clientX, e.clientY);
+
+          if (range) {
+            clickIndex = this.getRangePosition(range);
+          }
         }
-      ).caretPositionFromPoint?.(e.clientX, e.clientY);
-      if (!caret) return;
 
-      // Find the error at this position
-      const clickIndex = this.getCaretPosition(caret);
-      const matchingError = this.state.errors.find(
-        (err) => err.start_index <= clickIndex && clickIndex < err.end_index
-      );
+        if (clickIndex !== null) {
+          matchingError = this.state.errors.find(
+            (err) => err.start_index <= clickIndex && clickIndex < err.end_index
+          );
+        }
+      }
 
       if (
         matchingError &&
@@ -946,6 +986,19 @@ export class GrammarChecker {
     return 0;
   }
 
+  private getRangePosition(range: Range): number {
+    // Convert DOM range to Quill index (for Safari/Firefox)
+    try {
+      const blot = this.editor.findBlot?.(range.startContainer);
+      if (blot && this.editor.getIndex) {
+        return this.editor.getIndex(blot) + range.startOffset;
+      }
+    } catch (_err) {
+      // ignore
+    }
+    return 0;
+  }
+
   private showContextMenu(x: number, y: number, error: DivvunError): void {
     // Remove existing context menu
     const existing = document.getElementById("grammar-context-menu");
@@ -1011,14 +1064,31 @@ export class GrammarChecker {
 
     document.body.appendChild(menu);
 
-    // Close menu when clicking outside
-    const closeHandler = (e: Event) => {
-      if (!menu.contains(e.target as Node)) {
-        menu.remove();
-        document.removeEventListener("click", closeHandler);
-      }
-    };
-    setTimeout(() => document.addEventListener("click", closeHandler), 0);
+    // Close menu when clicking outside - use longer delay to prevent immediate closure
+    setTimeout(() => {
+      const closeHandler = (e: Event) => {
+        if (!menu.contains(e.target as Node)) {
+          menu.remove();
+          document.removeEventListener("click", closeHandler);
+          document.removeEventListener("contextmenu", closeHandler);
+        }
+      };
+
+      // Handle both click and contextmenu events for closing
+      document.addEventListener("click", closeHandler);
+      document.addEventListener("contextmenu", closeHandler);
+
+      // Also close on escape key
+      const escHandler = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          menu.remove();
+          document.removeEventListener("keydown", escHandler);
+          document.removeEventListener("click", closeHandler);
+          document.removeEventListener("contextmenu", closeHandler);
+        }
+      };
+      document.addEventListener("keydown", escHandler);
+    }, 150); // Longer delay to prevent immediate closure from contextmenu event
   }
 
   private applySuggestion(error: DivvunError, suggestion: string): void {
