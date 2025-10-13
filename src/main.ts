@@ -326,6 +326,16 @@ export class GrammarChecker {
         matchingError.suggestions &&
         matchingError.suggestions.length > 0
       ) {
+        // Determine which line this error is on
+        const lineInfo = this.getLineFromError(matchingError);
+        console.log(
+          `Right-click activated error on line ${lineInfo.lineNumber}: "${matchingError.error_text}"`
+        );
+        console.log(`Line content: "${lineInfo.lineContent}"`);
+        console.log(
+          `Error at position ${matchingError.start_index}-${matchingError.end_index}`
+        );
+
         // Calculate Chrome-compatible coordinates
         let menuX = e.clientX;
         let menuY = e.clientY;
@@ -1298,6 +1308,41 @@ export class GrammarChecker {
       this.state.lastCheckedContent = ""; // Force re-check
       this.checkGrammar();
     }
+  }
+
+  private getLineFromError(error: DivvunError): {
+    lineNumber: number;
+    lineContent: string;
+    positionInLine: number;
+  } {
+    const fullText = this.editor.getText();
+    const lines = fullText.split("\n");
+    let currentIndex = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineWithNewline = i < lines.length - 1 ? line + "\n" : line;
+      const lineStart = currentIndex;
+      const lineEnd = currentIndex + lineWithNewline.length;
+
+      // Check if the error falls within this line
+      if (error.start_index >= lineStart && error.start_index < lineEnd) {
+        return {
+          lineNumber: i + 1, // 1-based line numbering
+          lineContent: line,
+          positionInLine: error.start_index - lineStart,
+        };
+      }
+
+      currentIndex += lineWithNewline.length;
+    }
+
+    // Fallback if line not found
+    return {
+      lineNumber: 1,
+      lineContent: lines[0] || "",
+      positionInLine: error.start_index,
+    };
   }
 
   setText(text: string): void {
