@@ -2,6 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom layout styles to ensure gradient background and card design work */
+.min-h-screen {
+  min-height: 100vh;
+}
+.bg-gradient-to-br {
+  background: linear-gradient(to bottom right, #3b82f6, #8b5cf6, #ec4899);
+}
+.from-blue-500 {
+  --tw-gradient-from: #3b82f6;
+}
+.via-purple-500 {
+  --tw-gradient-via: #8b5cf6;
+}
+.to-pink-500 {
+  --tw-gradient-to: #ec4899;
+}
+.p-4 {
+  padding: 1rem;
+}
+.p-6 {
+  padding: 1.5rem;
+}
+.md\:p-8 {
+  @media (min-width: 768px) {
+    padding: 2rem;
+  }
+}
+.max-w-4xl {
+  max-width: 56rem;
+}
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+.bg-white {
+  background-color: white;
+}
+.bg-white\/95 {
+  background-color: rgba(255, 255, 255, 0.95);
+}
+.rounded-2xl {
+  border-radius: 1rem;
+}
+.shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+.overflow-hidden {
+  overflow: hidden;
+}
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+}
+
+.bg-gradient-to-r {
+  background: linear-gradient(to right, #10b981, #2563eb);
+}
+.from-green-500 {
+  --tw-gradient-from: #10b981;
+}
+.to-blue-600 {
+  --tw-gradient-to: #2563eb;
+}
+.text-white {
+  color: white;
+}
+.text-center {
+  text-align: center;
+}
+.text-3xl {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+}
+.font-bold {
+  font-weight: 700;
+}
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+.text-green-100 {
+  color: #dcfce7;
+}
+.opacity-90 {
+  opacity: 0.9;
+}
+
+.space-y-6 > * + * {
+  margin-top: 1.5rem;
+}
+
 /* Custom CSS for Quill editor and grammar highlighting */
 .quill-editor {
   min-height: 24rem;

@@ -1,6 +1,43 @@
-/** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./src/**/*.{html,js,ts,jsx,tsx}"],
+  content: [
+    "./src/**/*.{html,js,ts,jsx,tsx}",
+    "./src/_includes/**/*.{html,js,ts,jsx,tsx}",
+    "./_site/**/*.{html,js}",
+    "./src/**/*.page.tsx",
+  ],
+  safelist: [
+    // Layout classes
+    "min-h-screen",
+    "bg-gradient-to-br",
+    "from-blue-500",
+    "via-purple-500",
+    "to-pink-500",
+    "p-4",
+    "md:p-8",
+    "max-w-4xl",
+    "mx-auto",
+    "bg-white",
+    "rounded-2xl",
+    "shadow-2xl",
+    "overflow-hidden",
+    "backdrop-blur-sm",
+    "bg-white/95",
+    // Header classes
+    "bg-gradient-to-r",
+    "from-green-500",
+    "to-blue-600",
+    "text-white",
+    "p-6",
+    "text-center",
+    "text-3xl",
+    "font-bold",
+    "mb-2",
+    "text-green-100",
+    "opacity-90",
+    // Content classes
+    "space-y-6",
+    "editor-wrapper",
+  ],
   theme: {
     extend: {},
   },

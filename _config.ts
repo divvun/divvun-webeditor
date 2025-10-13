@@ -34,7 +34,7 @@ site.use(
   })
 );
 
-// Use Tailwind CSS for styling
+// Use Tailwind CSS for styling with external config
 site.use(tailwindcss());
 site.add("style.css");
 
