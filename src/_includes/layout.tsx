@@ -1,0 +1,115 @@
+export interface LayoutProps {
+  title: string;
+  description?: string;
+  children: unknown;
+}
+
+export default function Layout({ title, description, children }: LayoutProps) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>{title}</title>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                sans-serif;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              min-height: 100vh;
+              padding: 20px;
+            }
+            .container {
+              max-width: 900px;
+              margin: 0 auto;
+              background: white;
+              border-radius: 12px;
+              box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+              overflow: hidden;
+            }
+            .header {
+              background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+              color: white;
+              padding: 20px;
+              text-align: center;
+            }
+            .header h1 {
+              font-size: 2em;
+              margin-bottom: 10px;
+            }
+            .controls {
+              padding: 20px;
+              background: #f8f9fa;
+              border-bottom: 1px solid #e9ecef;
+              display: flex;
+              gap: 15px;
+              align-items: center;
+              flex-wrap: wrap;
+            }
+            .editor-container {
+              padding: 20px;
+            }
+            .quill-editor {
+              height: 70vh !important;
+            }
+
+            /* Quill error highlight */
+            .ql-editor .grammar-typo {
+              text-decoration: underline;
+              text-decoration-color: red;
+              text-decoration-style: wavy;
+            }
+            .ql-editor .grammar-other {
+              text-decoration: underline;
+              text-decoration-color: blue;
+              text-decoration-style: wavy;
+            }
+            .status-bar {
+              padding: 15px 20px;
+              background: #f8f9fa;
+              border-top: 1px solid #e9ecef;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            @media (max-width: 768px) {
+              .controls {
+                flex-direction: column;
+                align-items: stretch;
+              }
+              .status-bar {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+              }
+            }
+          `,
+          }}
+        />
+        <link
+          href="https://cdn.quilljs.com/1.3.7/quill.snow.css"
+          rel="stylesheet"
+        />
+      </head>
+      <body>
+        <div className="container">
+          <div className="header">
+            <h1>{title}</h1>
+            {description && <p>{description}</p>}
+          </div>
+          {children}
+        </div>
+        <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+        <script src="quill-bridge.js"></script>
+        <script type="module" src="main.js"></script>
+      </body>
+    </html>
+  );
+}
