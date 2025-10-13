@@ -11,7 +11,7 @@ export default function LanguageSelector() {
       </label>
       <select
         id="language-select"
-        className="block w-full sm:w-auto px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+        className="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm min-w-0 flex-shrink-0"
       >
         <option value="se">Davvisámegiella (Northern sami)</option>
         <option value="sma">Åarjelsaemien (Southern sami)</option>
