@@ -1261,24 +1261,36 @@ export class GrammarChecker {
 
   private applySuggestion(error: DivvunError, suggestion: string): void {
     try {
+      // Get line information before making changes
+      const lineInfo = this.getLineFromError(error);
+      const originalLength = error.end_index - error.start_index;
+      const newLength = suggestion.length;
+      const lengthDifference = newLength - originalLength;
+
+      console.log(
+        `Applying suggestion on line ${lineInfo.lineNumber}: "${error.error_text}" → "${suggestion}"`
+      );
+      console.log(
+        `Length change: ${originalLength} → ${newLength} (diff: ${lengthDifference})`
+      );
+
       // Apply the suggestion
       const start = error.start_index;
-      const length = error.end_index - error.start_index;
 
       // Clear formatting first
       this.editor.formatText(
         start,
-        length,
+        originalLength,
         error.error_code === "typo" ? "grammar-typo" : "grammar-other",
         false
       );
 
       // Replace the text
-      this.editor.deleteText(start, length);
+      this.editor.deleteText(start, originalLength);
       this.editor.insertText(start, suggestion);
 
       // Set cursor position after the replaced text
-      const newCursorPosition = start + suggestion.length;
+      const newCursorPosition = start + newLength;
       try {
         this.editor.setSelection(newCursorPosition, 0);
       } catch (_selErr) {
@@ -1286,16 +1298,156 @@ export class GrammarChecker {
         this.editor.focus();
       }
 
-      // Clear state and re-check grammar
-      this.state.lastCheckedContent = "";
-      this.clearErrors();
-
-      // Re-run grammar check after a brief delay
+      // Intelligent re-checking: only check the modified line and adjust indices
       setTimeout(() => {
-        this.checkGrammar();
+        this.intelligentCorrection(
+          error,
+          suggestion,
+          lineInfo,
+          lengthDifference
+        );
       }, 100);
     } catch (_err) {
       // ignore
+    }
+  }
+
+  private async intelligentCorrection(
+    originalError: DivvunError,
+    _suggestion: string,
+    lineInfo: {
+      lineNumber: number;
+      lineContent: string;
+      positionInLine: number;
+    },
+    lengthDifference: number
+  ): Promise<void> {
+    try {
+      console.log(
+        `Starting intelligent correction for line ${lineInfo.lineNumber}`
+      );
+
+      // Remove the corrected error from state
+      this.state.errors = this.state.errors.filter(
+        (err) => err !== originalError
+      );
+
+      // If there's a length difference, adjust indices of subsequent errors
+      if (lengthDifference !== 0) {
+        this.adjustSubsequentErrorIndices(
+          originalError.start_index,
+          lengthDifference
+        );
+      }
+
+      // Only recheck the modified line
+      await this.recheckModifiedLine(lineInfo.lineNumber);
+
+      // Update UI
+      this.updateErrorCount(this.state.errors.length);
+      this.updateStatus("Ready", false);
+
+      console.log(
+        `Intelligent correction complete. Total errors: ${this.state.errors.length}`
+      );
+    } catch (error) {
+      console.error(
+        "Intelligent correction failed, falling back to full check:",
+        error
+      );
+      // Fallback to full grammar check
+      this.state.lastCheckedContent = "";
+      this.clearErrors();
+      this.checkGrammar();
+    }
+  }
+
+  private adjustSubsequentErrorIndices(
+    correctionPosition: number,
+    lengthDifference: number
+  ): void {
+    console.log(
+      `Adjusting error indices after position ${correctionPosition} by ${lengthDifference}`
+    );
+
+    this.state.errors = this.state.errors.map((error) => {
+      if (error.start_index > correctionPosition) {
+        return {
+          ...error,
+          start_index: error.start_index + lengthDifference,
+          end_index: error.end_index + lengthDifference,
+        };
+      }
+      return error;
+    });
+
+    // Re-highlight all errors with adjusted positions
+    this.highlightErrors(this.state.errors);
+  }
+
+  private async recheckModifiedLine(lineNumber: number): Promise<void> {
+    try {
+      const fullText = this.editor.getText();
+      const lines = fullText.split("\n");
+
+      if (lineNumber < 1 || lineNumber > lines.length) {
+        console.warn(`Invalid line number: ${lineNumber}`);
+        return;
+      }
+
+      // Get the modified line (convert from 1-based to 0-based index)
+      const lineIndex = lineNumber - 1;
+      const line = lines[lineIndex];
+      const lineWithNewline = lineIndex < lines.length - 1 ? line + "\n" : line;
+
+      // Calculate the start position of this line in the full text
+      let lineStartPosition = 0;
+      for (let i = 0; i < lineIndex; i++) {
+        const prevLine = lines[i];
+        const prevLineWithNewline =
+          i < lines.length - 1 ? prevLine + "\n" : prevLine;
+        lineStartPosition += prevLineWithNewline.length;
+      }
+
+      console.log(`Rechecking line ${lineNumber}: "${line}"`);
+
+      // Only check if the line has content
+      if (lineWithNewline.trim()) {
+        const response = await this.api.checkText(
+          lineWithNewline,
+          this.config.language
+        );
+
+        // Adjust error indices to account for position in full text
+        const adjustedErrors = response.errs.map((error) => ({
+          ...error,
+          start_index: error.start_index + lineStartPosition,
+          end_index: error.end_index + lineStartPosition,
+        }));
+
+        // Remove any existing errors from this line first
+        this.state.errors = this.state.errors.filter((error) => {
+          const lineEnd = lineStartPosition + lineWithNewline.length;
+          return !(
+            error.start_index >= lineStartPosition &&
+            error.start_index < lineEnd
+          );
+        });
+
+        // Add new errors from the rechecked line
+        this.state.errors.push(...adjustedErrors);
+
+        // Highlight the new errors for this line
+        if (adjustedErrors.length > 0) {
+          this.highlightLineErrors(adjustedErrors);
+        }
+
+        console.log(
+          `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`
+        );
+      }
+    } catch (error) {
+      console.error(`Error rechecking line ${lineNumber}:`, error);
     }
   }
 
