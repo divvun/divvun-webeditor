@@ -3,5 +3,9 @@ export interface ControlGroupProps {
 }
 
 export default function ControlGroup({ children }: ControlGroupProps) {
-  return <div className="control-group">{children}</div>;
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+      {children}
+    </div>
+  );
 }

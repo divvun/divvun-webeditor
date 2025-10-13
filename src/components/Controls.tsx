@@ -3,5 +3,11 @@ export interface ControlsProps {
 }
 
 export default function Controls({ children }: ControlsProps) {
-  return <div className="controls">{children}</div>;
+  return (
+    <div className="bg-gray-50 border-b border-gray-200 p-6">
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+        {children}
+      </div>
+    </div>
+  );
 }

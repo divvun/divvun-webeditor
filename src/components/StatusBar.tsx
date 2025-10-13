@@ -1,11 +1,22 @@
 export default function StatusBar() {
   return (
-    <div className="status-bar">
-      <div className="status" id="status-display">
-        <span id="status-text">Ready</span>
-      </div>
-      <div className="error-count" id="error-count">
-        0 errors
+    <div className="bg-gray-50 border-t border-gray-200 px-6 py-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          <div
+            id="status-display"
+            className="text-sm font-medium text-gray-700"
+          >
+            <span id="status-text">Ready</span>
+          </div>
+        </div>
+        <div
+          id="error-count"
+          className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full border"
+        >
+          0 errors
+        </div>
       </div>
     </div>
   );

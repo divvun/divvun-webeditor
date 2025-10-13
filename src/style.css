@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom CSS for Quill editor and grammar highlighting */
+.quill-editor {
+  min-height: 24rem;
+}
+
+.ql-editor .grammar-typo {
+  text-decoration: underline;
+  text-decoration-color: rgb(239, 68, 68);
+  text-decoration-style: wavy;
+}
+
+.ql-editor .grammar-other {
+  text-decoration: underline;
+  text-decoration-color: rgb(59, 130, 246);
+  text-decoration-style: wavy;
+}

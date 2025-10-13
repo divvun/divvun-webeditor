@@ -1,6 +1,7 @@
 import lume from "lume/mod.ts";
 import esbuild from "lume/plugins/esbuild.ts";
 import jsx from "lume/plugins/jsx.ts";
+import tailwindcss from "lume/plugins/tailwindcss.ts";
 
 const site = lume({ src: "src" });
 
@@ -32,6 +33,10 @@ site.use(
     },
   })
 );
+
+// Use Tailwind CSS for styling
+site.use(tailwindcss());
+site.add("style.css");
 
 // Copy static JavaScript files (non-TypeScript)
 site.copy("quill-bridge.js");
