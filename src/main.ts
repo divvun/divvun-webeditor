@@ -108,6 +108,11 @@ export class GrammarChecker {
   private state: EditorState;
   private checkTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Smart editing tracking
+  private lastCursorPosition: { index: number; length: number } | null = null;
+  private lastTextLength: number = 0;
+  private editTrackingEnabled: boolean = true;
+
   // DOM elements
   private editor: QuillBridgeInstance; // Quill instance
   private languageSelect: HTMLSelectElement;
@@ -171,6 +176,11 @@ export class GrammarChecker {
     ) as HTMLElement;
     this.errorCount = document.getElementById("error-count") as HTMLElement;
 
+    // Initialize tracking state
+    this.lastCursorPosition = null;
+    this.lastTextLength = 0;
+    this.editTrackingEnabled = true;
+
     // Populate language options from API and then wire up events
     this.populateLanguageOptions();
     this.setupEventListeners();
@@ -211,14 +221,20 @@ export class GrammarChecker {
   }
 
   private setupEventListeners(): void {
-    // Auto-check on text change with debouncing (Quill emits 'text-change')
-    this.editor.on("text-change", () => {
+    // Smart text change detection with cursor tracking
+    this.editor.on("text-change", (...args: unknown[]) => {
       if (this.checkTimeout) {
         clearTimeout(this.checkTimeout);
       }
 
+      // Check if this is a programmatic change (source is typically the 3rd argument)
+      const source = args.length > 2 ? String(args[2]) : "user";
+      if (source === "api" || source === "silent") {
+        return;
+      }
+
       this.checkTimeout = setTimeout(() => {
-        this.checkGrammar();
+        this.handleIntelligentTextChange();
       }, this.config.autoCheckDelay);
     });
 
@@ -429,6 +445,141 @@ export class GrammarChecker {
         // ignore
       }
     });
+  }
+
+  private async handleIntelligentTextChange(): Promise<void> {
+    if (!this.editTrackingEnabled) {
+      // Fall back to full check if tracking is disabled
+      return this.checkGrammar();
+    }
+
+    try {
+      const currentText = this.editor.getText();
+      const currentSelection = this.editor.getSelection();
+      const currentLength = currentText.length;
+
+      // Skip if no change or checking already in progress
+      if (this.state.isChecking || currentLength === 0) {
+        return;
+      }
+
+      console.debug("🔤 Intelligent text change detection:");
+      console.debug("  Current cursor:", currentSelection);
+      console.debug("  Previous cursor:", this.lastCursorPosition);
+      console.debug("  Length change:", currentLength - this.lastTextLength);
+
+      // Determine change type and location
+      const changeInfo = this.analyzeTextChange(
+        currentText,
+        currentSelection,
+        currentLength
+      );
+
+      console.debug("  Change analysis:", changeInfo);
+
+      if (changeInfo.type === "small-edit" && changeInfo.affectedLines) {
+        // Intelligent checking for small edits
+        await this.checkAffectedLinesOnly(
+          changeInfo.affectedLines,
+          changeInfo.changeStart || 0,
+          changeInfo.lengthDifference || 0,
+          currentText
+        );
+      } else {
+        // Fall back to full check for major changes
+        console.debug("  Falling back to full check due to:", changeInfo.type);
+        await this.checkGrammar();
+      }
+
+      // Update tracking state
+      this.lastCursorPosition = currentSelection;
+      this.lastTextLength = currentLength;
+    } catch (error) {
+      console.error(
+        "Intelligent text change failed, falling back to full check:",
+        error
+      );
+      await this.checkGrammar();
+    }
+  }
+
+  private analyzeTextChange(
+    currentText: string,
+    currentSelection: { index: number; length: number } | null,
+    currentLength: number
+  ): {
+    type: "small-edit" | "major-change" | "unknown";
+    affectedLines?: {
+      startLine: number;
+      endLine: number;
+      needsIndexAdjustment: boolean;
+    };
+    changeStart?: number;
+    lengthDifference?: number;
+  } {
+    // If no previous state, treat as major change
+    if (!this.lastCursorPosition || this.lastTextLength === 0) {
+      return { type: "major-change" };
+    }
+
+    const lengthDifference = currentLength - this.lastTextLength;
+    const maxSmallEditSize = 50; // Characters
+
+    // Large changes should use full check
+    if (Math.abs(lengthDifference) > maxSmallEditSize) {
+      return { type: "major-change" };
+    }
+
+    // Determine likely change location
+    let changeStart: number;
+    if (currentSelection) {
+      // If we deleted text, change likely happened before current cursor
+      if (lengthDifference < 0) {
+        changeStart = currentSelection.index;
+      } else {
+        // If we added text, change likely happened before current cursor
+        changeStart = Math.max(
+          0,
+          currentSelection.index - Math.abs(lengthDifference)
+        );
+      }
+    } else {
+      // No selection info, estimate based on previous cursor
+      changeStart = this.lastCursorPosition.index;
+    }
+
+    // Calculate affected lines for small edits
+    const lines = currentText.split("\n");
+    let currentIndex = 0;
+    let startLine = 0;
+    let endLine = 0;
+
+    // Find which line contains the change
+    for (let i = 0; i < lines.length; i++) {
+      const lineLength = lines[i].length + (i < lines.length - 1 ? 1 : 0);
+      if (currentIndex + lineLength > changeStart) {
+        startLine = i;
+        // For small edits, usually only affect current line plus context
+        endLine = Math.min(lines.length - 1, i + 1);
+        break;
+      }
+      currentIndex += lineLength;
+    }
+
+    // Add context lines
+    const contextStartLine = Math.max(0, startLine - 1);
+    const contextEndLine = Math.min(lines.length - 1, endLine + 1);
+
+    return {
+      type: "small-edit",
+      affectedLines: {
+        startLine: contextStartLine,
+        endLine: contextEndLine,
+        needsIndexAdjustment: lengthDifference !== 0,
+      },
+      changeStart,
+      lengthDifference,
+    };
   }
 
   private async handleIntelligentPasteCheck(
