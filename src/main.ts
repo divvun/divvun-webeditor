@@ -447,10 +447,16 @@ export class GrammarChecker {
     const allErrors: DivvunError[] = [];
     let currentIndex = 0;
 
+    // Clear all previous highlighting before starting
+    this.clearErrors();
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       // Reconstruct the line with newline (except for the last line)
       const lineWithNewline = i < lines.length - 1 ? line + "\n" : line;
+
+      // Update status to show progress
+      this.updateStatus(`Checking line ${i + 1} of ${lines.length}...`, true);
 
       // Only check non-empty lines
       if (lineWithNewline.trim()) {
@@ -468,6 +474,13 @@ export class GrammarChecker {
           }));
 
           allErrors.push(...adjustedErrors);
+
+          // Highlight errors for this line immediately as they come back
+          if (adjustedErrors.length > 0) {
+            this.highlightLineErrors(adjustedErrors);
+            // Update error count progressively
+            this.updateErrorCount(allErrors.length);
+          }
         } catch (error) {
           console.warn(`Error checking line ${i + 1}:`, error);
           // Continue with next line if one line fails
@@ -479,6 +492,66 @@ export class GrammarChecker {
     }
 
     return allErrors;
+  }
+
+  private highlightLineErrors(errors: DivvunError[]): void {
+    // Highlight errors for a specific line without clearing existing highlights
+    const savedSelection = this.saveCursorPosition();
+
+    // Detect Safari
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+    if (isSafari) {
+      this.performSafariSafeLineHighlighting(errors, savedSelection);
+    } else {
+      requestAnimationFrame(() => {
+        this.performLineHighlightingOperations(errors, savedSelection);
+      });
+    }
+  }
+
+  private performLineHighlightingOperations(
+    errors: DivvunError[],
+    savedSelection: { index: number; length: number } | null
+  ): void {
+    // Apply highlighting for new errors without clearing existing ones
+    errors.forEach((error) => {
+      const start = error.start_index;
+      const len = error.end_index - error.start_index;
+      const isTypo =
+        error.error_code === "typo" ||
+        (error.title && String(error.title).toLowerCase().includes("typo"));
+      const formatName = isTypo ? "grammar-typo" : "grammar-other";
+
+      try {
+        // Use silent mode to prevent triggering selection changes during formatting
+        if (
+          this.editor._quill &&
+          typeof this.editor._quill.formatText === "function"
+        ) {
+          this.editor._quill.formatText(start, len, formatName, true, "silent");
+        } else {
+          this.editor.formatText(start, len, formatName, true, "silent");
+        }
+      } catch (_err) {
+        // Ignore formatting errors
+      }
+    });
+
+    // Restore cursor position
+    this.restoreCursorPositionImmediate(savedSelection);
+  }
+
+  private performSafariSafeLineHighlighting(
+    errors: DivvunError[],
+    savedSelection: { index: number; length: number } | null
+  ): void {
+    // Simplified Safari-safe highlighting for individual lines
+    try {
+      this.performLineHighlightingOperations(errors, savedSelection);
+    } catch (err) {
+      console.warn("Safari line highlighting failed:", err);
+    }
   }
 
   private highlightErrors(errors: DivvunError[]): void {
