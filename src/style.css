@@ -93,7 +93,18 @@
 
 /* Custom CSS for Quill editor and grammar highlighting */
 .quill-editor {
-  min-height: 24rem;
+  min-height: 12rem;
+  max-height: 55vh;
+  height: 35vh;
+}
+
+.quill-editor .ql-container {
+  height: 100%;
+}
+
+.quill-editor .ql-editor {
+  height: 100%;
+  overflow-y: auto;
 }
 
 .ql-editor .grammar-typo {
