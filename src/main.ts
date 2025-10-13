@@ -21,6 +21,52 @@ interface QuillBridgeInstance {
   focus(): void;
   findBlot?(node: Node): unknown;
   getIndex?(blot: unknown): number;
+  getSelection?(): { index: number; length: number } | null;
+  setSelection?(index: number, length: number): void;
+}
+
+// Register custom Quill blots for error highlighting
+function registerQuillBlots() {
+  // Use runtime JavaScript to avoid TypeScript complexity with Quill blots
+  const script = `
+    if (typeof Quill !== 'undefined') {
+      const Inline = Quill.import('blots/inline');
+      
+      class GrammarTypoBlot extends Inline {
+        static create(value) {
+          let node = super.create();
+          node.classList.add('grammar-typo');
+          return node;
+        }
+        static formats(node) {
+          return 'grammar-typo';
+        }
+      }
+      GrammarTypoBlot.blotName = 'grammar-typo';
+      GrammarTypoBlot.tagName = 'span';
+
+      class GrammarOtherBlot extends Inline {
+        static create(value) {
+          let node = super.create();
+          node.classList.add('grammar-other');
+          return node;
+        }
+        static formats(node) {
+          return 'grammar-other';
+        }
+      }
+      GrammarOtherBlot.blotName = 'grammar-other';
+      GrammarOtherBlot.tagName = 'span';
+
+      Quill.register(GrammarTypoBlot);
+      Quill.register(GrammarOtherBlot);
+    }
+  `;
+
+  // Execute the script
+  const scriptElement = document.createElement("script");
+  scriptElement.textContent = script;
+  document.head.appendChild(scriptElement);
 }
 
 const maybeBridge = (
@@ -70,6 +116,9 @@ export class GrammarChecker {
     };
 
     this.api = new DivvunAPI();
+
+    // Register custom Quill blots for error highlighting
+    registerQuillBlots();
 
     // Initialize Quill editor via the bridge
     const editorContainer = document.getElementById("editor") as HTMLElement;
@@ -173,6 +222,36 @@ export class GrammarChecker {
       const existingTooltip = document.querySelector(".error-tooltip");
       if (existingTooltip && !existingTooltip.contains(e.target as Node)) {
         existingTooltip.remove();
+      }
+    });
+
+    // Right-click context menu for error corrections
+    this.editor.root.addEventListener("contextmenu", (e: MouseEvent) => {
+      e.preventDefault();
+
+      // Use caretPositionFromPoint to find the error at the cursor position
+      const caret = (
+        document as unknown as {
+          caretPositionFromPoint?: (
+            x: number,
+            y: number
+          ) => { offsetNode: Node; offset: number } | null;
+        }
+      ).caretPositionFromPoint?.(e.clientX, e.clientY);
+      if (!caret) return;
+
+      // Find the error at this position
+      const clickIndex = this.getCaretPosition(caret);
+      const matchingError = this.state.errors.find(
+        (err) => err.start_index <= clickIndex && clickIndex < err.end_index
+      );
+
+      if (
+        matchingError &&
+        matchingError.suggestions &&
+        matchingError.suggestions.length > 0
+      ) {
+        this.showContextMenu(e.clientX, e.clientY, matchingError);
       }
     });
 
@@ -413,6 +492,128 @@ export class GrammarChecker {
     alert(`Error: ${message}`);
   }
 
+  private getCaretPosition(caret: {
+    offsetNode: Node;
+    offset: number;
+  }): number {
+    // Use Quill's built-in method to find position from DOM node
+    try {
+      const blot = this.editor.findBlot?.(caret.offsetNode);
+      if (blot && this.editor.getIndex) {
+        return this.editor.getIndex(blot) + caret.offset;
+      }
+    } catch (_err) {
+      // ignore
+    }
+    return 0;
+  }
+
+  private showContextMenu(x: number, y: number, error: DivvunError): void {
+    // Remove existing context menu
+    const existing = document.getElementById("grammar-context-menu");
+    if (existing) existing.remove();
+
+    const menu = document.createElement("div");
+    menu.id = "grammar-context-menu";
+    menu.style.cssText = `
+      position: absolute;
+      left: ${x}px;
+      top: ${y}px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      z-index: 1000;
+      min-width: 120px;
+    `;
+
+    // Add title if available
+    if (error.title) {
+      const title = document.createElement("div");
+      title.style.cssText =
+        "padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #eee; font-size: 12px;";
+      title.textContent = error.title;
+      menu.appendChild(title);
+    }
+
+    // Add suggestions
+    const suggestions =
+      error.suggestions && error.suggestions.length > 0
+        ? error.suggestions
+        : [error.error_text];
+
+    suggestions.forEach((suggestion) => {
+      const btn = document.createElement("button");
+      btn.style.cssText = `
+        display: block;
+        width: 100%;
+        padding: 8px 12px;
+        border: none;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+      `;
+      btn.textContent = suggestion;
+
+      btn.addEventListener("mouseover", () => {
+        btn.style.backgroundColor = "#f0f0f0";
+      });
+      btn.addEventListener("mouseout", () => {
+        btn.style.backgroundColor = "transparent";
+      });
+
+      btn.addEventListener("click", () => {
+        this.applySuggestion(error, suggestion);
+        menu.remove();
+      });
+
+      menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+
+    // Close menu when clicking outside
+    const closeHandler = (e: Event) => {
+      if (!menu.contains(e.target as Node)) {
+        menu.remove();
+        document.removeEventListener("click", closeHandler);
+      }
+    };
+    setTimeout(() => document.addEventListener("click", closeHandler), 0);
+  }
+
+  private applySuggestion(error: DivvunError, suggestion: string): void {
+    try {
+      // Apply the suggestion
+      const start = error.start_index;
+      const length = error.end_index - error.start_index;
+
+      // Clear formatting first
+      this.editor.formatText(
+        start,
+        length,
+        error.error_code === "typo" ? "grammar-typo" : "grammar-other",
+        false
+      );
+
+      // Replace the text
+      this.editor.deleteText(start, length);
+      this.editor.insertText(start, suggestion);
+
+      // Clear state and re-check grammar
+      this.state.lastCheckedContent = "";
+      this.clearErrors();
+
+      // Re-run grammar check after a brief delay
+      setTimeout(() => {
+        this.checkGrammar();
+      }, 100);
+    } catch (_err) {
+      // ignore
+    }
+  }
+
   setLanguage(language: SupportedLanguage): void {
     this.config.language = language;
     this.clearErrors();
@@ -484,10 +685,48 @@ export class GrammarChecker {
 
 // Initialize the grammar checker when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-  const grammarChecker = new GrammarChecker();
+  console.log("DOM loaded, initializing grammar checker...");
 
-  // Make it available globally for debugging
-  (
-    globalThis as unknown as { grammarChecker?: GrammarChecker }
-  ).grammarChecker = grammarChecker;
+  // Check if required elements exist
+  const editorElement = document.getElementById("editor");
+  console.log("Editor element:", editorElement);
+
+  if (!editorElement) {
+    console.error("Editor element not found!");
+    return;
+  }
+
+  // Check if Quill is available
+  const quill = (globalThis as unknown as { Quill?: unknown })?.Quill;
+  console.log("Quill available:", !!quill);
+
+  // Check if QuillBridge is available
+  const bridge = (globalThis as unknown as { QuillBridge?: unknown })
+    ?.QuillBridge;
+  console.log("QuillBridge available:", !!bridge);
+
+  if (!quill) {
+    console.error("Quill.js not loaded!");
+    return;
+  }
+
+  if (!bridge) {
+    console.error("QuillBridge not loaded!");
+    return;
+  }
+
+  try {
+    const grammarChecker = new GrammarChecker();
+
+    // Make it available globally for debugging
+    (
+      globalThis as unknown as { grammarChecker?: GrammarChecker }
+    ).grammarChecker = grammarChecker;
+
+    console.log("Grammar checker initialized successfully");
+  } catch (error) {
+    console.error("Error initializing grammar checker:", error);
+  }
 });
+
+// The GrammarChecker class is already exported above
