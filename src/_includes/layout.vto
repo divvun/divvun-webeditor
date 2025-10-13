@@ -129,32 +129,6 @@
       Quill.register(GrammarTypoBlot);
       Quill.register(GrammarOtherBlot);
 
-      // Helper function to convert byte positions to character positions
-      function byteToCharPosition(text, bytePos) {
-        const bytes = new TextEncoder().encode(text);
-        let charPos = 0;
-        for (let i = 0; i < Math.min(bytePos, bytes.length); i++) {
-          // Count UTF-8 byte sequences
-          if ((bytes[i] & 0x80) === 0) {
-            // Single byte character (ASCII)
-            charPos++;
-          } else if ((bytes[i] & 0xE0) === 0xC0) {
-            // 2-byte sequence
-            charPos++;
-            i++; // Skip the continuation byte
-          } else if ((bytes[i] & 0xF0) === 0xE0) {
-            // 3-byte sequence
-            charPos++;
-            i += 2; // Skip the continuation bytes
-          } else if ((bytes[i] & 0xF8) === 0xF0) {
-            // 4-byte sequence
-            charPos++;
-            i += 3; // Skip the continuation bytes
-          }
-        }
-        return charPos;
-      }
-
       if (document.getElementById("editor")) {
         const quill = new Quill("#editor", {
           theme: "snow",
@@ -168,23 +142,12 @@
             const blot = Quill.find(caret.offsetNode);
             if (blot) {
               const index = quill.getIndex(blot) + caret.offset;
-              // Find error by converting character position back to byte position for comparison
-              const text = quill.getText();
-              const err = currentErrs.find(e => {
-                const errStartChar = byteToCharPosition(text, e.start_index);
-                const errEndChar = byteToCharPosition(text, e.end_index);
-                return errStartChar <= index && index < errEndChar;
-              });
+              const err = currentErrs.find(e => e.start_index <= index && index < e.end_index);
               if (err && err.suggestions && err.suggestions.length > 0) {
                 showSuggestionsMenu(e.clientX, e.clientY, err.suggestions, async (suggestion) => {
-                  // Convert byte positions to character positions for text operations
-                  const startChar = byteToCharPosition(text, err.start_index);
-                  const endChar = byteToCharPosition(text, err.end_index);
-                  const len = endChar - startChar;
-                  
-                  quill.formatText(startChar, len, err.error_code === 'typo' ? 'grammar-typo' : 'grammar-other', false);
-                  quill.deleteText(startChar, len);
-                  quill.insertText(startChar, suggestion);
+                  quill.formatText(err.start_index, err.end_index - err.start_index, err.error_code === 'typo' ? 'grammar-typo' : 'grammar-other', false);
+                  quill.deleteText(err.start_index, err.end_index - err.start_index);
+                  quill.insertText(err.start_index, suggestion);
                   
                   // Re-run grammar check immediately after correction to update error positions
                   setTimeout(async () => {
@@ -310,12 +273,9 @@
 
         function highlightErrors(errs) {
           currentErrs = errs;
-          const text = quill.getText();
           errs.forEach((err) => {
-            // Convert byte positions to character positions
-            const start = byteToCharPosition(text, err.start_index);
-            const end = byteToCharPosition(text, err.end_index);
-            const len = end - start;
+            const start = err.start_index;
+            const len = err.end_index - start;
             const isTypo =
               err.error_code === "typo" ||
               (err.title && err.title.toLowerCase().includes("typo"));
