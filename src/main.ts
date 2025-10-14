@@ -108,6 +108,11 @@ export class GrammarChecker {
   private state: EditorState;
   private checkTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Undo detection
+  private recentTextChanges: Array<{ timestamp: number; text: string }> = [];
+  private lastUserActionTime: number = 0;
+  private isHighlighting: boolean = false;
+
   // DOM elements
   private editor: QuillBridgeInstance; // Quill instance
   private languageSelect: HTMLSelectElement;
@@ -212,7 +217,41 @@ export class GrammarChecker {
 
   private setupEventListeners(): void {
     // Auto-check on text change with debouncing (Quill emits 'text-change')
-    this.editor.on("text-change", () => {
+    this.editor.on("text-change", (...args: unknown[]) => {
+      const source = args[2] as string;
+      const now = Date.now();
+      const currentText = this.editor.getText();
+
+      console.debug("🔄 Text change detected:", {
+        source,
+        isHighlighting: this.isHighlighting,
+      });
+
+      // Track text changes for undo detection
+      this.recentTextChanges.push({ timestamp: now, text: currentText });
+
+      // Keep only recent changes (last 5 seconds)
+      this.recentTextChanges = this.recentTextChanges.filter(
+        (change) => now - change.timestamp < 5000
+      );
+
+      // Check if this is likely an undo operation
+      if (this.isUndoOperation(currentText, source)) {
+        console.debug("🔄 Undo operation detected, skipping grammar check");
+        return;
+      }
+
+      // Only proceed if not currently highlighting
+      if (this.isHighlighting) {
+        console.debug("🔄 Currently highlighting, skipping new check");
+        return;
+      }
+
+      // Record user action time
+      if (source === "user") {
+        this.lastUserActionTime = now;
+      }
+
       if (this.checkTimeout) {
         clearTimeout(this.checkTimeout);
       }
@@ -242,6 +281,8 @@ export class GrammarChecker {
         // Let the paste happen, then position cursor at start
         setTimeout(() => {
           console.debug("📍 Cursor: Positioning at start after paste");
+          // Record this as user action for undo detection
+          this.lastUserActionTime = Date.now();
           this.editor.setSelection(0, 0);
         }, 10);
       } else if (prePasteSelection) {
@@ -653,6 +694,57 @@ export class GrammarChecker {
     }
   }
 
+  private isUndoOperation(currentText: string, source: string): boolean {
+    // If source is not 'user', it's likely a programmatic change (like undo/redo)
+    if (source !== "user") {
+      console.debug("🔄 Non-user source detected:", source);
+      return true;
+    }
+
+    const now = Date.now();
+
+    // Check if we have a recent history of text changes
+    if (this.recentTextChanges.length >= 2) {
+      // Look for a pattern where text reverts to a previous state
+      const previousTexts = this.recentTextChanges
+        .slice(0, -1) // Exclude the current change
+        .map((change) => change.text);
+
+      // If current text matches any previous text from recent history, it's likely undo
+      if (previousTexts.includes(currentText)) {
+        console.debug("🔄 Text reverted to previous state - undo detected");
+        return true;
+      }
+
+      // Check for rapid changes that might indicate undo cascading
+      const recentChanges = this.recentTextChanges.filter(
+        (change) => now - change.timestamp < 1000 // Last 1 second
+      );
+
+      if (recentChanges.length > 3) {
+        console.debug("🔄 Rapid text changes detected - possible undo cascade");
+        return true;
+      }
+    }
+
+    // Check if this change happened very soon after user action but during highlighting
+    if (this.isHighlighting && now - this.lastUserActionTime < 2000) {
+      console.debug(
+        "🔄 Change during highlighting phase - likely undo of highlight"
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  private finishHighlighting(): void {
+    setTimeout(() => {
+      this.isHighlighting = false;
+      console.debug("🎨 Highlighting operations completed");
+    }, 100); // Small delay to ensure all operations are complete
+  }
+
   private getLineStartIndex(lineNumber: number, lines: string[]): number {
     let index = 0;
     for (let i = 0; i < Math.min(lineNumber, lines.length); i++) {
@@ -749,18 +841,32 @@ export class GrammarChecker {
   }
 
   private highlightLineErrors(errors: DivvunError[]): void {
+    // Set highlighting flag to prevent triggering grammar checks during line highlighting
+    this.isHighlighting = true;
+    console.debug("🎨 Starting line highlighting operations");
+
     // Highlight errors for a specific line without clearing existing highlights
     const savedSelection = this.saveCursorPosition();
 
     // Detect Safari
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-    if (isSafari) {
-      this.performSafariSafeLineHighlighting(errors, savedSelection);
-    } else {
-      requestAnimationFrame(() => {
-        this.performLineHighlightingOperations(errors, savedSelection);
-      });
+    try {
+      if (isSafari) {
+        this.performSafariSafeLineHighlighting(errors, savedSelection);
+      } else {
+        requestAnimationFrame(() => {
+          this.performLineHighlightingOperations(errors, savedSelection);
+          // Clear highlighting flag after line operations complete
+          this.finishHighlighting();
+        });
+        return; // Early return for async path
+      }
+    } finally {
+      // Clear highlighting flag for synchronous Safari path
+      if (isSafari) {
+        this.finishHighlighting();
+      }
     }
   }
 
@@ -768,32 +874,72 @@ export class GrammarChecker {
     errors: DivvunError[],
     savedSelection: { index: number; length: number } | null
   ): void {
-    // Apply highlighting for new errors without clearing existing ones
-    errors.forEach((error) => {
-      const start = error.start_index;
-      const len = error.end_index - error.start_index;
-      const isTypo =
-        error.error_code === "typo" ||
-        (error.title && String(error.title).toLowerCase().includes("typo"));
-      const formatName = isTypo ? "grammar-typo" : "grammar-other";
+    // Disable Quill history during line highlighting
+    const quillInstance = this.editor._quill as unknown as {
+      history?: {
+        disable?: () => void;
+        enable?: () => void;
+      };
+    };
 
-      try {
-        // Use silent mode to prevent triggering selection changes during formatting
-        if (
-          this.editor._quill &&
-          typeof this.editor._quill.formatText === "function"
-        ) {
-          this.editor._quill.formatText(start, len, formatName, true, "silent");
-        } else {
-          this.editor.formatText(start, len, formatName, true, "silent");
-        }
-      } catch (_err) {
-        // Ignore formatting errors
+    console.debug("🎨 Disabling Quill history for line highlighting");
+    let originalHistoryRecord: (() => void) | null = null;
+
+    if (quillInstance?.history) {
+      const history = quillInstance.history as unknown as {
+        record?: () => void;
+      };
+      if (history.record) {
+        originalHistoryRecord = history.record;
+        history.record = () => {}; // Disable recording temporarily
       }
-    });
+    }
 
-    // Restore cursor position
-    this.restoreCursorPositionImmediate(savedSelection);
+    try {
+      // Apply highlighting for new errors without clearing existing ones
+      errors.forEach((error) => {
+        const start = error.start_index;
+        const len = error.end_index - error.start_index;
+        const isTypo =
+          error.error_code === "typo" ||
+          (error.title && String(error.title).toLowerCase().includes("typo"));
+        const formatName = isTypo ? "grammar-typo" : "grammar-other";
+
+        try {
+          // Use silent mode to prevent triggering selection changes during formatting
+          if (
+            this.editor._quill &&
+            typeof this.editor._quill.formatText === "function"
+          ) {
+            this.editor._quill.formatText(
+              start,
+              len,
+              formatName,
+              true,
+              "silent"
+            );
+          } else {
+            this.editor.formatText(start, len, formatName, true, "silent");
+          }
+        } catch (_err) {
+          // Ignore formatting errors
+        }
+      });
+
+      // Restore cursor position
+      this.restoreCursorPositionImmediate(savedSelection);
+    } finally {
+      // Restore original history recording if it was intercepted
+      if (originalHistoryRecord && quillInstance?.history) {
+        console.debug("🎨 Restoring Quill history after line highlighting");
+        const history = quillInstance.history as unknown as {
+          record?: () => void;
+        };
+        if (history) {
+          history.record = originalHistoryRecord;
+        }
+      }
+    }
   }
 
   private performSafariSafeLineHighlighting(
@@ -809,20 +955,34 @@ export class GrammarChecker {
   }
 
   private highlightErrors(errors: DivvunError[]): void {
+    // Set highlighting flag to prevent triggering grammar checks during highlighting
+    this.isHighlighting = true;
+    console.debug("🎨 Starting highlighting operations");
+
     // Safari-specific approach: Completely disable all selection events during formatting
     const savedSelection = this.saveCursorPosition();
 
     // Detect Safari
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-    if (isSafari) {
-      // For Safari, use a more aggressive approach
-      this.performSafariSafeHighlighting(errors, savedSelection);
-    } else {
-      // Use standard approach for other browsers
-      requestAnimationFrame(() => {
-        this.performHighlightingOperations(errors, savedSelection);
-      });
+    try {
+      if (isSafari) {
+        // For Safari, use a more aggressive approach
+        this.performSafariSafeHighlighting(errors, savedSelection);
+      } else {
+        // Use standard approach for other browsers
+        requestAnimationFrame(() => {
+          this.performHighlightingOperations(errors, savedSelection);
+          // Clear highlighting flag after operations complete
+          this.finishHighlighting();
+        });
+        return; // Early return for async path
+      }
+    } finally {
+      // Clear highlighting flag for synchronous Safari path
+      if (isSafari) {
+        this.finishHighlighting();
+      }
     }
   }
 
@@ -1006,14 +1166,28 @@ export class GrammarChecker {
   ): void {
     // Batch all operations together to minimize DOM thrashing
     const quillInstance = this.editor._quill as unknown as {
-      history?: { options?: { delay?: number } };
+      history?: {
+        options?: { delay?: number };
+        disable?: () => void;
+        enable?: () => void;
+        clear?: () => void;
+      };
       setSelection?: (index: number, length: number, source?: string) => void;
     };
 
-    let _originalDelay: number | undefined;
-    if (quillInstance?.history?.options) {
-      _originalDelay = quillInstance.history.options.delay;
-      quillInstance.history.options.delay = 0; // Disable history during formatting
+    // Temporarily disable history recording during highlighting
+    console.debug("🎨 Manipulating Quill history for highlighting");
+    let originalHistoryRecord: (() => void) | null = null;
+
+    // Try to intercept the history recording
+    if (quillInstance?.history) {
+      const history = quillInstance.history as unknown as {
+        record?: () => void;
+      };
+      if (history.record) {
+        originalHistoryRecord = history.record;
+        history.record = () => {}; // Disable recording temporarily
+      }
     }
 
     try {
@@ -1138,9 +1312,17 @@ export class GrammarChecker {
       // Force immediate cursor restoration
       this.restoreCursorPositionImmediate(savedSelection);
     } finally {
-      // Re-enable history if it was disabled
-      if (quillInstance?.history?.options && _originalDelay !== undefined) {
-        quillInstance.history.options.delay = _originalDelay; // Restore original delay
+      // Restore original history recording if it was intercepted
+      if (originalHistoryRecord && quillInstance?.history) {
+        console.debug(
+          "🎨 Restoring Quill history recording after highlighting"
+        );
+        const history = quillInstance.history as unknown as {
+          record?: () => void;
+        };
+        if (history) {
+          history.record = originalHistoryRecord;
+        }
       }
     }
   }
