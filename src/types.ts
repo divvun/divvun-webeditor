@@ -4,7 +4,6 @@ export type SupportedLanguage =
   | "se"
   | "sma"
   | "smj"
-  | "smj"
   | "smn"
   | "sms"
   | "fo"

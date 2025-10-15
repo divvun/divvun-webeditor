@@ -3,7 +3,40 @@ import esbuild from "lume/plugins/esbuild.ts";
 import jsx from "lume/plugins/jsx.ts";
 import tailwindcss from "lume/plugins/tailwindcss.ts";
 
+// Function to get git commit information
+function getGitInfo() {
+  try {
+    const gitHash = new Deno.Command("git", {
+      args: ["rev-parse", "HEAD"],
+    }).outputSync();
+    
+    const gitDate = new Deno.Command("git", {
+      args: ["log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M"],
+    }).outputSync();
+
+    const fullHash = new TextDecoder().decode(gitHash.stdout).trim();
+    const shortHash = fullHash.substring(0, 7);
+    const timestamp = new TextDecoder().decode(gitDate.stdout).trim();
+
+    return {
+      fullHash,
+      shortHash,
+      timestamp,
+    };
+  } catch {
+    return {
+      fullHash: "unknown",
+      shortHash: "unknown",
+      timestamp: "unknown",
+    };
+  }
+}
+
 const site = lume({ src: "src" });
+
+// Add git information to global site data
+const gitInfo = getGitInfo();
+site.data("git", gitInfo);
 
 site.options.prettyUrls = false;
 

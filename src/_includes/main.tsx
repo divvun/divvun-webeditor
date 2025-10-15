@@ -4,6 +4,7 @@ export default function MainLayout({
   title,
   description,
   children,
+  git,
 }: LayoutProps) {
   return (
     <html>
@@ -27,6 +28,27 @@ export default function MainLayout({
           </header>
 
           <main className="p-6">{children}</main>
+          
+          <footer className="px-6 py-3 bg-gray-50 border-t border-gray-100">
+            <div className="text-center text-xs text-gray-500">
+              {git && (
+                <>
+                  Version{" "}
+                  <a
+                    href={`https://github.com/divvun/divvun-webeditor/commit/${git.fullHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 hover:underline font-mono"
+                  >
+                    {git.shortHash}
+                  </a>
+                  {" ("}
+                  {git.timestamp}
+                  {")"}
+                </>
+              )}
+            </div>
+          </footer>
         </div>
       </body>
     </html>
