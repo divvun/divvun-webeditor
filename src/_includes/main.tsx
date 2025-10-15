@@ -28,7 +28,7 @@ export default function MainLayout({
           </header>
 
           <main className="p-6">{children}</main>
-          
+
           <footer className="px-6 py-3 bg-gray-50 border-t border-gray-100">
             <div className="text-center text-xs text-gray-500">
               {git && (

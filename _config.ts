@@ -9,7 +9,7 @@ function getGitInfo() {
     const gitHash = new Deno.Command("git", {
       args: ["rev-parse", "HEAD"],
     }).outputSync();
-    
+
     const gitDate = new Deno.Command("git", {
       args: ["log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M"],
     }).outputSync();

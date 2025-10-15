@@ -5,7 +5,6 @@ export type SupportedLanguage =
   | "sma"
   | "smj"
   | "smn"
-  | "sms"
   | "fo"
   | "ga"
   | "kl"

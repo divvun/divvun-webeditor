@@ -17,7 +17,6 @@ export default function LanguageSelector() {
         <option value="sma">Åarjelsaemien (Southern sami)</option>
         <option value="smj">Julevsámegiella (Lule sami)</option>
         <option value="smn">Anarâškielâ (Inari sami)</option>
-        <option value="sms">Nuõrttsääʹmǩiõll (Skolt sami)</option>
         <option value="fo">Føroyskt (Faroese)</option>
         <option value="ga">Gaeilge (Irish)</option>
         <option value="kl">Kalaallisut (Greenlandic)</option>

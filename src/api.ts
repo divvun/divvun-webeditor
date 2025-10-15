@@ -59,10 +59,14 @@ export class DivvunAPI {
 
   getSupportedLanguages(): Array<{ code: SupportedLanguage; name: string }> {
     return [
-      { code: "se", name: "Davvisámegiella (Northern Sami)" },
-      { code: "sma", name: "Åarjelsaemien (Southern Sami)" },
-      { code: "smj", name: "Julevsámegiella (Lule Sami)" },
-      { code: "fao", name: "Føroyskt (Faroese)" },
+      { code: "se", name: "Davvisámegiella (Northern sami)" },
+      { code: "sma", name: "Åarjelsaemien (Southern sami)" },
+      { code: "smj", name: "Julevsámegiella (Lule sami)" },
+      { code: "smn", name: "Anarâškielâ (Inari sami)" },
+      { code: "fo", name: "Føroyskt (Faroese)" },
+      { code: "ga", name: "Gaeilge (Irish)" },
+      { code: "kl", name: "Kalaallisut (Greenlandic)" },
+      { code: "nb", name: "Norsk bokmål (Norwegian bokmål)" },
     ];
   }
 }
