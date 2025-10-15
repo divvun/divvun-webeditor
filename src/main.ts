@@ -4,6 +4,10 @@ import type {
   DivvunError,
   EditorState,
   GrammarCheckerConfig,
+  CheckerState,
+  StateTransition,
+  CheckingContext,
+  LineCacheEntry,
 } from "./types.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
@@ -107,6 +111,12 @@ export class GrammarChecker {
   private config: GrammarCheckerConfig;
   private state: EditorState;
   private checkTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // State machine
+  private currentState: CheckerState = "idle";
+  private checkingContext: CheckingContext | null = null;
+  private stateHistory: StateTransition[] = [];
+  private lineCache: Map<number, LineCacheEntry> = new Map();
 
   // Undo detection
   private recentTextChanges: Array<{ timestamp: number; text: string }> = [];
@@ -216,16 +226,15 @@ export class GrammarChecker {
   }
 
   private setupEventListeners(): void {
-    // Auto-check on text change with debouncing (Quill emits 'text-change')
+    // Auto-check on text change using state machine
     this.editor.on("text-change", (...args: unknown[]) => {
       const source = args[2] as string;
       const now = Date.now();
       const currentText = this.editor.getText();
 
-      console.debug("🔄 Text change detected:", {
-        source,
-        isHighlighting: this.isHighlighting,
-      });
+      console.debug(
+        `🔄 Text change detected: source=${source}, state=${this.currentState}`
+      );
 
       // Track text changes for undo detection
       this.recentTextChanges.push({ timestamp: now, text: currentText });
@@ -237,13 +246,7 @@ export class GrammarChecker {
 
       // Check if this is likely an undo operation
       if (this.isUndoOperation(currentText, source)) {
-        console.debug("🔄 Undo operation detected, skipping grammar check");
-        return;
-      }
-
-      // Only proceed if not currently highlighting
-      if (this.isHighlighting) {
-        console.debug("🔄 Currently highlighting, skipping new check");
+        console.debug("🔄 Undo operation detected, skipping state machine");
         return;
       }
 
@@ -252,13 +255,33 @@ export class GrammarChecker {
         this.lastUserActionTime = now;
       }
 
-      if (this.checkTimeout) {
-        clearTimeout(this.checkTimeout);
+      // State machine transitions based on current state
+      switch (this.currentState) {
+        case "idle":
+          this.transitionTo("editing", "text-change");
+          break;
+        case "editing":
+          // Reset to editing (interrupts any pending timeout)
+          this.transitionTo("editing", "continued-editing");
+          break;
+        case "timeout":
+          // Interrupt timeout and go back to editing
+          this.transitionTo("editing", "editing-during-timeout");
+          break;
+        case "checking":
+          // Interrupt ongoing check and start editing
+          this.transitionTo("editing", "editing-during-check");
+          break;
+        case "highlighting":
+          // Skip if currently highlighting
+          console.debug("🔄 Text change during highlighting, ignoring");
+          break;
       }
 
-      this.checkTimeout = setTimeout(() => {
-        this.checkGrammar();
-      }, this.config.autoCheckDelay);
+      // If now in editing state, start the timeout
+      if (this.currentState === "editing") {
+        this.transitionTo("timeout", "editing-finished");
+      }
     });
 
     // Handle paste events for cursor positioning and intelligent checking
@@ -742,14 +765,196 @@ export class GrammarChecker {
     setTimeout(() => {
       this.isHighlighting = false;
       console.debug("🎨 Highlighting operations completed");
+
+      // Transition back to idle when highlighting is complete
+      if (this.currentState === "highlighting") {
+        this.transitionTo("idle", "highlighting-complete");
+      }
     }, 100); // Small delay to ensure all operations are complete
   }
 
+  // State Machine Methods
+  private transitionTo(newState: CheckerState, trigger: string): void {
+    if (newState === this.currentState) {
+      return; // No transition needed
+    }
+
+    console.debug(`State: ${this.currentState} → ${newState} (${trigger})`);
+
+    // Record transition history
+    const transition: StateTransition = {
+      from: this.currentState,
+      to: newState,
+      trigger,
+      timestamp: new Date(),
+    };
+    this.stateHistory.push(transition);
+
+    // Keep only recent history (last 20 transitions)
+    if (this.stateHistory.length > 20) {
+      this.stateHistory.shift();
+    }
+
+    // Handle state exit
+    this.onStateExit(this.currentState);
+
+    // Update current state
+    this.currentState = newState;
+
+    // Handle state entry
+    this.onStateEntry(this.currentState);
+  }
+
+  private onStateExit(state: CheckerState): void {
+    switch (state) {
+      case "timeout":
+        if (this.checkTimeout) {
+          clearTimeout(this.checkTimeout);
+          this.checkTimeout = null;
+        }
+        break;
+      case "checking":
+        // Abort any ongoing check
+        if (this.checkingContext?.abortController) {
+          this.checkingContext.abortController.abort();
+        }
+        this.state.isChecking = false;
+        break;
+    }
+  }
+
+  private onStateEntry(state: CheckerState): void {
+    switch (state) {
+      case "idle":
+        this.updateStatus("Ready", false);
+        this.checkingContext = null;
+        break;
+      case "editing":
+        // Clear any pending timeouts
+        if (this.checkTimeout) {
+          clearTimeout(this.checkTimeout);
+          this.checkTimeout = null;
+        }
+        break;
+      case "timeout":
+        // Start the timeout for checking
+        this.checkTimeout = setTimeout(() => {
+          this.transitionTo("checking", "timeout-expired");
+        }, this.config.autoCheckDelay);
+        break;
+      case "checking":
+        this.state.isChecking = true;
+        this.updateStatus("Checking...", true);
+        // Perform the actual checking
+        this.performGrammarCheck();
+        break;
+      case "highlighting":
+        this.updateStatus("Updating highlights...", true);
+        break;
+    }
+  }
+
+  // Line-level caching methods
+  private async checkSingleLine(lineNumber: number): Promise<DivvunError[]> {
+    const text = this.editor.getText();
+    const lines = text.split("\n");
+
+    if (lineNumber < 0 || lineNumber >= lines.length) {
+      return [];
+    }
+
+    const lineContent = lines[lineNumber];
+
+    // Check cache first
+    const cached = this.lineCache.get(lineNumber);
+    if (cached && cached.content === lineContent) {
+      const age = Date.now() - cached.timestamp.getTime();
+      if (age < 30000) {
+        // Cache valid for 30 seconds
+        console.debug(`📦 Cache hit for line ${lineNumber}`);
+        return cached.errors;
+      }
+    }
+
+    // Cache miss or expired - check with API
+    console.debug(`🔍 Cache miss for line ${lineNumber}, checking with API`);
+
+    try {
+      const response = await this.api.checkText(
+        lineContent,
+        this.config.language
+      );
+      const errors = response.errs || [];
+
+      // Adjust error indices to match document position
+      const lineStartIndex = this.getLineStartIndex(lineNumber, lines);
+      const adjustedErrors = errors.map((error: DivvunError) => ({
+        ...error,
+        start_index: error.start_index + lineStartIndex,
+        end_index: error.end_index + lineStartIndex,
+      }));
+
+      // Cache the results
+      this.lineCache.set(lineNumber, {
+        content: lineContent,
+        errors: adjustedErrors,
+        timestamp: new Date(),
+      });
+
+      return adjustedErrors;
+    } catch (error) {
+      console.warn(`Failed to check line ${lineNumber}:`, error);
+      return [];
+    }
+  }
+
+  private invalidateLineCache(
+    fromLine: number,
+    toLine: number = fromLine
+  ): void {
+    for (let i = fromLine; i <= toLine; i++) {
+      this.lineCache.delete(i);
+    }
+    console.debug(`📦 Invalidated cache for lines ${fromLine}-${toLine}`);
+  }
+
+  private getLineNumberFromIndex(index: number): number {
+    const text = this.editor.getText();
+    const lines = text.substring(0, index).split("\n");
+    return lines.length - 1; // 0-based line number
+  }
+
+  private performGrammarCheck(): void {
+    // Set up checking context
+    this.checkingContext = {
+      abortController: new AbortController(),
+      startTime: new Date(),
+    };
+
+    // Perform the actual grammar check
+    this.checkGrammar()
+      .then(() => {
+        if (this.currentState === "checking") {
+          this.transitionTo("highlighting", "check-complete");
+        }
+      })
+      .catch((error) => {
+        console.warn("Grammar check failed:", error);
+        if (this.currentState === "checking") {
+          this.transitionTo("idle", "check-failed");
+        }
+      });
+  }
+
   private getLineStartIndex(lineNumber: number, lines: string[]): number {
+    if (lineNumber === 0) {
+      return 0;
+    }
+
     let index = 0;
-    for (let i = 0; i < Math.min(lineNumber, lines.length); i++) {
-      if (i > 0) index += 1; // Add 1 for newline character
-      index += lines[i].length;
+    // Sum up all previous lines plus their newline characters
+    for (let i = 0; i < lineNumber; i++) {
+      index += lines[i].length + 1; // +1 for the \n character
     }
     return index;
   }
@@ -758,32 +963,62 @@ export class GrammarChecker {
     const currentText = this.editor.getText();
 
     // Don't check if content hasn't changed or is empty
-    if (this.state.isChecking) return;
-    if (!currentText || currentText.trim() === "") return;
-    if (currentText === this.state.lastCheckedContent) return;
+    if (!currentText || currentText.trim() === "") {
+      if (this.currentState === "checking") {
+        this.transitionTo("idle", "empty-content");
+      }
+      return;
+    }
 
-    this.state.isChecking = true;
-    this.updateStatus("Checking...", true);
+    // Skip if content hasn't changed
+    if (currentText === this.state.lastCheckedContent) {
+      if (this.currentState === "checking") {
+        this.transitionTo("idle", "no-change");
+      }
+      return;
+    }
 
     try {
-      // Split text into lines and process stepwise
-      const allErrors = await this.checkGrammarStepwise(currentText);
+      // Use line-by-line checking with caching
+      const lines = currentText.split("\n");
+      const allErrors: DivvunError[] = [];
 
-      this.state.lastCheckedContent = currentText;
-      this.state.errors = allErrors;
-      this.highlightErrors(allErrors);
+      // Check each line that might have changed
+      for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
+        // Check if we should abort (user might have interrupted)
+        if (this.checkingContext?.abortController.signal.aborted) {
+          console.debug("Grammar check aborted by user");
+          return;
+        }
 
-      const errorCount = allErrors.length;
-      this.updateStatus("Ready", false);
-      this.updateErrorCount(errorCount);
+        const lineErrors = await this.checkSingleLine(lineNumber);
+        allErrors.push(...lineErrors);
+      }
+
+      // Only proceed if we're still in checking state
+      if (this.currentState === "checking") {
+        this.state.lastCheckedContent = currentText;
+        this.state.errors = allErrors;
+
+        // Update error count
+        const errorCount = allErrors.length;
+
+        // Highlight the errors (this will handle the transition to highlighting state)
+        this.highlightErrors(allErrors);
+
+        this.updateErrorCount(errorCount);
+      }
     } catch (error) {
       console.error("Grammar check failed:", error);
       this.updateStatus("Error checking grammar", false);
       this.showErrorMessage(
         error instanceof Error ? error.message : String(error)
       );
-    } finally {
-      this.state.isChecking = false;
+
+      // Transition back to idle on error
+      if (this.currentState === "checking") {
+        this.transitionTo("idle", "check-error");
+      }
     }
   }
 

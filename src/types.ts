@@ -1,6 +1,6 @@
 // Type definitions for the Divvun Grammar Checker
 
-export type SupportedLanguage = 'se' | 'sma' | 'smj' | 'fao';
+export type SupportedLanguage = "se" | "sma" | "smj" | "fao";
 
 export interface DivvunError {
   error_text: string;
@@ -36,4 +36,31 @@ export interface EditorState {
   errors: DivvunError[];
   isChecking: boolean;
   errorSpans: ErrorSpan[];
+}
+
+// State Machine Types
+export type CheckerState =
+  | "idle"
+  | "editing"
+  | "timeout"
+  | "checking"
+  | "highlighting";
+
+export interface StateTransition {
+  from: CheckerState;
+  to: CheckerState;
+  trigger: string;
+  timestamp: Date;
+}
+
+export interface CheckingContext {
+  abortController: AbortController;
+  startTime: Date;
+  affectedLines?: number[];
+}
+
+export interface LineCacheEntry {
+  content: string;
+  errors: DivvunError[];
+  timestamp: Date;
 }
