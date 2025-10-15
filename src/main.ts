@@ -993,6 +993,13 @@ export class GrammarChecker {
 
         const lineErrors = await this.checkSingleLine(lineNumber);
         allErrors.push(...lineErrors);
+
+        // Highlight this line's errors immediately if any found
+        if (lineErrors.length > 0 && this.currentState === "checking") {
+          this.highlightLineErrors(lineErrors);
+          // Update error count progressively
+          this.updateErrorCount(allErrors.length);
+        }
       }
 
       // Only proceed if we're still in checking state
@@ -1000,13 +1007,11 @@ export class GrammarChecker {
         this.state.lastCheckedContent = currentText;
         this.state.errors = allErrors;
 
-        // Update error count
-        const errorCount = allErrors.length;
+        // Update final error count
+        this.updateErrorCount(allErrors.length);
 
-        // Highlight the errors (this will handle the transition to highlighting state)
-        this.highlightErrors(allErrors);
-
-        this.updateErrorCount(errorCount);
+        // Transition to idle since highlighting was done progressively
+        this.transitionTo("idle", "check-complete");
       }
     } catch (error) {
       console.error("Grammar check failed:", error);
