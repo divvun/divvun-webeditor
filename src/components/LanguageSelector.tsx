@@ -18,6 +18,10 @@ export default function LanguageSelector() {
         <option value="smj">Julevsámegiella (Lule sami)</option>
         <option value="smn">Anarâškielâ (Inari sami)</option>
         <option value="sms">Nuõrttsääʹmǩiõll (Skolt sami)</option>
+        <option value="fo">Føroyskt (Faroese)</option>
+        <option value="ga">Gaeilge (Irish)</option>
+        <option value="kl">Kalaallisut (Greenlandic)</option>
+        <option value="nb">Norsk bokmål (Norwegian bokmål)</option>
       </select>
     </ControlGroup>
   );

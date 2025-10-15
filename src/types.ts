@@ -1,6 +1,16 @@
 // Type definitions for the Divvun Grammar Checker
 
-export type SupportedLanguage = "se" | "sma" | "smj" | "fao";
+export type SupportedLanguage =
+  | "se"
+  | "sma"
+  | "smj"
+  | "smj"
+  | "smn"
+  | "sms"
+  | "fo"
+  | "ga"
+  | "kl"
+  | "nb";
 
 export interface DivvunError {
   error_text: string;
