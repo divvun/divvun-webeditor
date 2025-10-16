@@ -8,6 +8,7 @@ import type {
   StateTransition,
   CheckingContext,
   LineCacheEntry,
+  CheckerApi,
 } from "./types.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
@@ -107,7 +108,7 @@ if (!maybeBridge) {
 const QuillBridge = maybeBridge;
 
 export class GrammarChecker {
-  private api: GrammarCheckerAPI;
+  private api: CheckerApi;
   private config: GrammarCheckerConfig;
   private state: EditorState;
   private checkTimeout: ReturnType<typeof setTimeout> | null = null;

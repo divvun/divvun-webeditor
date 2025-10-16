@@ -42,6 +42,11 @@ export interface CheckerResponse {
   errs: CheckerError[];
 }
 
+export interface CheckerApi {
+  checkText(text: string, language: SupportedLanguage): Promise<CheckerResponse>;
+  getSupportedLanguages(): Array<{ code: SupportedLanguage; name: string }>;
+}
+
 export interface GrammarCheckerConfig {
   language: SupportedLanguage;
   apiUrl: string;

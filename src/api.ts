@@ -3,9 +3,10 @@ import type {
   SupportedLanguage,
   SpellCheckerResponse,
   CheckerError,
+  CheckerApi,
 } from "./types.ts";
 
-export class GrammarCheckerAPI {
+export class GrammarCheckerAPI implements CheckerApi {
   private readonly baseUrl = "https://api-giellalt.uit.no/grammar";
   private readonly timeout = 10000; // 10 seconds
 
@@ -84,7 +85,7 @@ export async function checkGrammar(
   return await api.checkText(text, language);
 }
 
-export class SpellCheckerAPI {
+export class SpellCheckerAPI implements CheckerApi {
   private readonly baseUrl = "https://api-giellalt.uit.no/speller";
   private readonly timeout = 10000; // 10 seconds
 
