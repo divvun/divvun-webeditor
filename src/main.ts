@@ -196,44 +196,12 @@ export class GrammarChecker {
     ) as HTMLElement;
     this.errorCount = document.getElementById("error-count") as HTMLElement;
 
-    // Populate language options from API and then wire up events
-    this.populateLanguageOptions();
+    // Set up event listeners (LanguageSelector component handles its own options)
     this.setupEventListeners();
     console.log("Grammar checker initialized successfully");
   }
 
-  private populateLanguageOptions(): void {
-    try {
-      const languages = this.api.getSupportedLanguages();
-      // Clear existing options
-      this.languageSelect.innerHTML = "";
-      languages.forEach((lang) => {
-        const opt = document.createElement("option");
-        opt.value = lang.code;
-        opt.textContent = lang.name;
-        this.languageSelect.appendChild(opt);
-      });
 
-      // Set the select to the configured language if available
-      let found = false;
-      for (let i = 0; i < this.languageSelect.options.length; i++) {
-        if (this.languageSelect.options[i].value === this.config.language) {
-          found = true;
-          break;
-        }
-      }
-
-      if (found) {
-        this.languageSelect.value = this.config.language;
-      } else if (this.languageSelect.options.length > 0) {
-        this.config.language = this.languageSelect.options[0]
-          .value as SupportedLanguage;
-        this.languageSelect.value = this.config.language;
-      }
-    } catch (_err) {
-      // If populating languages fails, leave existing static options as fallback
-    }
-  }
 
   private setupEventListeners(): void {
     // Auto-check on text change using state machine
@@ -328,10 +296,13 @@ export class GrammarChecker {
           );
         }, 50); // Allow paste to complete
       }
-    }); // Language selection
-    this.languageSelect.addEventListener("change", (e) => {
-      const target = e.target as HTMLSelectElement;
-      this.setLanguage(target.value as SupportedLanguage);
+    }); 
+    
+    // Language selection - listen for custom event from LanguageSelector component
+    globalThis.addEventListener("languageChanged", (e) => {
+      const customEvent = e as CustomEvent;
+      const language = customEvent.detail.language as SupportedLanguage;
+      this.setLanguage(language);
     });
 
     // Clear button
