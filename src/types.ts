@@ -43,7 +43,10 @@ export interface CheckerResponse {
 }
 
 export interface CheckerApi {
-  checkText(text: string, language: SupportedLanguage): Promise<CheckerResponse>;
+  checkText(
+    text: string,
+    language: SupportedLanguage
+  ): Promise<CheckerResponse>;
   getSupportedLanguages(): Array<{ code: SupportedLanguage; name: string }>;
 }
 

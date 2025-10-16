@@ -1,4 +1,4 @@
-import { GrammarCheckerAPI } from "./api.ts";
+import { GrammarCheckerAPI, SpellCheckerAPI } from "./api.ts";
 import type {
   SupportedLanguage,
   CheckerError,
@@ -132,6 +132,15 @@ export class GrammarChecker {
   private statusDisplay: HTMLElement;
   private errorCount: HTMLElement;
 
+  private createApiForLanguage(language: SupportedLanguage): CheckerApi {
+    // SMS language uses spell checker API, all others use grammar checker API
+    if (language === "sms") {
+      return new SpellCheckerAPI();
+    } else {
+      return new GrammarCheckerAPI();
+    }
+  }
+
   constructor() {
     this.config = {
       language: "se",
@@ -147,7 +156,7 @@ export class GrammarChecker {
       errorSpans: [],
     };
 
-    this.api = new GrammarCheckerAPI();
+    this.api = this.createApiForLanguage(this.config.language);
 
     // Register custom Quill blots for error highlighting
     registerQuillBlots();
@@ -2120,6 +2129,8 @@ export class GrammarChecker {
 
   setLanguage(language: SupportedLanguage): void {
     this.config.language = language;
+    // Create appropriate API for the new language
+    this.api = this.createApiForLanguage(language);
     this.clearErrors();
     // Re-check with new language if there's content
     const text = this.getText();
