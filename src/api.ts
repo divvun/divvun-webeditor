@@ -1,13 +1,13 @@
-import type { DivvunResponse, SupportedLanguage } from "./types.ts";
+import type { GrammarCheckerResponse, SupportedLanguage } from "./types.ts";
 
-export class DivvunAPI {
+export class GrammarCheckerAPI {
   private readonly baseUrl = "https://api-giellalt.uit.no/grammar";
   private readonly timeout = 10000; // 10 seconds
 
   async checkText(
     text: string,
     language: SupportedLanguage
-  ): Promise<DivvunResponse> {
+  ): Promise<GrammarCheckerResponse> {
     if (!text.trim()) {
       return { text, errs: [] };
     }
@@ -39,7 +39,7 @@ export class DivvunAPI {
         }
       }
 
-      const data: DivvunResponse = await response.json();
+      const data: GrammarCheckerResponse = await response.json();
       return data;
     } catch (error: unknown) {
       clearTimeout(timeoutId);
@@ -74,7 +74,7 @@ export class DivvunAPI {
 export async function checkGrammar(
   text: string,
   language: SupportedLanguage
-): Promise<DivvunResponse> {
-  const api = new DivvunAPI();
+): Promise<GrammarCheckerResponse> {
+  const api = new GrammarCheckerAPI();
   return await api.checkText(text, language);
 }

@@ -10,7 +10,7 @@ export type SupportedLanguage =
   | "kl"
   | "nb";
 
-export interface DivvunError {
+export interface GrammarCheckerError {
   error_text: string;
   start_index: number;
   end_index: number;
@@ -20,9 +20,9 @@ export interface DivvunError {
   title: string;
 }
 
-export interface DivvunResponse {
+export interface GrammarCheckerResponse {
   text: string;
-  errs: DivvunError[];
+  errs: GrammarCheckerError[];
 }
 
 export interface GrammarCheckerConfig {
@@ -34,14 +34,14 @@ export interface GrammarCheckerConfig {
 
 export interface ErrorSpan {
   element: HTMLElement;
-  error: DivvunError;
+  error: GrammarCheckerError;
   startOffset: number;
   endOffset: number;
 }
 
 export interface EditorState {
   lastCheckedContent: string;
-  errors: DivvunError[];
+  errors: GrammarCheckerError[];
   isChecking: boolean;
   errorSpans: ErrorSpan[];
 }
@@ -69,6 +69,6 @@ export interface CheckingContext {
 
 export interface LineCacheEntry {
   content: string;
-  errors: DivvunError[];
+  errors: GrammarCheckerError[];
   timestamp: Date;
 }
