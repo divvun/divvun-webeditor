@@ -201,8 +201,6 @@ export class GrammarChecker {
     console.log("Grammar checker initialized successfully");
   }
 
-
-
   private setupEventListeners(): void {
     // Auto-check on text change using state machine
     this.editor.on("text-change", (...args: unknown[]) => {
@@ -296,8 +294,8 @@ export class GrammarChecker {
           );
         }, 50); // Allow paste to complete
       }
-    }); 
-    
+    });
+
     // Language selection - listen for custom event from LanguageSelector component
     globalThis.addEventListener("languageChanged", (e) => {
       const customEvent = e as CustomEvent;
@@ -846,6 +844,12 @@ export class GrammarChecker {
 
     const lineContent = lines[lineNumber];
 
+    // Skip empty or whitespace-only lines
+    if (!lineContent || lineContent.trim().length === 0) {
+      console.debug(`🔍 Skipping empty line ${lineNumber}`);
+      return [];
+    }
+
     // Check cache first
     const cached = this.lineCache.get(lineNumber);
     if (cached && cached.content === lineContent) {
@@ -962,6 +966,12 @@ export class GrammarChecker {
     try {
       // Use line-by-line checking with caching
       const lines = currentText.split("\n");
+      console.debug(
+        `🔍 Text split into ${lines.length} lines:`,
+        lines.map(
+          (line, idx) => `Line ${idx}: "${line}" (length: ${line.length})`
+        )
+      );
       const allErrors: CheckerError[] = [];
 
       // Check each line that might have changed
@@ -1065,6 +1075,18 @@ export class GrammarChecker {
     // Set highlighting flag to prevent triggering grammar checks during line highlighting
     this.isHighlighting = true;
     console.debug("🎨 Starting line highlighting operations");
+    console.debug("🎨 Errors to highlight:", errors.length, errors);
+
+    // AGGRESSIVE FIX: Always clear ALL formatting before highlighting
+    try {
+      const docLength = this.editor.getLength();
+      this.editor.formatText(0, docLength, "grammar-error", false, "silent");
+      this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
+      this.editor.formatText(0, docLength, "grammar-other", false, "silent");
+      console.debug("🎨 Cleared all existing formatting");
+    } catch (_err) {
+      console.debug("🎨 Error clearing formatting:", _err);
+    }
 
     // Highlight errors for a specific line without clearing existing highlights
     const savedSelection = this.saveCursorPosition();
@@ -1126,6 +1148,10 @@ export class GrammarChecker {
           (error.title && String(error.title).toLowerCase().includes("typo"));
         const formatName = isTypo ? "grammar-typo" : "grammar-other";
 
+        console.debug(
+          `🎨 Highlighting error: "${error.error_text}" at ${start}-${error.end_index} with format ${formatName}`
+        );
+
         try {
           // Use silent mode to prevent triggering selection changes during formatting
           if (
@@ -1142,6 +1168,24 @@ export class GrammarChecker {
           } else {
             this.editor.formatText(start, len, formatName, true, "silent");
           }
+
+          // Debug: Check what classes were actually applied to the DOM
+          setTimeout(() => {
+            const quillEditor = document.querySelector(".ql-editor");
+            if (quillEditor) {
+              const formattedElements = quillEditor.querySelectorAll(
+                ".grammar-typo, .grammar-other"
+              );
+              console.debug(
+                `🎨 DOM inspection: Found ${formattedElements.length} formatted elements`
+              );
+              formattedElements.forEach((el: Element, idx: number) => {
+                console.debug(
+                  `🎨 Element ${idx}: classes="${el.className}", text="${el.textContent}"`
+                );
+              });
+            }
+          }, 10);
         } catch (_err) {
           // Ignore formatting errors
         }
@@ -1413,6 +1457,7 @@ export class GrammarChecker {
 
     try {
       // Clear existing error formatting across the document
+      console.debug("🎨 Clearing existing formatting before highlighting");
       try {
         const docLength = this.editor.getLength();
         // Use silent mode to prevent cursor jumps during clearing
@@ -2166,10 +2211,12 @@ export class GrammarChecker {
     this.state.errors = [];
     this.state.errorSpans = [];
     this.updateErrorCount(0);
-    // Remove any grammar-error formatting
+    // Remove any grammar-related formatting
     try {
       const docLength = this.editor.getLength();
       this.editor.formatText(0, docLength, "grammar-error", false);
+      this.editor.formatText(0, docLength, "grammar-typo", false);
+      this.editor.formatText(0, docLength, "grammar-other", false);
     } catch (_err) {
       // ignore
     }

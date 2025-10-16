@@ -129,19 +129,20 @@ export class SpellCheckerAPI implements CheckerApi {
       const data: SpellCheckerResponse = await response.json();
       console.log("Spell checker response:", data);
 
-      // Convert SpellResult[] to GrammarCheckerError[]
+      // Convert SpellResult[] to CheckerError[]
       const errors: CheckerError[] = [];
-      let wordStartIndex = 0;
 
-      // Split text into words and process results
-      const words = text.split(/\s+/);
-
-      data.results.forEach((result, index) => {
-        if (index < words.length && !result.is_correct) {
-          const word = words[index];
-          const wordIndex = text.indexOf(word, wordStartIndex);
+      // Process each result from the spell checker
+      data.results.forEach((result) => {
+        // Only process words that are marked as incorrect
+        if (!result.is_correct) {
+          // Find the position of this word in the original text
+          const wordIndex = text.indexOf(result.word);
 
           if (wordIndex !== -1) {
+            console.log(
+              `Processing incorrect word: "${result.word}" at index ${wordIndex}`
+            );
             errors.push({
               error_text: result.word,
               start_index: wordIndex,
@@ -152,13 +153,8 @@ export class SpellCheckerAPI implements CheckerApi {
               title: "Suggestion",
             });
           }
-        }
-
-        // Update word start index for next iteration
-        if (index < words.length) {
-          const word = words[index];
-          const wordIndex = text.indexOf(word, wordStartIndex);
-          wordStartIndex = wordIndex + word.length;
+        } else {
+          console.log(`Skipping correct word: "${result.word}"`);
         }
       });
 
