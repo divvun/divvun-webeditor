@@ -1,5 +1,5 @@
 import type {
-  GrammarCheckerResponse,
+  CheckerResponse,
   SupportedLanguage,
   SpellCheckerResponse,
   CheckerError,
@@ -12,7 +12,7 @@ export class GrammarCheckerAPI {
   async checkText(
     text: string,
     language: SupportedLanguage
-  ): Promise<GrammarCheckerResponse> {
+  ): Promise<CheckerResponse> {
     if (!text.trim()) {
       return { text, errs: [] };
     }
@@ -44,7 +44,7 @@ export class GrammarCheckerAPI {
         }
       }
 
-      const data: GrammarCheckerResponse = await response.json();
+      const data: CheckerResponse = await response.json();
       return data;
     } catch (error: unknown) {
       clearTimeout(timeoutId);
@@ -79,7 +79,7 @@ export class GrammarCheckerAPI {
 export async function checkGrammar(
   text: string,
   language: SupportedLanguage
-): Promise<GrammarCheckerResponse> {
+): Promise<CheckerResponse> {
   const api = new GrammarCheckerAPI();
   return await api.checkText(text, language);
 }
@@ -91,9 +91,9 @@ export class SpellCheckerAPI {
   async checkText(
     text: string,
     language: SupportedLanguage
-  ): Promise<CheckerError[]> {
+  ): Promise<CheckerResponse> {
     if (!text.trim()) {
-      return [];
+      return { text, errs: [] };
     }
 
     const controller = new AbortController();
@@ -161,7 +161,7 @@ export class SpellCheckerAPI {
         }
       });
 
-      return errors;
+      return { text, errs: errors };
     } catch (error: unknown) {
       clearTimeout(timeoutId);
 
@@ -187,7 +187,7 @@ export class SpellCheckerAPI {
 export async function checkSpelling(
   text: string,
   language: SupportedLanguage
-): Promise<CheckerError[]> {
+): Promise<CheckerResponse> {
   const api = new SpellCheckerAPI();
   return await api.checkText(text, language);
 }

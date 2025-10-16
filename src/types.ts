@@ -37,7 +37,7 @@ export interface SpellCheckerResponse {
   results: SpellResult[];
 }
 
-export interface GrammarCheckerResponse {
+export interface CheckerResponse {
   text: string;
   errs: CheckerError[];
 }
