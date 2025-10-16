@@ -79,13 +79,6 @@ export type CheckerState =
   | "checking"
   | "highlighting";
 
-export interface StateTransition {
-  from: CheckerState;
-  to: CheckerState;
-  trigger: string;
-  timestamp: Date;
-}
-
 export interface CheckingContext {
   abortController: AbortController;
   startTime: Date;

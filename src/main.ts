@@ -5,7 +5,6 @@ import type {
   EditorState,
   GrammarCheckerConfig,
   CheckerState,
-  StateTransition,
   CheckingContext,
   LineCacheEntry,
   CheckerApi,
@@ -116,7 +115,6 @@ export class GrammarChecker {
   // State machine
   private currentState: CheckerState = "idle";
   private checkingContext: CheckingContext | null = null;
-  private stateHistory: StateTransition[] = [];
   private lineCache: Map<number, LineCacheEntry> = new Map();
 
   // Undo detection
@@ -198,7 +196,6 @@ export class GrammarChecker {
 
     // Set up event listeners (LanguageSelector component handles its own options)
     this.setupEventListeners();
-    console.log("Grammar checker initialized successfully");
   }
 
   private setupEventListeners(): void {
@@ -207,10 +204,6 @@ export class GrammarChecker {
       const source = args[2] as string;
       const now = Date.now();
       const currentText = this.editor.getText();
-
-      console.debug(
-        `🔄 Text change detected: source=${source}, state=${this.currentState}`
-      );
 
       // Track text changes for undo detection
       this.recentTextChanges.push({ timestamp: now, text: currentText });
@@ -222,7 +215,6 @@ export class GrammarChecker {
 
       // Check if this is likely an undo operation
       if (this.isUndoOperation(currentText, source)) {
-        console.debug("🔄 Undo operation detected, skipping state machine");
         return;
       }
 
@@ -262,24 +254,14 @@ export class GrammarChecker {
 
     // Handle paste events for cursor positioning and intelligent checking
     this.editor.root.addEventListener("paste", (e: ClipboardEvent) => {
-      console.debug("📋 Event: Paste detected");
-
       // Record cursor position before paste
       const prePasteSelection = this.editor.getSelection();
       const prePasteText = this.editor.getText();
       const isEmpty = prePasteText.trim() === "";
 
-      console.debug("📋 Pre-paste cursor position:", prePasteSelection);
-      console.debug("📋 Pre-paste text length:", prePasteText.length);
-
       if (isEmpty) {
-        console.debug(
-          "📋 Event: Pasting into empty editor, will position cursor at start"
-        );
-
         // Let the paste happen, then position cursor at start
         setTimeout(() => {
-          console.debug("📍 Cursor: Positioning at start after paste");
           // Record this as user action for undo detection
           this.lastUserActionTime = Date.now();
           this.editor.setSelection(0, 0);
@@ -382,16 +364,6 @@ export class GrammarChecker {
         matchingError.suggestions &&
         matchingError.suggestions.length > 0
       ) {
-        // Determine which line this error is on
-        const lineInfo = this.getLineFromError(matchingError);
-        console.log(
-          `Right-click activated error on line ${lineInfo.lineNumber}: "${matchingError.error_text}"`
-        );
-        console.log(`Line content: "${lineInfo.lineContent}"`);
-        console.log(
-          `Error at position ${matchingError.start_index}-${matchingError.end_index}`
-        );
-
         // Calculate Chrome-compatible coordinates
         let menuX = e.clientX;
         let menuY = e.clientY;
@@ -482,21 +454,11 @@ export class GrammarChecker {
     try {
       // Get current text after paste
       const postPasteText = this.editor.getText();
-      const postPasteSelection = this.editor.getSelection();
-
-      console.debug("📋 Intelligent paste check:");
-      console.debug("  Pre-paste cursor:", prePasteSelection);
-      console.debug("  Post-paste cursor:", postPasteSelection);
-      console.debug("  Pasted content length:", pastedContent.length);
 
       // Calculate paste boundaries
       const pasteStartIndex = prePasteSelection.index;
       const replacedLength = prePasteSelection.length; // Length of selected text that was replaced
       const actualPastedLength = pastedContent.length;
-
-      console.debug("  Paste start index:", pasteStartIndex);
-      console.debug("  Replaced length:", replacedLength);
-      console.debug("  Actual pasted length:", actualPastedLength);
 
       // Calculate net length change
       const lengthDifference = actualPastedLength - replacedLength;
@@ -510,8 +472,6 @@ export class GrammarChecker {
         prePasteText,
         postPasteText
       );
-
-      console.debug("  Lines to check:", linesToCheck);
 
       // Perform intelligent checking
       await this.checkAffectedLinesOnly(
@@ -743,7 +703,6 @@ export class GrammarChecker {
   private finishHighlighting(): void {
     setTimeout(() => {
       this.isHighlighting = false;
-      console.debug("🎨 Highlighting operations completed");
 
       // Transition back to idle when highlighting is complete
       if (this.currentState === "highlighting") {
@@ -753,25 +712,9 @@ export class GrammarChecker {
   }
 
   // State Machine Methods
-  private transitionTo(newState: CheckerState, trigger: string): void {
+  private transitionTo(newState: CheckerState, _trigger: string): void {
     if (newState === this.currentState) {
       return; // No transition needed
-    }
-
-    console.debug(`State: ${this.currentState} → ${newState} (${trigger})`);
-
-    // Record transition history
-    const transition: StateTransition = {
-      from: this.currentState,
-      to: newState,
-      trigger,
-      timestamp: new Date(),
-    };
-    this.stateHistory.push(transition);
-
-    // Keep only recent history (last 20 transitions)
-    if (this.stateHistory.length > 20) {
-      this.stateHistory.shift();
     }
 
     // Handle state exit
@@ -846,7 +789,6 @@ export class GrammarChecker {
 
     // Skip empty or whitespace-only lines
     if (!lineContent || lineContent.trim().length === 0) {
-      console.debug(`🔍 Skipping empty line ${lineNumber}`);
       return [];
     }
 
@@ -856,13 +798,11 @@ export class GrammarChecker {
       const age = Date.now() - cached.timestamp.getTime();
       if (age < 30000) {
         // Cache valid for 30 seconds
-        console.debug(`📦 Cache hit for line ${lineNumber}`);
         return cached.errors;
       }
     }
 
     // Cache miss or expired - check with API
-    console.debug(`🔍 Cache miss for line ${lineNumber}, checking with API`);
 
     try {
       const response = await this.api.checkText(
@@ -900,7 +840,6 @@ export class GrammarChecker {
     for (let i = fromLine; i <= toLine; i++) {
       this.lineCache.delete(i);
     }
-    console.debug(`📦 Invalidated cache for lines ${fromLine}-${toLine}`);
   }
 
   private getLineNumberFromIndex(index: number): number {
@@ -966,12 +905,6 @@ export class GrammarChecker {
     try {
       // Use line-by-line checking with caching
       const lines = currentText.split("\n");
-      console.debug(
-        `🔍 Text split into ${lines.length} lines:`,
-        lines.map(
-          (line, idx) => `Line ${idx}: "${line}" (length: ${line.length})`
-        )
-      );
       const allErrors: CheckerError[] = [];
 
       // Check each line that might have changed
@@ -1018,64 +951,9 @@ export class GrammarChecker {
     }
   }
 
-  private async checkGrammarStepwise(text: string): Promise<CheckerError[]> {
-    // Split text by newlines, but keep the newlines in the text chunks
-    const lines = text.split("\n");
-    const allErrors: CheckerError[] = [];
-    let currentIndex = 0;
-
-    // Clear all previous highlighting before starting
-    this.clearErrors();
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      // Reconstruct the line with newline (except for the last line)
-      const lineWithNewline = i < lines.length - 1 ? line + "\n" : line;
-
-      // Update status to show progress
-      this.updateStatus(`Checking line ${i + 1} of ${lines.length}...`, true);
-
-      // Only check non-empty lines
-      if (lineWithNewline.trim()) {
-        try {
-          const response = await this.api.checkText(
-            lineWithNewline,
-            this.config.language
-          );
-
-          // Adjust error indices to account for position in full text
-          const adjustedErrors = response.errs.map((error) => ({
-            ...error,
-            start_index: error.start_index + currentIndex,
-            end_index: error.end_index + currentIndex,
-          }));
-
-          allErrors.push(...adjustedErrors);
-
-          // Highlight errors for this line immediately as they come back
-          if (adjustedErrors.length > 0) {
-            this.highlightLineErrors(adjustedErrors);
-            // Update error count progressively
-            this.updateErrorCount(allErrors.length);
-          }
-        } catch (error) {
-          console.warn(`Error checking line ${i + 1}:`, error);
-          // Continue with next line if one line fails
-        }
-      }
-
-      // Move index forward by the length of this line including newline
-      currentIndex += lineWithNewline.length;
-    }
-
-    return allErrors;
-  }
-
   private highlightLineErrors(errors: CheckerError[]): void {
     // Set highlighting flag to prevent triggering grammar checks during line highlighting
     this.isHighlighting = true;
-    console.debug("🎨 Starting line highlighting operations");
-    console.debug("🎨 Errors to highlight:", errors.length, errors);
 
     // AGGRESSIVE FIX: Always clear ALL formatting before highlighting
     try {
@@ -1083,9 +961,8 @@ export class GrammarChecker {
       this.editor.formatText(0, docLength, "grammar-error", false, "silent");
       this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
       this.editor.formatText(0, docLength, "grammar-other", false, "silent");
-      console.debug("🎨 Cleared all existing formatting");
     } catch (_err) {
-      console.debug("🎨 Error clearing formatting:", _err);
+      // ignore
     }
 
     // Highlight errors for a specific line without clearing existing highlights
@@ -1096,7 +973,7 @@ export class GrammarChecker {
 
     try {
       if (isSafari) {
-        this.performSafariSafeLineHighlighting(errors, savedSelection);
+        this.performLineHighlightingOperations(errors, savedSelection);
       } else {
         requestAnimationFrame(() => {
           this.performLineHighlightingOperations(errors, savedSelection);
@@ -1124,8 +1001,6 @@ export class GrammarChecker {
         enable?: () => void;
       };
     };
-
-    console.debug("🎨 Disabling Quill history for line highlighting");
     let originalHistoryRecord: (() => void) | null = null;
 
     if (quillInstance?.history) {
@@ -1168,24 +1043,6 @@ export class GrammarChecker {
           } else {
             this.editor.formatText(start, len, formatName, true, "silent");
           }
-
-          // Debug: Check what classes were actually applied to the DOM
-          setTimeout(() => {
-            const quillEditor = document.querySelector(".ql-editor");
-            if (quillEditor) {
-              const formattedElements = quillEditor.querySelectorAll(
-                ".grammar-typo, .grammar-other"
-              );
-              console.debug(
-                `🎨 DOM inspection: Found ${formattedElements.length} formatted elements`
-              );
-              formattedElements.forEach((el: Element, idx: number) => {
-                console.debug(
-                  `🎨 Element ${idx}: classes="${el.className}", text="${el.textContent}"`
-                );
-              });
-            }
-          }, 10);
         } catch (_err) {
           // Ignore formatting errors
         }
@@ -1196,7 +1053,6 @@ export class GrammarChecker {
     } finally {
       // Restore original history recording if it was intercepted
       if (originalHistoryRecord && quillInstance?.history) {
-        console.debug("🎨 Restoring Quill history after line highlighting");
         const history = quillInstance.history as unknown as {
           record?: () => void;
         };
@@ -1207,22 +1063,9 @@ export class GrammarChecker {
     }
   }
 
-  private performSafariSafeLineHighlighting(
-    errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
-  ): void {
-    // Simplified Safari-safe highlighting for individual lines
-    try {
-      this.performLineHighlightingOperations(errors, savedSelection);
-    } catch (err) {
-      console.warn("Safari line highlighting failed:", err);
-    }
-  }
-
   private highlightErrors(errors: CheckerError[]): void {
     // Set highlighting flag to prevent triggering grammar checks during highlighting
     this.isHighlighting = true;
-    console.debug("🎨 Starting highlighting operations");
 
     // Safari-specific approach: Completely disable all selection events during formatting
     const savedSelection = this.saveCursorPosition();
@@ -1441,7 +1284,6 @@ export class GrammarChecker {
     };
 
     // Temporarily disable history recording during highlighting
-    console.debug("🎨 Manipulating Quill history for highlighting");
     let originalHistoryRecord: (() => void) | null = null;
 
     // Try to intercept the history recording
@@ -2225,39 +2067,12 @@ export class GrammarChecker {
     const tooltips = document.querySelectorAll(".error-tooltip");
     tooltips.forEach((tooltip) => tooltip.remove());
   }
-
-  // Test methods
-  testUserExample(): void {
-    this.setText("Dáll čálán davvsámgiela");
-  }
-
-  testGrammarErrors(): void {
-    this.setText("Mun leat studeanta ja mun háliidan oahpahit sámegiella.");
-  }
-
-  testMixedErrors(): void {
-    this.setText(
-      "This textt has speling errors. Mun leat studeanta ja háliidan oahpahit sámegiella."
-    );
-  }
-
-  // Public API for debugging
-  getState(): EditorState {
-    return { ...this.state };
-  }
-
-  getConfig(): GrammarCheckerConfig {
-    return { ...this.config };
-  }
 }
 
 // Initialize the grammar checker when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("DOM loaded, initializing grammar checker...");
-
   // Check if required elements exist
   const editorElement = document.getElementById("editor");
-  console.log("Editor element:", editorElement);
 
   if (!editorElement) {
     console.error("Editor element not found!");
@@ -2266,12 +2081,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Check if Quill is available
   const quill = (globalThis as unknown as { Quill?: unknown })?.Quill;
-  console.log("Quill available:", !!quill);
 
   // Check if QuillBridge is available
   const bridge = (globalThis as unknown as { QuillBridge?: unknown })
     ?.QuillBridge;
-  console.log("QuillBridge available:", !!bridge);
 
   if (!quill) {
     console.error("Quill.js not loaded!");
@@ -2290,8 +2103,6 @@ document.addEventListener("DOMContentLoaded", () => {
     (
       globalThis as unknown as { grammarChecker?: GrammarChecker }
     ).grammarChecker = grammarChecker;
-
-    console.log("Grammar checker initialized successfully");
   } catch (error) {
     console.error("Error initializing grammar checker:", error);
   }

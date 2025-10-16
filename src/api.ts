@@ -77,14 +77,6 @@ export class GrammarCheckerAPI implements CheckerApi {
   }
 }
 
-export async function checkGrammar(
-  text: string,
-  language: SupportedLanguage
-): Promise<CheckerResponse> {
-  const api = new GrammarCheckerAPI();
-  return await api.checkText(text, language);
-}
-
 export class SpellCheckerAPI implements CheckerApi {
   private readonly baseUrl = "https://api-giellalt.uit.no/speller";
   private readonly timeout = 10000; // 10 seconds
@@ -127,7 +119,6 @@ export class SpellCheckerAPI implements CheckerApi {
       }
 
       const data: SpellCheckerResponse = await response.json();
-      console.log("Spell checker response:", data);
 
       // Convert SpellResult[] to CheckerError[]
       const errors: CheckerError[] = [];
@@ -140,9 +131,6 @@ export class SpellCheckerAPI implements CheckerApi {
           const wordIndex = text.indexOf(result.word);
 
           if (wordIndex !== -1) {
-            console.log(
-              `Processing incorrect word: "${result.word}" at index ${wordIndex}`
-            );
             errors.push({
               error_text: result.word,
               start_index: wordIndex,
@@ -154,7 +142,7 @@ export class SpellCheckerAPI implements CheckerApi {
             });
           }
         } else {
-          console.log(`Skipping correct word: "${result.word}"`);
+          // Optionally log skipped words for debugging if needed
         }
       });
 
@@ -179,12 +167,4 @@ export class SpellCheckerAPI implements CheckerApi {
     // Return only SMS for spell checker
     return [{ code: "sms", name: "Nuõrttsääʹmǩiõll (Skolt sami)" }];
   }
-}
-
-export async function checkSpelling(
-  text: string,
-  language: SupportedLanguage
-): Promise<CheckerResponse> {
-  const api = new SpellCheckerAPI();
-  return await api.checkText(text, language);
 }
