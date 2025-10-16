@@ -5,12 +5,13 @@ export type SupportedLanguage =
   | "sma"
   | "smj"
   | "smn"
+  | "sms"
   | "fo"
   | "ga"
   | "kl"
   | "nb";
 
-export interface GrammarCheckerError {
+export interface CheckerError {
   error_text: string;
   start_index: number;
   end_index: number;
@@ -20,9 +21,25 @@ export interface GrammarCheckerError {
   title: string;
 }
 
+// New spell checker API response format
+export interface SpellSuggestion {
+  value: string;
+  weight: number;
+}
+
+export interface SpellResult {
+  word: string;
+  is_correct: boolean;
+  suggestions: SpellSuggestion[];
+}
+
+export interface SpellCheckerResponse {
+  results: SpellResult[];
+}
+
 export interface GrammarCheckerResponse {
   text: string;
-  errs: GrammarCheckerError[];
+  errs: CheckerError[];
 }
 
 export interface GrammarCheckerConfig {
@@ -34,14 +51,14 @@ export interface GrammarCheckerConfig {
 
 export interface ErrorSpan {
   element: HTMLElement;
-  error: GrammarCheckerError;
+  error: CheckerError;
   startOffset: number;
   endOffset: number;
 }
 
 export interface EditorState {
   lastCheckedContent: string;
-  errors: GrammarCheckerError[];
+  errors: CheckerError[];
   isChecking: boolean;
   errorSpans: ErrorSpan[];
 }
@@ -69,6 +86,6 @@ export interface CheckingContext {
 
 export interface LineCacheEntry {
   content: string;
-  errors: GrammarCheckerError[];
+  errors: CheckerError[];
   timestamp: Date;
 }

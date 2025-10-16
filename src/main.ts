@@ -1,7 +1,7 @@
 import { GrammarCheckerAPI } from "./api.ts";
 import type {
   SupportedLanguage,
-  GrammarCheckerError,
+  CheckerError,
   EditorState,
   GrammarCheckerConfig,
   CheckerState,
@@ -343,7 +343,7 @@ export class GrammarChecker {
       e.stopPropagation();
 
       // Try multiple methods to find the error at the cursor position
-      let matchingError: GrammarCheckerError | undefined;
+      let matchingError: CheckerError | undefined;
 
       // Method 1: Check if right-clicking directly on an error element
       const target = e.target as HTMLElement;
@@ -618,7 +618,7 @@ export class GrammarChecker {
 
     try {
       const lines = fullText.split("\n");
-      const newErrors: GrammarCheckerError[] = [];
+      const newErrors: CheckerError[] = [];
 
       // Step 1: Remove errors from affected lines (they'll be rechecked)
       let currentIndex = 0;
@@ -855,9 +855,7 @@ export class GrammarChecker {
   }
 
   // Line-level caching methods
-  private async checkSingleLine(
-    lineNumber: number
-  ): Promise<GrammarCheckerError[]> {
+  private async checkSingleLine(lineNumber: number): Promise<CheckerError[]> {
     const text = this.editor.getText();
     const lines = text.split("\n");
 
@@ -890,7 +888,7 @@ export class GrammarChecker {
 
       // Adjust error indices to match document position
       const lineStartIndex = this.getLineStartIndex(lineNumber, lines);
-      const adjustedErrors = errors.map((error: GrammarCheckerError) => ({
+      const adjustedErrors = errors.map((error: CheckerError) => ({
         ...error,
         start_index: error.start_index + lineStartIndex,
         end_index: error.end_index + lineStartIndex,
@@ -983,7 +981,7 @@ export class GrammarChecker {
     try {
       // Use line-by-line checking with caching
       const lines = currentText.split("\n");
-      const allErrors: GrammarCheckerError[] = [];
+      const allErrors: CheckerError[] = [];
 
       // Check each line that might have changed
       for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
@@ -1029,12 +1027,10 @@ export class GrammarChecker {
     }
   }
 
-  private async checkGrammarStepwise(
-    text: string
-  ): Promise<GrammarCheckerError[]> {
+  private async checkGrammarStepwise(text: string): Promise<CheckerError[]> {
     // Split text by newlines, but keep the newlines in the text chunks
     const lines = text.split("\n");
-    const allErrors: GrammarCheckerError[] = [];
+    const allErrors: CheckerError[] = [];
     let currentIndex = 0;
 
     // Clear all previous highlighting before starting
@@ -1084,7 +1080,7 @@ export class GrammarChecker {
     return allErrors;
   }
 
-  private highlightLineErrors(errors: GrammarCheckerError[]): void {
+  private highlightLineErrors(errors: CheckerError[]): void {
     // Set highlighting flag to prevent triggering grammar checks during line highlighting
     this.isHighlighting = true;
     console.debug("🎨 Starting line highlighting operations");
@@ -1115,7 +1111,7 @@ export class GrammarChecker {
   }
 
   private performLineHighlightingOperations(
-    errors: GrammarCheckerError[],
+    errors: CheckerError[],
     savedSelection: { index: number; length: number } | null
   ): void {
     // Disable Quill history during line highlighting
@@ -1187,7 +1183,7 @@ export class GrammarChecker {
   }
 
   private performSafariSafeLineHighlighting(
-    errors: GrammarCheckerError[],
+    errors: CheckerError[],
     savedSelection: { index: number; length: number } | null
   ): void {
     // Simplified Safari-safe highlighting for individual lines
@@ -1198,7 +1194,7 @@ export class GrammarChecker {
     }
   }
 
-  private highlightErrors(errors: GrammarCheckerError[]): void {
+  private highlightErrors(errors: CheckerError[]): void {
     // Set highlighting flag to prevent triggering grammar checks during highlighting
     this.isHighlighting = true;
     console.debug("🎨 Starting highlighting operations");
@@ -1231,7 +1227,7 @@ export class GrammarChecker {
   }
 
   private trySafariDOMIsolation(
-    errors: GrammarCheckerError[],
+    errors: CheckerError[],
     savedSelection: { index: number; length: number } | null
   ): boolean {
     try {
@@ -1295,7 +1291,7 @@ export class GrammarChecker {
   }
 
   private performSafariSafeHighlighting(
-    errors: GrammarCheckerError[],
+    errors: CheckerError[],
     savedSelection: { index: number; length: number } | null
   ): void {
     // Safari-specific implementation - try DOM isolation approach first
@@ -1405,7 +1401,7 @@ export class GrammarChecker {
   }
 
   private performHighlightingOperations(
-    errors: GrammarCheckerError[],
+    errors: CheckerError[],
     savedSelection: { index: number; length: number } | null
   ): void {
     // Batch all operations together to minimize DOM thrashing
@@ -1716,7 +1712,7 @@ export class GrammarChecker {
 
   private showSuggestionTooltip(
     _anchor: HTMLElement,
-    error: GrammarCheckerError,
+    error: CheckerError,
     index: number,
     length: number,
     ev: MouseEvent
@@ -1843,11 +1839,7 @@ export class GrammarChecker {
     return 0;
   }
 
-  private showContextMenu(
-    x: number,
-    y: number,
-    error: GrammarCheckerError
-  ): void {
+  private showContextMenu(x: number, y: number, error: CheckerError): void {
     // Remove existing context menu
     const existing = document.getElementById("grammar-context-menu");
     if (existing) existing.remove();
@@ -1933,10 +1925,7 @@ export class GrammarChecker {
     }, 150); // Longer delay to prevent immediate closure from contextmenu event
   }
 
-  private applySuggestion(
-    error: GrammarCheckerError,
-    suggestion: string
-  ): void {
+  private applySuggestion(error: CheckerError, suggestion: string): void {
     try {
       // Get line information before making changes
       const lineInfo = this.getLineFromError(error);
@@ -1990,7 +1979,7 @@ export class GrammarChecker {
   }
 
   private async intelligentCorrection(
-    originalError: GrammarCheckerError,
+    originalError: CheckerError,
     _suggestion: string,
     lineInfo: {
       lineNumber: number;
@@ -2139,7 +2128,7 @@ export class GrammarChecker {
     }
   }
 
-  private getLineFromError(error: GrammarCheckerError): {
+  private getLineFromError(error: CheckerError): {
     lineNumber: number;
     lineContent: string;
     positionInLine: number;
