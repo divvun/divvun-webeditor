@@ -4,7 +4,8 @@ export default function EditorContainer() {
       <div
         id="editor"
         className="quill-editor rounded-lg border border-gray-200 shadow-sm"
-      ></div>
+      >
+      </div>
     </div>
   );
 }

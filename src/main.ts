@@ -28,7 +28,7 @@ interface QuillBridgeInstance {
     len: number,
     format: string,
     value: unknown,
-    source?: string
+    source?: string,
   ): void;
   setText(text: string): void;
   deleteText(index: number, len: number): void;
@@ -44,7 +44,7 @@ interface QuillBridgeInstance {
       length: number,
       format: string,
       value: unknown,
-      source?: string
+      source?: string,
     ) => void;
     setSelection: (index: number, length: number, source?: string) => void;
   };
@@ -99,17 +99,20 @@ const maybeBridge = (
     QuillBridge?: {
       create: (
         container: string | HTMLElement,
-        options?: unknown
+        options?: unknown,
       ) => QuillBridgeInstance;
     };
   }
 ).QuillBridge;
 if (!maybeBridge) {
   throw new Error(
-    "QuillBridge is not available. Ensure src/quill-bridge.js is loaded."
+    "QuillBridge is not available. Ensure src/quill-bridge.js is loaded.",
   );
 }
 const QuillBridge = maybeBridge;
+
+// Global variable to store available languages from API
+let availableLanguages: AvailableLanguage[] = [];
 
 export class GrammarChecker {
   private api: CheckerApi;
@@ -203,14 +206,14 @@ export class GrammarChecker {
 
     // Get other DOM elements
     this.languageSelect = document.getElementById(
-      "language-select"
+      "language-select",
     ) as HTMLSelectElement;
     this.clearButton = document.getElementById(
-      "clear-btn"
+      "clear-btn",
     ) as HTMLButtonElement;
     this.statusText = document.getElementById("status-text") as HTMLElement;
     this.statusDisplay = document.getElementById(
-      "status-display"
+      "status-display",
     ) as HTMLElement;
     this.errorCount = document.getElementById("error-count") as HTMLElement;
 
@@ -242,7 +245,7 @@ export class GrammarChecker {
 
       // Keep only recent changes (last 5 seconds)
       this.recentTextChanges = this.recentTextChanges.filter(
-        (change) => now - change.timestamp < 5000
+        (change) => now - change.timestamp < 5000,
       );
 
       // Check if this is likely an undo operation
@@ -304,7 +307,7 @@ export class GrammarChecker {
           this.handleIntelligentPasteCheck(
             prePasteSelection,
             prePasteText,
-            e.clipboardData?.getData("text") || ""
+            e.clipboardData?.getData("text") || "",
           );
         }, 50); // Allow paste to complete
       }
@@ -341,7 +344,7 @@ export class GrammarChecker {
       // Method 1: Check if right-clicking directly on an error element
       const target = e.target as HTMLElement;
       const errorElement = target.closest(
-        ".grammar-typo, .grammar-other"
+        ".grammar-typo, .grammar-other",
       ) as HTMLElement;
 
       if (errorElement) {
@@ -351,7 +354,7 @@ export class GrammarChecker {
           (error) =>
             error.error_text === errorText ||
             (error.suggestions &&
-              error.suggestions.some((s) => s.includes(errorText)))
+              error.suggestions.some((s) => s.includes(errorText))),
         );
       }
 
@@ -364,7 +367,7 @@ export class GrammarChecker {
           document as unknown as {
             caretPositionFromPoint?: (
               x: number,
-              y: number
+              y: number,
             ) => { offsetNode: Node; offset: number } | null;
           }
         ).caretPositionFromPoint?.(e.clientX, e.clientY);
@@ -386,7 +389,8 @@ export class GrammarChecker {
 
         if (clickIndex !== null) {
           matchingError = this.state.errors.find(
-            (err) => err.start_index <= clickIndex && clickIndex < err.end_index
+            (err) =>
+              err.start_index <= clickIndex && clickIndex < err.end_index,
           );
         }
       }
@@ -402,8 +406,8 @@ export class GrammarChecker {
 
         // Detect browser for positioning adjustments
         const userAgent = globalThis.navigator?.userAgent || "";
-        const isChrome =
-          userAgent.includes("Chrome") && !userAgent.includes("Edg");
+        const isChrome = userAgent.includes("Chrome") &&
+          !userAgent.includes("Edg");
 
         if (isChrome) {
           // Chrome calculates coordinates differently - need much larger offset
@@ -438,7 +442,7 @@ export class GrammarChecker {
     this.editor.root.addEventListener("click", (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       const errorNode = target.closest(
-        ".grammar-typo, .grammar-other"
+        ".grammar-typo, .grammar-other",
       ) as HTMLElement;
       if (!errorNode) return;
 
@@ -447,10 +451,9 @@ export class GrammarChecker {
         const blot = this.editor.findBlot
           ? this.editor.findBlot(errorNode)
           : undefined;
-        const index =
-          this.editor.getIndex && blot !== undefined
-            ? this.editor.getIndex(blot)
-            : 0;
+        const index = this.editor.getIndex && blot !== undefined
+          ? this.editor.getIndex(blot)
+          : 0;
         const maybeLength =
           blot && typeof (blot as { length?: unknown }).length === "function"
             ? (blot as { length: () => number }).length()
@@ -461,7 +464,7 @@ export class GrammarChecker {
         const matching = this.state.errors.find(
           (err) =>
             err.start_index === index &&
-            err.end_index - err.start_index === length
+            err.end_index - err.start_index === length,
         );
         if (matching) {
           this.showSuggestionTooltip(
@@ -469,7 +472,7 @@ export class GrammarChecker {
             matching,
             index,
             length,
-            e as MouseEvent
+            e as MouseEvent,
           );
         }
       } catch (_err) {
@@ -481,7 +484,7 @@ export class GrammarChecker {
   private async handleIntelligentPasteCheck(
     prePasteSelection: { index: number; length: number },
     prePasteText: string,
-    pastedContent: string
+    pastedContent: string,
   ): Promise<void> {
     try {
       // Get current text after paste
@@ -502,7 +505,7 @@ export class GrammarChecker {
         pasteStartIndex,
         actualPastedLength,
         prePasteText,
-        postPasteText
+        postPasteText,
       );
 
       // Perform intelligent checking
@@ -510,12 +513,12 @@ export class GrammarChecker {
         linesToCheck,
         pasteStartIndex,
         lengthDifference,
-        postPasteText
+        postPasteText,
       );
     } catch (error) {
       console.error(
         "Intelligent paste check failed, falling back to full check:",
-        error
+        error,
       );
       // Fallback to full check
       this.state.lastCheckedContent = "";
@@ -527,7 +530,7 @@ export class GrammarChecker {
     pasteStartIndex: number,
     pastedLength: number,
     prePasteText: string,
-    postPasteText: string
+    postPasteText: string,
   ): { startLine: number; endLine: number; needsIndexAdjustment: boolean } {
     // Find which lines contain the paste
     const preLines = prePasteText.split("\n");
@@ -552,8 +555,8 @@ export class GrammarChecker {
     let endLine = startLine;
 
     for (let i = 0; i < postLines.length; i++) {
-      const lineLength =
-        postLines[i].length + (i < postLines.length - 1 ? 1 : 0);
+      const lineLength = postLines[i].length +
+        (i < postLines.length - 1 ? 1 : 0);
       if (currentIndex + lineLength >= pasteEndIndex) {
         endLine = i;
         break;
@@ -580,7 +583,7 @@ export class GrammarChecker {
     },
     pasteStartIndex: number,
     lengthDifference: number,
-    fullText: string
+    fullText: string,
   ): Promise<void> {
     if (this.state.isChecking) return;
 
@@ -595,11 +598,11 @@ export class GrammarChecker {
       let currentIndex = 0;
       const affectedStartIndex = this.getLineStartIndex(
         linesToCheck.startLine,
-        lines
+        lines,
       );
       const affectedEndIndex = this.getLineStartIndex(
         linesToCheck.endLine + 1,
-        lines
+        lines,
       );
 
       this.state.errors = this.state.errors.filter((error) => {
@@ -638,7 +641,7 @@ export class GrammarChecker {
             try {
               const response = await this.api.checkText(
                 lineWithNewline,
-                this.config.language
+                this.config.language,
               );
 
               // Adjust error indices to account for position in full text
@@ -677,7 +680,7 @@ export class GrammarChecker {
       console.log(
         `Intelligent paste check complete. Checked lines ${
           linesToCheck.startLine + 1
-        }-${linesToCheck.endLine + 1}. Total errors: ${errorCount}`
+        }-${linesToCheck.endLine + 1}. Total errors: ${errorCount}`,
       );
     } catch (error) {
       console.error("Affected lines check failed:", error);
@@ -712,7 +715,7 @@ export class GrammarChecker {
 
       // Check for rapid changes that might indicate undo cascading
       const recentChanges = this.recentTextChanges.filter(
-        (change) => now - change.timestamp < 1000 // Last 1 second
+        (change) => now - change.timestamp < 1000, // Last 1 second
       );
 
       if (recentChanges.length > 3) {
@@ -724,7 +727,7 @@ export class GrammarChecker {
     // Check if this change happened very soon after user action but during highlighting
     if (this.isHighlighting && now - this.lastUserActionTime < 2000) {
       console.debug(
-        "🔄 Change during highlighting phase - likely undo of highlight"
+        "🔄 Change during highlighting phase - likely undo of highlight",
       );
       return true;
     }
@@ -839,7 +842,7 @@ export class GrammarChecker {
     try {
       const response = await this.api.checkText(
         lineContent,
-        this.config.language
+        this.config.language,
       );
       const errors = response.errs || [];
 
@@ -867,7 +870,7 @@ export class GrammarChecker {
 
   private invalidateLineCache(
     fromLine: number,
-    toLine: number = fromLine
+    toLine: number = fromLine,
   ): void {
     for (let i = fromLine; i <= toLine; i++) {
       this.lineCache.delete(i);
@@ -973,7 +976,7 @@ export class GrammarChecker {
       console.error("Grammar check failed:", error);
       this.updateStatus("Error checking grammar", false);
       this.showErrorMessage(
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
 
       // Transition back to idle on error
@@ -1024,7 +1027,7 @@ export class GrammarChecker {
 
   private performLineHighlightingOperations(
     errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
+    savedSelection: { index: number; length: number } | null,
   ): void {
     // Disable Quill history during line highlighting
     const quillInstance = this.editor._quill as unknown as {
@@ -1050,13 +1053,12 @@ export class GrammarChecker {
       errors.forEach((error) => {
         const start = error.start_index;
         const len = error.end_index - error.start_index;
-        const isTypo =
-          error.error_code === "typo" ||
+        const isTypo = error.error_code === "typo" ||
           (error.title && String(error.title).toLowerCase().includes("typo"));
         const formatName = isTypo ? "grammar-typo" : "grammar-other";
 
         console.debug(
-          `🎨 Highlighting error: "${error.error_text}" at ${start}-${error.end_index} with format ${formatName}`
+          `🎨 Highlighting error: "${error.error_text}" at ${start}-${error.end_index} with format ${formatName}`,
         );
 
         try {
@@ -1070,7 +1072,7 @@ export class GrammarChecker {
               len,
               formatName,
               true,
-              "silent"
+              "silent",
             );
           } else {
             this.editor.formatText(start, len, formatName, true, "silent");
@@ -1128,7 +1130,7 @@ export class GrammarChecker {
 
   private trySafariDOMIsolation(
     errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
+    savedSelection: { index: number; length: number } | null,
   ): boolean {
     try {
       const quillInstance = this.editor._quill as unknown as {
@@ -1145,10 +1147,10 @@ export class GrammarChecker {
       const parentNode = container.parentNode;
 
       // Save scroll position
-      const scrollTop =
-        document.documentElement.scrollTop || document.body.scrollTop;
-      const scrollLeft =
-        document.documentElement.scrollLeft || document.body.scrollLeft;
+      const scrollTop = document.documentElement.scrollTop ||
+        document.body.scrollTop;
+      const scrollLeft = document.documentElement.scrollLeft ||
+        document.body.scrollLeft;
 
       // Remove container from DOM temporarily
       parentNode.insertBefore(placeholder, container);
@@ -1170,11 +1172,11 @@ export class GrammarChecker {
           const docLength = this.editor.getLength();
           const safeIndex = Math.min(
             savedSelection.index,
-            Math.max(0, docLength - 1)
+            Math.max(0, docLength - 1),
           );
           const safeLength = Math.min(
             savedSelection.length,
-            Math.max(0, docLength - safeIndex)
+            Math.max(0, docLength - safeIndex),
           );
 
           if (this.editor.setSelection) {
@@ -1192,7 +1194,7 @@ export class GrammarChecker {
 
   private performSafariSafeHighlighting(
     errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
+    savedSelection: { index: number; length: number } | null,
   ): void {
     // Safari-specific implementation - try DOM isolation approach first
     if (this.trySafariDOMIsolation(errors, savedSelection)) {
@@ -1262,18 +1264,18 @@ export class GrammarChecker {
             const docLength = this.editor.getLength();
             const safeIndex = Math.min(
               savedSelection.index,
-              Math.max(0, docLength - 1)
+              Math.max(0, docLength - 1),
             );
             const safeLength = Math.min(
               savedSelection.length,
-              Math.max(0, docLength - safeIndex)
+              Math.max(0, docLength - safeIndex),
             );
 
             originalSetSelection.call(
               quillInstance,
               safeIndex,
               safeLength,
-              "silent"
+              "silent",
             );
           }
         } catch (err) {
@@ -1302,7 +1304,7 @@ export class GrammarChecker {
 
   private performHighlightingOperations(
     errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
+    savedSelection: { index: number; length: number } | null,
   ): void {
     // Batch all operations together to minimize DOM thrashing
     const quillInstance = this.editor._quill as unknown as {
@@ -1344,14 +1346,14 @@ export class GrammarChecker {
             docLength,
             "grammar-typo",
             false,
-            "silent"
+            "silent",
           );
           this.editor._quill.formatText(
             0,
             docLength,
             "grammar-other",
             false,
-            "silent"
+            "silent",
           );
         } else {
           this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
@@ -1360,7 +1362,7 @@ export class GrammarChecker {
             docLength,
             "grammar-other",
             false,
-            "silent"
+            "silent",
           );
         }
       } catch (_err) {
@@ -1378,14 +1380,16 @@ export class GrammarChecker {
       const docLen = docText.length;
 
       errors.forEach((error) => {
-        const start =
-          typeof error.start_index === "number" ? error.start_index : null;
-        const end =
-          typeof error.end_index === "number" ? error.end_index : null;
-        const len =
-          start !== null && end !== null ? Math.max(0, end - start) : 0;
-        const isTypo =
-          error.error_code === "typo" ||
+        const start = typeof error.start_index === "number"
+          ? error.start_index
+          : null;
+        const end = typeof error.end_index === "number"
+          ? error.end_index
+          : null;
+        const len = start !== null && end !== null
+          ? Math.max(0, end - start)
+          : 0;
+        const isTypo = error.error_code === "typo" ||
           (error.title && String(error.title).toLowerCase().includes("typo"));
         const formatName = isTypo ? "grammar-typo" : "grammar-other";
 
@@ -1402,7 +1406,7 @@ export class GrammarChecker {
                 len,
                 formatName,
                 true,
-                "silent"
+                "silent",
               );
             } else {
               this.editor.formatText(start, len, formatName, true, "silent");
@@ -1429,7 +1433,7 @@ export class GrammarChecker {
                     needle.length,
                     formatName,
                     true,
-                    "silent"
+                    "silent",
                   );
                 } else {
                   this.editor.formatText(
@@ -1437,7 +1441,7 @@ export class GrammarChecker {
                     needle.length,
                     formatName,
                     true,
-                    "silent"
+                    "silent",
                   );
                 }
                 applied = true;
@@ -1455,7 +1459,7 @@ export class GrammarChecker {
       // Restore original history recording if it was intercepted
       if (originalHistoryRecord && quillInstance?.history) {
         console.debug(
-          "🎨 Restoring Quill history recording after highlighting"
+          "🎨 Restoring Quill history recording after highlighting",
         );
         const history = quillInstance.history as unknown as {
           record?: () => void;
@@ -1468,7 +1472,7 @@ export class GrammarChecker {
   }
 
   private restoreCursorPositionImmediate(
-    selection: { index: number; length: number } | null
+    selection: { index: number; length: number } | null,
   ): void {
     if (!selection) return;
 
@@ -1487,13 +1491,13 @@ export class GrammarChecker {
           this.editor._quill.setSelection(
             Math.max(0, safeIndex),
             Math.max(0, safeLength),
-            "silent"
+            "silent",
           );
         } else {
           this.editor.setSelection(
             Math.max(0, safeIndex),
             Math.max(0, safeLength),
-            "silent"
+            "silent",
           );
         }
       }
@@ -1527,8 +1531,8 @@ export class GrammarChecker {
           const endBlot = this.editor.findBlot(range.endContainer);
 
           if (startBlot && endBlot) {
-            const startIndex =
-              this.editor.getIndex(startBlot) + range.startOffset;
+            const startIndex = this.editor.getIndex(startBlot) +
+              range.startOffset;
             const endIndex = this.editor.getIndex(endBlot) + range.endOffset;
 
             return {
@@ -1548,14 +1552,14 @@ export class GrammarChecker {
   }
 
   private restoreCursorPosition(
-    selection: { index: number; length: number } | null
+    selection: { index: number; length: number } | null,
   ): void {
     if (!selection) return;
 
     try {
       // Use multiple restoration attempts with different delays for Safari
       const isSafari = /^((?!chrome|android).)*safari/i.test(
-        navigator.userAgent
+        navigator.userAgent,
       );
 
       const restoreAttempt = (attempt: number = 0) => {
@@ -1566,12 +1570,12 @@ export class GrammarChecker {
             const safeIndex = Math.min(selection.index, docLength - 1);
             const safeLength = Math.min(
               selection.length,
-              docLength - safeIndex
+              docLength - safeIndex,
             );
 
             this.editor.setSelection(
               Math.max(0, safeIndex),
-              Math.max(0, safeLength)
+              Math.max(0, safeLength),
             );
 
             // Verify the selection was actually set correctly
@@ -1615,7 +1619,7 @@ export class GrammarChecker {
     error: CheckerError,
     index: number,
     length: number,
-    ev: MouseEvent
+    ev: MouseEvent,
   ) {
     // Remove existing tooltip
     const existing = document.querySelector(".error-tooltip");
@@ -1638,10 +1642,9 @@ export class GrammarChecker {
 
     const ul = document.createElement("ul");
     ul.className = "suggestions";
-    const suggestions =
-      error.suggestions && error.suggestions.length > 0
-        ? error.suggestions
-        : [error.error_text];
+    const suggestions = error.suggestions && error.suggestions.length > 0
+      ? error.suggestions
+      : [error.error_text];
     suggestions.forEach((sugg) => {
       const li = document.createElement("li");
       li.textContent = sugg;
@@ -1701,8 +1704,9 @@ export class GrammarChecker {
     this.errorCount.textContent = `${count} ${
       count === 1 ? "error" : "errors"
     }`;
-    this.errorCount.className =
-      count > 0 ? "error-count has-errors" : "error-count";
+    this.errorCount.className = count > 0
+      ? "error-count has-errors"
+      : "error-count";
   }
 
   private showErrorMessage(message: string): void {
@@ -1753,10 +1757,10 @@ export class GrammarChecker {
 
     // Adjust coordinates to prevent menu from appearing off-screen
     // This helps with Chrome's different coordinate calculation
-    const viewportWidth =
-      globalThis.innerWidth || document.documentElement.clientWidth;
-    const viewportHeight =
-      globalThis.innerHeight || document.documentElement.clientHeight;
+    const viewportWidth = globalThis.innerWidth ||
+      document.documentElement.clientWidth;
+    const viewportHeight = globalThis.innerHeight ||
+      document.documentElement.clientHeight;
 
     const adjustedX = Math.max(10, Math.min(x, viewportWidth - 200));
     const adjustedY = Math.max(10, Math.min(y, viewportHeight - 150));
@@ -1775,10 +1779,9 @@ export class GrammarChecker {
     }
 
     // Add suggestions
-    const suggestions =
-      error.suggestions && error.suggestions.length > 0
-        ? error.suggestions
-        : [error.error_text];
+    const suggestions = error.suggestions && error.suggestions.length > 0
+      ? error.suggestions
+      : [error.error_text];
 
     suggestions.forEach((suggestion) => {
       const btn = document.createElement("button");
@@ -1834,10 +1837,10 @@ export class GrammarChecker {
       const lengthDifference = newLength - originalLength;
 
       console.log(
-        `Applying suggestion on line ${lineInfo.lineNumber}: "${error.error_text}" → "${suggestion}"`
+        `Applying suggestion on line ${lineInfo.lineNumber}: "${error.error_text}" → "${suggestion}"`,
       );
       console.log(
-        `Length change: ${originalLength} → ${newLength} (diff: ${lengthDifference})`
+        `Length change: ${originalLength} → ${newLength} (diff: ${lengthDifference})`,
       );
 
       // Apply the suggestion
@@ -1848,7 +1851,7 @@ export class GrammarChecker {
         start,
         originalLength,
         error.error_code === "typo" ? "grammar-typo" : "grammar-other",
-        false
+        false,
       );
 
       // Replace the text
@@ -1870,7 +1873,7 @@ export class GrammarChecker {
           error,
           suggestion,
           lineInfo,
-          lengthDifference
+          lengthDifference,
         );
       }, 100);
     } catch (_err) {
@@ -1886,23 +1889,23 @@ export class GrammarChecker {
       lineContent: string;
       positionInLine: number;
     },
-    lengthDifference: number
+    lengthDifference: number,
   ): Promise<void> {
     try {
       console.log(
-        `Starting intelligent correction for line ${lineInfo.lineNumber}`
+        `Starting intelligent correction for line ${lineInfo.lineNumber}`,
       );
 
       // Remove the corrected error from state
       this.state.errors = this.state.errors.filter(
-        (err) => err !== originalError
+        (err) => err !== originalError,
       );
 
       // If there's a length difference, adjust indices of subsequent errors
       if (lengthDifference !== 0) {
         this.adjustSubsequentErrorIndices(
           originalError.start_index,
-          lengthDifference
+          lengthDifference,
         );
       }
 
@@ -1914,12 +1917,12 @@ export class GrammarChecker {
       this.updateStatus("Ready", false);
 
       console.log(
-        `Intelligent correction complete. Total errors: ${this.state.errors.length}`
+        `Intelligent correction complete. Total errors: ${this.state.errors.length}`,
       );
     } catch (error) {
       console.error(
         "Intelligent correction failed, falling back to full check:",
-        error
+        error,
       );
       // Fallback to full grammar check
       this.state.lastCheckedContent = "";
@@ -1930,10 +1933,10 @@ export class GrammarChecker {
 
   private adjustSubsequentErrorIndices(
     correctionPosition: number,
-    lengthDifference: number
+    lengthDifference: number,
   ): void {
     console.log(
-      `Adjusting error indices after position ${correctionPosition} by ${lengthDifference}`
+      `Adjusting error indices after position ${correctionPosition} by ${lengthDifference}`,
     );
 
     this.state.errors = this.state.errors.map((error) => {
@@ -1970,8 +1973,9 @@ export class GrammarChecker {
       let lineStartPosition = 0;
       for (let i = 0; i < lineIndex; i++) {
         const prevLine = lines[i];
-        const prevLineWithNewline =
-          i < lines.length - 1 ? prevLine + "\n" : prevLine;
+        const prevLineWithNewline = i < lines.length - 1
+          ? prevLine + "\n"
+          : prevLine;
         lineStartPosition += prevLineWithNewline.length;
       }
 
@@ -1981,7 +1985,7 @@ export class GrammarChecker {
       if (lineWithNewline.trim()) {
         const response = await this.api.checkText(
           lineWithNewline,
-          this.config.language
+          this.config.language,
         );
 
         // Adjust error indices to account for position in full text
@@ -2009,7 +2013,7 @@ export class GrammarChecker {
         }
 
         console.log(
-          `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`
+          `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`,
         );
       }
     } catch (error) {

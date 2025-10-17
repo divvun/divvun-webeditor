@@ -1,9 +1,9 @@
 import {
-  Controls,
-  LanguageSelector,
   ClearButton,
-  StatusBar,
+  Controls,
   EditorContainer,
+  LanguageSelector,
+  StatusBar,
 } from "./components/index.ts";
 
 export const title = "Divvun Grammar and Spell Checker";

@@ -5,7 +5,7 @@
     globalThis.QuillBridge = {
       create: () => {
         throw new Error(
-          "Quill is not loaded. Include Quill CDN before using the bridge."
+          "Quill is not loaded. Include Quill CDN before using the bridge.",
         );
       },
     };
@@ -14,10 +14,9 @@
 
   const bridge = {
     create(container, options) {
-      const el =
-        typeof container === "string"
-          ? document.getElementById(container)
-          : container;
+      const el = typeof container === "string"
+        ? document.getElementById(container)
+        : container;
       if (!el) throw new Error("QuillBridge.create: container not found");
       const quill = new Q(el, options || {});
 
