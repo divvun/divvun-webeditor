@@ -14,6 +14,7 @@ import type {
   LineCacheEntry,
   SupportedLanguage,
 } from "./types.ts";
+import { CursorManager, type CursorPosition } from "./cursor-manager.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
 // Minimal Quill typings we need (Quill is loaded via CDN in the page)
@@ -138,6 +139,12 @@ export class GrammarChecker {
   private statusDisplay: HTMLElement;
   private errorCount: HTMLElement;
 
+  // Cursor management
+  private cursorManager: CursorManager;
+  
+  // Suggestion management
+  private suggestionManager: SuggestionManager;
+
   private createApiForLanguage(language: SupportedLanguage): CheckerApi {
     // Find the language in our available languages list
     const languageInfo = availableLanguages.find(
@@ -194,6 +201,9 @@ export class GrammarChecker {
         ],
       },
     });
+
+    // Initialize cursor manager
+    this.cursorManager = new CursorManager(this.editor);
 
     // Ensure editor root is focusable
     this.editor.root.setAttribute("aria-label", "Grammar editor");
@@ -997,7 +1007,7 @@ export class GrammarChecker {
     }
 
     // Highlight errors for a specific line without clearing existing highlights
-    const savedSelection = this.saveCursorPosition();
+    const savedSelection = this.cursorManager.saveCursorPosition();
 
     // Detect Safari
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -1079,7 +1089,7 @@ export class GrammarChecker {
       });
 
       // Restore cursor position
-      this.restoreCursorPositionImmediate(savedSelection);
+      this.cursorManager.restoreCursorPositionImmediate(savedSelection);
     } finally {
       // Restore original history recording if it was intercepted
       if (originalHistoryRecord && quillInstance?.history) {
@@ -1098,7 +1108,7 @@ export class GrammarChecker {
     this.isHighlighting = true;
 
     // Safari-specific approach: Completely disable all selection events during formatting
-    const savedSelection = this.saveCursorPosition();
+    const savedSelection = this.cursorManager.saveCursorPosition();
 
     // Detect Safari
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -1367,7 +1377,7 @@ export class GrammarChecker {
 
       if (!errors || errors.length === 0) {
         // Restore cursor position even when no errors
-        this.restoreCursorPositionImmediate(savedSelection);
+        this.cursorManager.restoreCursorPositionImmediate(savedSelection);
         return;
       }
 
@@ -1450,7 +1460,7 @@ export class GrammarChecker {
       });
 
       // Force immediate cursor restoration
-      this.restoreCursorPositionImmediate(savedSelection);
+      this.cursorManager.restoreCursorPositionImmediate(savedSelection);
     } finally {
       // Restore original history recording if it was intercepted
       if (originalHistoryRecord && quillInstance?.history) {
@@ -1467,148 +1477,8 @@ export class GrammarChecker {
     }
   }
 
-  private restoreCursorPositionImmediate(
-    selection: { index: number; length: number } | null,
-  ): void {
-    if (!selection) return;
 
-    try {
-      // Immediate restoration without delays
-      if (this.editor.setSelection) {
-        const docLength = this.editor.getLength();
-        const safeIndex = Math.min(selection.index, docLength - 1);
-        const safeLength = Math.min(selection.length, docLength - safeIndex);
 
-        // Use 'silent' source to prevent events
-        if (
-          this.editor._quill &&
-          typeof this.editor._quill.setSelection === "function"
-        ) {
-          this.editor._quill.setSelection(
-            Math.max(0, safeIndex),
-            Math.max(0, safeLength),
-            "silent",
-          );
-        } else {
-          this.editor.setSelection(
-            Math.max(0, safeIndex),
-            Math.max(0, safeLength),
-            "silent",
-          );
-        }
-      }
-    } catch (_err) {
-      // Fallback: try regular restoration with delay for Safari
-      this.restoreCursorPosition(selection);
-    }
-  }
-
-  private saveCursorPosition(): { index: number; length: number } | null {
-    try {
-      // Try to use Quill's getSelection method if available
-      if (this.editor.getSelection) {
-        return this.editor.getSelection();
-      }
-
-      // Fallback: use browser's selection API
-      const selection = (
-        globalThis as unknown as { getSelection?: () => Selection | null }
-      ).getSelection?.();
-      if (!selection || selection.rangeCount === 0) {
-        return null;
-      }
-
-      const range = selection.getRangeAt(0);
-
-      // Find the position within the editor using Quill's methods
-      if (this.editor.findBlot && this.editor.getIndex) {
-        try {
-          const startBlot = this.editor.findBlot(range.startContainer);
-          const endBlot = this.editor.findBlot(range.endContainer);
-
-          if (startBlot && endBlot) {
-            const startIndex = this.editor.getIndex(startBlot) +
-              range.startOffset;
-            const endIndex = this.editor.getIndex(endBlot) + range.endOffset;
-
-            return {
-              index: startIndex,
-              length: endIndex - startIndex,
-            };
-          }
-        } catch (_err) {
-          // Fallback to simple position
-        }
-      }
-
-      return null;
-    } catch (_err) {
-      return null;
-    }
-  }
-
-  private restoreCursorPosition(
-    selection: { index: number; length: number } | null,
-  ): void {
-    if (!selection) return;
-
-    try {
-      // Use multiple restoration attempts with different delays for Safari
-      const isSafari = /^((?!chrome|android).)*safari/i.test(
-        navigator.userAgent,
-      );
-
-      const restoreAttempt = (attempt: number = 0) => {
-        try {
-          if (this.editor.setSelection) {
-            // Ensure the selection is within document bounds
-            const docLength = this.editor.getLength();
-            const safeIndex = Math.min(selection.index, docLength - 1);
-            const safeLength = Math.min(
-              selection.length,
-              docLength - safeIndex,
-            );
-
-            this.editor.setSelection(
-              Math.max(0, safeIndex),
-              Math.max(0, safeLength),
-            );
-
-            // Verify the selection was actually set correctly
-            if (isSafari && attempt < 3) {
-              setTimeout(() => {
-                const currentSelection = this.editor.getSelection();
-                if (!currentSelection || currentSelection.index !== safeIndex) {
-                  restoreAttempt(attempt + 1);
-                }
-              }, 5);
-            }
-          }
-        } catch (_err) {
-          // If setSelection fails, try to at least focus the editor
-          if (attempt === 0) {
-            try {
-              this.editor.focus();
-              if (isSafari) {
-                setTimeout(() => restoreAttempt(1), 10);
-              }
-            } catch (_focusErr) {
-              // ignore
-            }
-          }
-        }
-      };
-
-      // Initial attempt with delay for Safari
-      if (isSafari) {
-        setTimeout(() => restoreAttempt(0), 15);
-      } else {
-        restoreAttempt(0);
-      }
-    } catch (_err) {
-      // ignore
-    }
-  }
 
   private showSuggestionTooltip(
     _anchor: HTMLElement,
