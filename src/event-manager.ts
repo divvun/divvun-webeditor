@@ -226,21 +226,30 @@ export class EventManager {
 
       // Check for rapid changes that might indicate undo cascading
       const recentChanges = this.recentTextChanges.filter(
-        (change) => now - change.timestamp < 1000 // Last 1 second
+        (change) => now - change.timestamp < 500 // Reduced to 500ms for tighter detection
       );
 
-      if (recentChanges.length > 3) {
+      if (recentChanges.length > 5) {
+        // Increased threshold to be less sensitive
         console.debug("🔄 Rapid text changes detected - possible undo cascade");
         return true;
       }
     }
 
     // Check if this change happened very soon after user action but during highlighting
-    if (this.isHighlighting && now - this.lastUserActionTime < 2000) {
-      console.debug(
-        "🔄 Change during highlighting phase - likely undo of highlight"
-      );
-      return true;
+    // Only consider it an undo if it happens within 500ms and the text is reverting
+    if (this.isHighlighting && now - this.lastUserActionTime < 500) {
+      // Additional check: only treat as undo if text is actually reverting to a previous state
+      const previousTexts = this.recentTextChanges
+        .slice(0, -1)
+        .map((change) => change.text);
+
+      if (previousTexts.includes(currentText)) {
+        console.debug(
+          "🔄 Change during highlighting phase - likely undo of highlight"
+        );
+        return true;
+      }
     }
 
     return false;
