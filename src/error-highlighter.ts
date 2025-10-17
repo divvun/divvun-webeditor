@@ -72,12 +72,11 @@ export class ErrorHighlighter {
     this.isHighlighting = true;
     this.callbacks.onHighlightingStart();
 
-    // AGGRESSIVE FIX: Always clear ALL formatting before highlighting
+    // Instead of aggressive global clearing, only clear formatting for affected lines
     try {
-      const docLength = this.editor.getLength();
-      this.editor.formatText(0, docLength, "grammar-error", false, "silent");
-      this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
-      this.editor.formatText(0, docLength, "grammar-other", false, "silent");
+      if (errors.length > 0) {
+        this.clearFormattingForErrors(errors);
+      }
     } catch (_err) {
       // ignore
     }
@@ -100,6 +99,31 @@ export class ErrorHighlighter {
       // Clear highlighting flag for synchronous Safari path
       if (this.isSafari) {
         this.finishHighlighting();
+      }
+    }
+  }
+
+  /**
+   * Clear formatting only for the specific error ranges
+   */
+  private clearFormattingForErrors(errors: CheckerError[]): void {
+    const formatTypes = ["grammar-error", "grammar-typo", "grammar-other"];
+
+    for (const error of errors) {
+      const length = error.end_index - error.start_index;
+
+      for (const formatType of formatTypes) {
+        try {
+          this.editor.formatText(
+            error.start_index,
+            length,
+            formatType,
+            false,
+            "silent"
+          );
+        } catch (_err) {
+          // ignore individual format failures
+        }
       }
     }
   }
@@ -403,5 +427,108 @@ export class ErrorHighlighter {
       this.isHighlighting = false;
       this.callbacks.onHighlightingComplete();
     }, 100); // Small delay to ensure all operations are complete
+  }
+
+  /**
+   * Highlight errors for a specific line only
+   * This is the new isolated line-by-line highlighting approach
+   */
+  highlightSpecificLine(
+    lineNumber: number,
+    errors: CheckerError[],
+    _lineStartIndex: number
+  ): void {
+    if (errors.length === 0) {
+      return; // Nothing to highlight
+    }
+
+    console.debug(
+      `🎨 Highlighting line ${lineNumber} with ${errors.length} errors`
+    );
+
+    const savedSelection = this.cursorManager.saveCursorPosition();
+
+    try {
+      // Apply highlighting only for this line's errors
+      for (const error of errors) {
+        try {
+          const errorClass = this.getErrorClass(error.error_code);
+          const length = error.end_index - error.start_index;
+
+          this.editor.formatText(
+            error.start_index,
+            length,
+            errorClass,
+            true,
+            "silent"
+          );
+        } catch (err) {
+          console.warn(
+            `Failed to highlight error at ${error.start_index}-${error.end_index}:`,
+            err
+          );
+        }
+      }
+
+      // Restore cursor if it was affected
+      if (savedSelection) {
+        this.cursorManager.restoreCursorPositionImmediate(savedSelection);
+      }
+    } catch (err) {
+      console.warn(`Line highlighting failed for line ${lineNumber}:`, err);
+    }
+  }
+
+  /**
+   * Clear highlighting for a specific line only
+   */
+  clearSpecificLine(
+    lineNumber: number,
+    lineStartIndex: number,
+    lineLength: number
+  ): void {
+    console.debug(`🧹 Clearing highlighting for line ${lineNumber}`);
+
+    const savedSelection = this.cursorManager.saveCursorPosition();
+
+    try {
+      // Clear all grammar-related formatting for this line
+      const formatTypes = ["grammar-error", "grammar-typo", "grammar-other"];
+
+      for (const formatType of formatTypes) {
+        try {
+          this.editor.formatText(
+            lineStartIndex,
+            lineLength,
+            formatType,
+            false,
+            "silent"
+          );
+        } catch (err) {
+          console.warn(
+            `Failed to clear ${formatType} for line ${lineNumber}:`,
+            err
+          );
+        }
+      }
+
+      // Restore cursor
+      if (savedSelection) {
+        this.cursorManager.restoreCursorPositionImmediate(savedSelection);
+      }
+    } catch (err) {
+      console.warn(`Line clearing failed for line ${lineNumber}:`, err);
+    }
+  }
+
+  /**
+   * Get the appropriate CSS class for an error code
+   */
+  private getErrorClass(errorCode: string): string {
+    const isTypo =
+      errorCode === "typo" ||
+      errorCode === "unknown-word" ||
+      errorCode.toLowerCase().includes("spell");
+    return isTypo ? "grammar-typo" : "grammar-other";
   }
 }

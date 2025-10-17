@@ -192,6 +192,8 @@ export class TextAnalyzer {
         content: lineContent,
         errors: adjustedErrors,
         timestamp: new Date(),
+        isHighlighted: false,
+        lineStartIndex: lineStartIndex,
       });
 
       return adjustedErrors;
@@ -300,5 +302,90 @@ export class TextAnalyzer {
       size: this.lineCache.size,
       entries,
     };
+  }
+
+  /**
+   * Apply highlighting for a specific line using cached data
+   */
+  highlightLine(
+    lineNumber: number,
+    highlighter: {
+      highlightSpecificLine: (
+        lineNumber: number,
+        errors: CheckerError[],
+        lineStartIndex: number
+      ) => void;
+    }
+  ): boolean {
+    const cached = this.lineCache.get(lineNumber);
+    if (!cached || cached.isHighlighted) {
+      return false; // Nothing to highlight or already highlighted
+    }
+
+    if (cached.errors.length > 0) {
+      highlighter.highlightSpecificLine(
+        lineNumber,
+        cached.errors,
+        cached.lineStartIndex
+      );
+    }
+
+    // Mark as highlighted
+    cached.isHighlighted = true;
+    return true;
+  }
+
+  /**
+   * Remove highlighting for a specific line and mark cache accordingly
+   */
+  unhighlightLine(
+    lineNumber: number,
+    highlighter: {
+      clearSpecificLine: (
+        lineNumber: number,
+        lineStartIndex: number,
+        lineLength: number
+      ) => void;
+    }
+  ): boolean {
+    const cached = this.lineCache.get(lineNumber);
+    if (!cached || !cached.isHighlighted) {
+      return false; // Nothing to unhighlight
+    }
+
+    // Calculate line length from cached content
+    const lineLength = cached.content.length;
+    highlighter.clearSpecificLine(
+      lineNumber,
+      cached.lineStartIndex,
+      lineLength
+    );
+
+    // Mark as not highlighted
+    cached.isHighlighted = false;
+    return true;
+  }
+
+  /**
+   * Check and highlight a specific line atomically
+   * This is the main entry point for line-by-line checking + highlighting
+   */
+  async checkAndHighlightLine(
+    lineNumber: number,
+    highlighter: {
+      highlightSpecificLine: (
+        lineNumber: number,
+        errors: CheckerError[],
+        lineStartIndex: number
+      ) => void;
+    }
+  ): Promise<CheckerError[]> {
+    // First, check the line (this updates the cache)
+    const errors = await this.checkSpecificLine(lineNumber);
+
+    // Then apply highlighting using the cached data
+    this.highlightLine(lineNumber, highlighter);
+
+    return errors;
   }
 }

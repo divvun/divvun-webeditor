@@ -66,6 +66,9 @@ export class GrammarChecker {
   // Error highlighting
   private errorHighlighter: ErrorHighlighter;
 
+  // Line checking coordination
+  private pendingLineChecks: Map<number, Promise<void>> = new Map();
+
   // ConfigManager now handles API creation
 
   constructor() {
@@ -253,14 +256,17 @@ export class GrammarChecker {
   }
 
   private handleTextChange(_source: string, currentText: string): void {
-    // Always update previous text to maintain accurate baseline for next edit detection
+    // Skip processing during highlighting or if any line checks are pending
     const shouldProcessEdit =
-      this.stateMachine.getCurrentState() !== "highlighting";
+      this.stateMachine.getCurrentState() !== "highlighting" &&
+      this.pendingLineChecks.size === 0;
 
     if (!shouldProcessEdit) {
       // Skip processing but still update previousText to prevent stale state
       console.debug(
-        "🔄 Text change during highlighting, ignoring edit processing but updating baseline"
+        `🔄 Text change while ${this.stateMachine.getCurrentState()} or ${
+          this.pendingLineChecks.size
+        } line checks pending, ignoring edit processing but updating baseline`
       );
       this.previousText = currentText;
       return;
@@ -330,22 +336,46 @@ export class GrammarChecker {
    * Handle single line edit with line-specific checking
    */
   private async handleSingleLineEdit(lineNumber: number): Promise<void> {
+    // Check if there's already a pending check for this line
+    if (this.pendingLineChecks.has(lineNumber)) {
+      console.debug(
+        `⏸️ Line ${lineNumber} check already in progress, skipping`
+      );
+      return;
+    }
+
+    const checkPromise = this.performSingleLineCheck(lineNumber);
+    this.pendingLineChecks.set(lineNumber, checkPromise);
+
+    try {
+      await checkPromise;
+    } finally {
+      this.pendingLineChecks.delete(lineNumber);
+    }
+  }
+
+  /**
+   * Perform the actual line check (extracted for better control)
+   */
+  private async performSingleLineCheck(lineNumber: number): Promise<void> {
     try {
       console.debug(`🔍 Checking specific line: ${lineNumber}`);
 
       // Invalidate cache for this line since it was edited
       this.textAnalyzer.invalidateLineCache(lineNumber);
 
-      // Check only the specific line
-      const errors = await this.textAnalyzer.checkSpecificLine(lineNumber);
-
-      console.debug(
-        `✅ Line ${lineNumber} check complete: ${errors.length} errors found`
+      // Use atomic check + highlight - this prevents race conditions
+      const errors = await this.textAnalyzer.checkAndHighlightLine(
+        lineNumber,
+        this.errorHighlighter
       );
 
-      // The callbacks in TextAnalyzer will handle updating the UI
-      // But we also need to update the highlighting
-      this.updateLineSpecificHighlighting(lineNumber, errors);
+      console.debug(
+        `✅ Line ${lineNumber} atomic check+highlight complete: ${errors.length} errors found`
+      );
+
+      // Update error count in UI
+      this.updateErrorCount(this.state.errors.length);
 
       // Cancel any pending debounce since line-specific check completed successfully
       this.stateMachine.cancelPendingCheck();
@@ -369,10 +399,16 @@ export class GrammarChecker {
       // Invalidate cache for the line that was split and the new line
       this.textAnalyzer.invalidateLineCache(lineNumber, lineNumber + 1);
 
-      // Check both the original line and the new line created
+      // Use atomic check + highlight for both lines
       await Promise.all([
-        this.textAnalyzer.checkSpecificLine(lineNumber),
-        this.textAnalyzer.checkSpecificLine(lineNumber + 1),
+        this.textAnalyzer.checkAndHighlightLine(
+          lineNumber,
+          this.errorHighlighter
+        ),
+        this.textAnalyzer.checkAndHighlightLine(
+          lineNumber + 1,
+          this.errorHighlighter
+        ),
       ]);
 
       console.debug(
@@ -400,17 +436,30 @@ export class GrammarChecker {
         lineNumber + 1
       );
 
-      // Check the lines around the deletion point
+      // Use atomic check + highlight for lines around the deletion point
       const currentText = this.editor.getText();
       const lines = currentText.split("\n");
 
+      const checkPromises = [];
       if (lineNumber < lines.length) {
-        await this.textAnalyzer.checkSpecificLine(lineNumber);
+        checkPromises.push(
+          this.textAnalyzer.checkAndHighlightLine(
+            lineNumber,
+            this.errorHighlighter
+          )
+        );
       }
 
       if (lineNumber > 0) {
-        await this.textAnalyzer.checkSpecificLine(lineNumber - 1);
+        checkPromises.push(
+          this.textAnalyzer.checkAndHighlightLine(
+            lineNumber - 1,
+            this.errorHighlighter
+          )
+        );
       }
+
+      await Promise.all(checkPromises);
 
       console.debug(`✅ Line deletion handling complete`);
 
@@ -420,108 +469,6 @@ export class GrammarChecker {
       console.error(`❌ Line deletion handling failed:`, error);
       this.textAnalyzer.checkGrammar();
     }
-  }
-
-  /**
-   * Update highlighting for a specific line's errors
-   */
-  private updateLineSpecificHighlighting(
-    lineNumber: number,
-    errors: CheckerError[]
-  ): void {
-    if (errors.length > 0) {
-      console.debug(
-        `🎨 Applying line-specific highlighting for line ${lineNumber}: ${errors.length} errors`
-      );
-
-      // Remove existing errors from this line from the state
-      const currentText = this.editor.getText();
-      const lineStartIndex =
-        this.textAnalyzer.getLineNumberFromIndex === undefined
-          ? this.getLineStartIndexFromText(lineNumber, currentText)
-          : this.getLineStartIndexFromText(lineNumber, currentText);
-      const lineEndIndex = this.getLineEndIndexFromText(
-        lineNumber,
-        currentText
-      );
-
-      // Remove errors that fall within this line's range
-      this.state.errors = this.state.errors.filter(
-        (error) =>
-          !(
-            error.start_index >= lineStartIndex &&
-            error.end_index <= lineEndIndex
-          )
-      );
-
-      // Add the new errors for this line
-      this.state.errors.push(...errors);
-
-      // Re-highlight all errors to ensure consistency
-      this.errorHighlighter.highlightErrors(this.state.errors);
-
-      // Update error count and state
-      this.updateErrorCount(this.state.errors.length);
-      this.eventManager.updateErrors(this.state.errors);
-    } else {
-      console.debug(
-        `🧹 Clearing errors for line ${lineNumber} - no errors found`
-      );
-
-      // Remove errors from this line from the state
-      const currentText = this.editor.getText();
-      const lineStartIndex = this.getLineStartIndexFromText(
-        lineNumber,
-        currentText
-      );
-      const lineEndIndex = this.getLineEndIndexFromText(
-        lineNumber,
-        currentText
-      );
-
-      const originalErrorCount = this.state.errors.length;
-      this.state.errors = this.state.errors.filter(
-        (error) =>
-          !(
-            error.start_index >= lineStartIndex &&
-            error.end_index <= lineEndIndex
-          )
-      );
-
-      // If we removed any errors, update highlighting
-      if (this.state.errors.length !== originalErrorCount) {
-        this.errorHighlighter.highlightErrors(this.state.errors);
-        this.updateErrorCount(this.state.errors.length);
-        this.eventManager.updateErrors(this.state.errors);
-      }
-    }
-  }
-
-  /**
-   * Get the start index of a line in the document
-   */
-  private getLineStartIndexFromText(lineNumber: number, text: string): number {
-    const lines = text.split("\n");
-    if (lineNumber === 0) return 0;
-
-    let index = 0;
-    for (let i = 0; i < lineNumber; i++) {
-      index += lines[i].length + 1; // +1 for newline character
-    }
-    return index;
-  }
-
-  /**
-   * Get the end index of a line in the document
-   */
-  private getLineEndIndexFromText(lineNumber: number, text: string): number {
-    const lines = text.split("\n");
-    if (lineNumber >= lines.length) return text.length;
-
-    return (
-      this.getLineStartIndexFromText(lineNumber, text) +
-      lines[lineNumber].length
-    );
   }
 
   private async handleIntelligentPasteCheck(
