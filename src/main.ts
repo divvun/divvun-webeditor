@@ -253,10 +253,13 @@ export class GrammarChecker {
   }
 
   private handleTextChange(_source: string, currentText: string): void {
-    // Handle state transitions via state machine
-    if (this.stateMachine.getCurrentState() === "highlighting") {
-      // Skip if currently highlighting
-      console.debug("🔄 Text change during highlighting, ignoring");
+    // Always update previous text to maintain accurate baseline for next edit detection
+    const shouldProcessEdit = this.stateMachine.getCurrentState() !== "highlighting";
+    
+    if (!shouldProcessEdit) {
+      // Skip processing but still update previousText to prevent stale state
+      console.debug("🔄 Text change during highlighting, ignoring edit processing but updating baseline");
+      this.previousText = currentText;
       return;
     }
 

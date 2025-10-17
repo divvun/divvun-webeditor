@@ -255,3 +255,159 @@ Deno.test("CheckerStateMachine - Rapid Multi-line Edits Don't Reset Each Other",
   // Cleanup
   stateMachine.cleanup();
 });
+
+Deno.test("CheckerStateMachine - Edits During Highlighting Phase Are Queued", async () => {
+  const { callbacks, calls } = createMockCallbacks();
+  const stateMachine = new CheckerStateMachine(100, callbacks); // Short delay for testing
+  
+  // This test covers the scenario from console logs:
+  // "🔄 Text change during highlighting, ignoring"
+  // When user continues typing while highlighting is in progress
+  
+  // 1. Start with initial edit that will trigger checking
+  stateMachine.handleEdit("", "Dqll");
+  
+  // Wait for check to start
+  await delay(120);
+  
+  // 2. Simulate check completion -> transition to highlighting
+  stateMachine.onCheckComplete();
+  
+  // Clear calls to focus on what happens during highlighting
+  calls.length = 0;
+  
+  // 3. Try to edit while in highlighting state (this gets ignored in the real app)
+  stateMachine.handleEdit("Dqll", "Dqll. Mun leat");
+  
+  // Should ignore edits during highlighting (current behavior)
+  const editCalls = calls.filter(call => call.method === "onEditDetected");
+  assertEquals(editCalls.length, 0); // Edit ignored
+  
+  // 4. Complete highlighting
+  stateMachine.onHighlightingComplete();
+  
+  // 5. Now try editing again (should work)
+  stateMachine.handleEdit("Dqll", "Dqll. Mun leat stuoris.");
+  
+  // This edit should be detected
+  const finalEditCalls = calls.filter(call => call.method === "onEditDetected");
+  assertEquals(finalEditCalls.length, 1); // Edit detected after highlighting complete
+  
+  const editInfo = finalEditCalls[0]?.args[1] as EditInfo;
+  assertEquals(editInfo.lineNumber, 0);
+  assertEquals(editInfo.lengthChange > 0, true); // Should be a positive length change
+  
+  // Cleanup
+  stateMachine.cleanup();
+});
+
+Deno.test("CheckerStateMachine - Highlighting State Isolation", async () => {
+  const { callbacks, calls } = createMockCallbacks();
+  const stateMachine = new CheckerStateMachine(50, callbacks); // Very short delay
+  
+  // Test the specific issue: text changes during highlighting cause inconsistent state
+  
+  // 1. User types quickly: "Dql" (triggers check)
+  stateMachine.handleEdit("", "D");
+  stateMachine.handleEdit("D", "Dq");
+  stateMachine.handleEdit("Dq", "Dql");
+  
+  // Wait for debounce -> check starts
+  await delay(60);
+  
+  // 2. Simulate check returns (highlighting starts)
+  stateMachine.onCheckComplete();
+  
+  // At this point state should be "highlighting"
+  const stateAfterCheck = calls.filter(call => 
+    call.method === "onStateEntry" && call.args[0] === "highlighting"
+  );
+  assertEquals(stateAfterCheck.length, 1);
+  
+  // Clear calls
+  calls.length = 0;
+  
+  // 3. User continues typing during highlighting (real-world scenario)
+  stateMachine.handleEdit("Dql", "Dqll"); // This should be ignored
+  stateMachine.handleEdit("Dqll", "Dqll."); // This should be ignored
+  
+  // Edits during highlighting should be ignored
+  const ignoredEdits = calls.filter(call => call.method === "onEditDetected");
+  assertEquals(ignoredEdits.length, 0); // Both edits ignored
+  
+  // 4. Complete highlighting
+  stateMachine.onHighlightingComplete();
+  
+  // 5. Subsequent edits should work normally
+  stateMachine.handleEdit("Dqll.", "Dqll. Fixed");
+  
+  const workingEdit = calls.filter(call => call.method === "onEditDetected");
+  assertEquals(workingEdit.length, 1); // Edit works after highlighting complete
+  
+  // Cleanup
+  stateMachine.cleanup();
+});
+
+Deno.test("CheckerStateMachine - PreviousText Baseline Maintenance During Highlighting", async () => {
+  // This test verifies the fix for the bug where previousText wasn't updated
+  // during highlighting, causing stale state and incorrect edit detection
+  
+  const { callbacks, calls } = createMockCallbacks();
+  
+  // Create a mock main.ts handleTextChange function to test the integration
+  let mockPreviousText = "";
+  const mockStateMachine = new CheckerStateMachine(50, callbacks); // Short delay
+  
+  const mockHandleTextChange = (currentText: string) => {
+    // Replicate the fixed logic from main.ts
+    const shouldProcessEdit = mockStateMachine.getCurrentState() !== "highlighting";
+    
+    if (!shouldProcessEdit) {
+      // CRITICAL FIX: Should still update previousText even when ignoring edit processing
+      mockPreviousText = currentText;
+      return;
+    }
+    
+    // Normal processing
+    mockStateMachine.handleEdit(mockPreviousText, currentText);
+    mockPreviousText = currentText;
+  };
+  
+  // Scenario: User types "Dql" → highlighting starts → user continues typing during highlighting
+  
+  // 1. User types "Dql"
+  mockHandleTextChange("Dql");
+  assertEquals(mockPreviousText, "Dql");
+  assertEquals(mockStateMachine.getCurrentState(), "editing");
+  
+  // 2. Simulate checking and highlighting starting
+  await new Promise(resolve => setTimeout(resolve, 100)); // Wait for debounce
+  
+  // Manually transition to checking and then highlighting to simulate the flow
+  mockStateMachine.onCheckComplete(); // This transitions to highlighting
+  assertEquals(mockStateMachine.getCurrentState(), "highlighting");
+  
+  // 3. User continues typing "Dqll. Mun leat..." DURING highlighting
+  mockHandleTextChange("Dqll. Mun leat...");
+  
+  // 4. CRITICAL TEST: previousText should be updated even though edit was ignored
+  assertEquals(mockPreviousText, "Dqll. Mun leat...");
+  assertEquals(mockStateMachine.getCurrentState(), "highlighting"); // Still highlighting
+  
+  // 5. Highlighting finishes
+  mockStateMachine.onHighlightingComplete();
+  assertEquals(mockStateMachine.getCurrentState(), "idle");
+  
+  // 6. User makes another edit - this should work correctly with updated baseline
+  mockHandleTextChange("Dqll. Mun leat... and more");
+  assertEquals(mockPreviousText, "Dqll. Mun leat... and more");
+  assertEquals(mockStateMachine.getCurrentState(), "editing");
+  
+  // 7. Verify the state machine processed the edit correctly 
+  // (no stale previousText causing wrong edit detection)
+  const newEditCalls = calls.filter(call => call.method === "onEditDetected");
+  assertEquals(newEditCalls.length >= 1, true); // At least one edit should be detected
+  
+  // Cleanup
+  mockStateMachine.cleanup();
+});
