@@ -1,11 +1,11 @@
 import type {
-  CheckerResponse,
-  SupportedLanguage,
-  SpellCheckerResponse,
-  CheckerError,
-  CheckerApi,
   ApiLanguageResponse,
   AvailableLanguage,
+  CheckerApi,
+  CheckerError,
+  CheckerResponse,
+  SpellCheckerResponse,
+  SupportedLanguage,
 } from "./types.ts";
 
 export class GrammarCheckerAPI implements CheckerApi {
@@ -14,7 +14,7 @@ export class GrammarCheckerAPI implements CheckerApi {
 
   async checkText(
     text: string,
-    language: SupportedLanguage
+    language: SupportedLanguage,
   ): Promise<CheckerResponse> {
     if (!text.trim()) {
       return { text, errs: [] };
@@ -38,7 +38,7 @@ export class GrammarCheckerAPI implements CheckerApi {
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(
-            `Language "${language}" is not supported by the Divvun API`
+            `Language "${language}" is not supported by the Divvun API`,
           );
         } else if (response.status >= 500) {
           throw new Error("Divvun API server error. Please try again later.");
@@ -55,7 +55,7 @@ export class GrammarCheckerAPI implements CheckerApi {
       if (error instanceof Error) {
         if (error.name === "AbortError") {
           throw new Error(
-            `Request timeout: The grammar check took longer than ${this.timeout}ms`
+            `Request timeout: The grammar check took longer than ${this.timeout}ms`,
           );
         }
         throw error;
@@ -85,7 +85,7 @@ export class SpellCheckerAPI implements CheckerApi {
 
   async checkText(
     text: string,
-    language: SupportedLanguage
+    language: SupportedLanguage,
   ): Promise<CheckerResponse> {
     if (!text.trim()) {
       return { text, errs: [] };
@@ -109,11 +109,11 @@ export class SpellCheckerAPI implements CheckerApi {
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(
-            `Language "${language}" is not supported by the Spell Checker API`
+            `Language "${language}" is not supported by the Spell Checker API`,
           );
         } else if (response.status >= 500) {
           throw new Error(
-            "Spell Checker API server error. Please try again later."
+            "Spell Checker API server error. Please try again later.",
           );
         } else {
           throw new Error(`API request failed with status ${response.status}`);
@@ -155,7 +155,7 @@ export class SpellCheckerAPI implements CheckerApi {
       if (error instanceof Error) {
         if (error.name === "AbortError") {
           throw new Error(
-            `Request timeout: The spell check took longer than ${this.timeout}ms`
+            `Request timeout: The spell check took longer than ${this.timeout}ms`,
           );
         }
         throw error;
@@ -183,41 +183,45 @@ export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
     if (!response.ok) {
       throw new Error(`Failed to fetch languages: ${response.status}`);
     }
-    
+
     const data: ApiLanguageResponse = await response.json();
     const languages: AvailableLanguage[] = [];
-    
+
     // Process grammar languages (exclude SMS as per requirements)
     Object.entries(data.available.grammar).forEach(([code, name]) => {
-      if (code !== "sms") { // Exclude SMS from grammar as it doesn't work
+      if (code !== "sms") {
+        // Exclude SMS from grammar as it doesn't work
         languages.push({
           code: code as SupportedLanguage,
           name: name,
-          type: "grammar"
+          type: "grammar",
         });
       }
     });
-    
+
     // Process speller languages
     Object.entries(data.available.speller).forEach(([code, name]) => {
       // Only add speller languages that don't already have grammar support
-      const hasGrammar = languages.some(lang => lang.code === code);
+      const hasGrammar = languages.some((lang) => lang.code === code);
       if (!hasGrammar) {
         languages.push({
           code: code as SupportedLanguage,
           name: name,
-          type: "speller"
+          type: "speller",
         });
       }
       // If a language has both grammar and speller, grammar takes precedence (already added above)
     });
-    
+
     // Sort by language code for consistent ordering
     languages.sort((a, b) => a.code.localeCompare(b.code));
-    
+
     return languages;
   } catch (error) {
-    console.warn("Failed to fetch languages from API, falling back to defaults:", error);
+    console.warn(
+      "Failed to fetch languages from API, falling back to defaults:",
+      error,
+    );
     // Fallback to some default languages if API fails
     return [
       { code: "se", name: "Davvisámegiella (Northern sami)", type: "grammar" },

@@ -1,13 +1,18 @@
-import { GrammarCheckerAPI, SpellCheckerAPI } from "./api.ts";
+import {
+  getAvailableLanguages,
+  GrammarCheckerAPI,
+  SpellCheckerAPI,
+} from "./api.ts";
 import type {
-  SupportedLanguage,
+  AvailableLanguage,
+  CheckerApi,
   CheckerError,
-  EditorState,
-  GrammarCheckerConfig,
   CheckerState,
   CheckingContext,
+  EditorState,
+  GrammarCheckerConfig,
   LineCacheEntry,
-  CheckerApi,
+  SupportedLanguage,
 } from "./types.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
@@ -131,7 +136,22 @@ export class GrammarChecker {
   private errorCount: HTMLElement;
 
   private createApiForLanguage(language: SupportedLanguage): CheckerApi {
-    // SMS language uses spell checker API, all others use grammar checker API
+    // Find the language in our available languages list
+    const languageInfo = availableLanguages.find(
+      (lang) => lang.code === language,
+    );
+
+    if (languageInfo) {
+      // Use the API type specified by the server
+      if (languageInfo.type === "speller") {
+        return new SpellCheckerAPI();
+      } else {
+        return new GrammarCheckerAPI();
+      }
+    }
+
+    // Fallback logic if language not found in API data
+    // SMS uses spell checker, all others use grammar checker
     if (language === "sms") {
       return new SpellCheckerAPI();
     } else {
@@ -196,6 +216,18 @@ export class GrammarChecker {
 
     // Set up event listeners (LanguageSelector component handles its own options)
     this.setupEventListeners();
+  }
+
+  async initializeLanguages(): Promise<void> {
+    // Fetch available languages from API
+    try {
+      availableLanguages = await getAvailableLanguages();
+      // Re-initialize the API with the default language using the new data
+      this.api = this.createApiForLanguage(this.config.language);
+    } catch (error) {
+      console.warn("Failed to initialize languages:", error);
+      // Continue with current API setup as fallback
+    }
   }
 
   private setupEventListeners(): void {
@@ -2098,6 +2130,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   try {
     const grammarChecker = new GrammarChecker();
+
+    // Initialize languages asynchronously
+    grammarChecker
+      .initializeLanguages()
+      .then(() => {
+        console.log("Languages initialized successfully");
+      })
+      .catch((error) => {
+        console.warn("Language initialization failed:", error);
+      });
 
     // Make it available globally for debugging
     (
