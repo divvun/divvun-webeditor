@@ -1,6 +1,6 @@
 /**
  * SuggestionManager - Handles tooltip and context menu creation, suggestion application, and popup positioning
- * 
+ *
  * This class encapsulates all the logic for showing error suggestions to users
  * through tooltips, context menus, and handling suggestion applications.
  */
@@ -11,7 +11,12 @@ import type { CheckerError } from "./types.ts";
 interface EditorInterface {
   deleteText(index: number, length: number): void;
   insertText(index: number, text: string): void;
-  formatText(index: number, length: number, format: string, value: boolean): void;
+  formatText(
+    index: number,
+    length: number,
+    format: string,
+    value: boolean
+  ): void;
   setSelection(index: number, length: number): void;
   focus(): void;
 }
@@ -39,7 +44,7 @@ export class SuggestionManager {
     error: CheckerError,
     index: number,
     length: number,
-    ev: MouseEvent,
+    ev: MouseEvent
   ): void {
     // Remove existing tooltip
     const existing = document.querySelector(".error-tooltip");
@@ -85,7 +90,7 @@ export class SuggestionManager {
       li.style.cursor = "default";
       ul.appendChild(li);
     }
-    
+
     tooltip.appendChild(ul);
     document.body.appendChild(tooltip);
 
@@ -116,10 +121,10 @@ export class SuggestionManager {
       "absolute bg-white border border-gray-300 rounded-md shadow-lg z-[1000] min-w-[120px] overflow-hidden";
 
     // Adjust coordinates to prevent menu from appearing off-screen
-    const viewportWidth = globalThis.innerWidth ||
-      document.documentElement.clientWidth;
-    const viewportHeight = globalThis.innerHeight ||
-      document.documentElement.clientHeight;
+    const viewportWidth =
+      globalThis.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight =
+      globalThis.innerHeight || document.documentElement.clientHeight;
 
     const adjustedX = Math.max(10, Math.min(x, viewportWidth - 200));
     const adjustedY = Math.max(10, Math.min(y, viewportHeight - 150));
@@ -207,7 +212,7 @@ export class SuggestionManager {
     _error: CheckerError,
     suggestion: string,
     index: number,
-    length: number,
+    length: number
   ): void {
     try {
       this.editor.deleteText(index, length);
