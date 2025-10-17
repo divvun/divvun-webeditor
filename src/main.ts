@@ -23,6 +23,7 @@ import {
   CheckerStateMachine,
   type StateTransitionCallbacks,
 } from "./checker-state-machine.ts";
+import { EventManager, type EventCallbacks } from "./event-manager.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
 // Minimal Quill typings we need (Quill is loaded via CDN in the page)
@@ -128,10 +129,6 @@ export class GrammarChecker {
   private config: GrammarCheckerConfig;
   private state: EditorState;
   private checkingContext: CheckingContext | null = null;
-
-  // Undo detection
-  private recentTextChanges: Array<{ timestamp: number; text: string }> = [];
-  private lastUserActionTime: number = 0;
   private isHighlighting: boolean = false;
 
   // DOM elements
@@ -153,6 +150,9 @@ export class GrammarChecker {
 
   // State machine
   private stateMachine: CheckerStateMachine;
+
+  // Event management
+  private eventManager: EventManager;
 
   private createApiForLanguage(language: SupportedLanguage): CheckerApi {
     // Find the language in our available languages list
@@ -239,6 +239,7 @@ export class GrammarChecker {
           this.highlightLineErrors(errors);
         } else {
           this.state.errors = errors;
+          this.eventManager.updateErrors(errors);
         }
       },
       onUpdateErrorCount: (count: number) => {
@@ -291,8 +292,40 @@ export class GrammarChecker {
     ) as HTMLElement;
     this.errorCount = document.getElementById("error-count") as HTMLElement;
 
-    // Set up event listeners (LanguageSelector component handles its own options)
-    this.setupEventListeners();
+    // Initialize event manager
+    const eventCallbacks: EventCallbacks = {
+      onTextChange: (source: string, currentText: string) =>
+        this.handleTextChange(source, currentText),
+      onLanguageChange: (language: SupportedLanguage) =>
+        this.setLanguage(language),
+      onClearEditor: () => this.clearEditor(),
+      onErrorClick: (
+        errorNode: HTMLElement,
+        matching: CheckerError,
+        index: number,
+        length: number,
+        event: MouseEvent
+      ) =>
+        this.suggestionManager.showSuggestionTooltip(
+          errorNode,
+          matching,
+          index,
+          length,
+          event
+        ),
+      onErrorRightClick: (x: number, y: number, matchingError: CheckerError) =>
+        this.suggestionManager.showContextMenu(x, y, matchingError),
+      onIntelligentPasteCheck: (
+        prePasteSelection: { index: number; length: number },
+        prePasteText: string,
+        pastedContent: string
+      ) => this.handleIntelligentPasteCheck(prePasteSelection, prePasteText, pastedContent),
+    };
+    this.eventManager = new EventManager(
+      this.editor,
+      this.clearButton,
+      eventCallbacks
+    );
   }
 
   async initializeLanguages(): Promise<void> {
@@ -307,230 +340,16 @@ export class GrammarChecker {
     }
   }
 
-  private setupEventListeners(): void {
-    // Auto-check on text change using state machine
-    this.editor.on("text-change", (...args: unknown[]) => {
-      const source = args[2] as string;
-      const now = Date.now();
-      const currentText = this.editor.getText();
+  private handleTextChange(_source: string, _currentText: string): void {
+    // Handle state transitions via state machine
+    if (this.stateMachine.getCurrentState() === "highlighting") {
+      // Skip if currently highlighting
+      console.debug("🔄 Text change during highlighting, ignoring");
+      return;
+    }
 
-      // Track text changes for undo detection
-      this.recentTextChanges.push({ timestamp: now, text: currentText });
-
-      // Keep only recent changes (last 5 seconds)
-      this.recentTextChanges = this.recentTextChanges.filter(
-        (change) => now - change.timestamp < 5000
-      );
-
-      // Check if this is likely an undo operation
-      if (this.isUndoOperation(currentText, source)) {
-        return;
-      }
-
-      // Record user action time
-      if (source === "user") {
-        this.lastUserActionTime = now;
-      }
-
-      // Handle state transitions via state machine
-      if (this.stateMachine.getCurrentState() === "highlighting") {
-        // Skip if currently highlighting
-        console.debug("🔄 Text change during highlighting, ignoring");
-        return;
-      }
-
-      // Let state machine handle the transition
-      this.stateMachine.handleTextChange();
-    });
-
-    // Handle paste events for cursor positioning and intelligent checking
-    this.editor.root.addEventListener("paste", (e: ClipboardEvent) => {
-      // Record cursor position before paste
-      const prePasteSelection = this.editor.getSelection();
-      const prePasteText = this.editor.getText();
-      const isEmpty = prePasteText.trim() === "";
-
-      if (isEmpty) {
-        // Let the paste happen, then position cursor at start
-        setTimeout(() => {
-          // Record this as user action for undo detection
-          this.lastUserActionTime = Date.now();
-          this.editor.setSelection(0, 0);
-        }, 10);
-      } else if (prePasteSelection) {
-        // For non-empty editor, record paste context for intelligent checking
-        setTimeout(() => {
-          this.handleIntelligentPasteCheck(
-            prePasteSelection,
-            prePasteText,
-            e.clipboardData?.getData("text") || ""
-          );
-        }, 50); // Allow paste to complete
-      }
-    });
-
-    // Language selection - listen for custom event from LanguageSelector component
-    globalThis.addEventListener("languageChanged", (e) => {
-      const customEvent = e as CustomEvent;
-      const language = customEvent.detail.language as SupportedLanguage;
-      this.setLanguage(language);
-    });
-
-    // Clear button
-    this.clearButton.addEventListener("click", () => {
-      this.clearEditor();
-    });
-
-    // Click outside to close tooltips
-    document.addEventListener("click", (e) => {
-      const existingTooltip = document.querySelector(".error-tooltip");
-      if (existingTooltip && !existingTooltip.contains(e.target as Node)) {
-        existingTooltip.remove();
-      }
-    });
-
-    // Right-click context menu for error corrections
-    this.editor.root.addEventListener("contextmenu", (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      // Try multiple methods to find the error at the cursor position
-      let matchingError: CheckerError | undefined;
-
-      // Method 1: Check if right-clicking directly on an error element
-      const target = e.target as HTMLElement;
-      const errorElement = target.closest(
-        ".grammar-typo, .grammar-other"
-      ) as HTMLElement;
-
-      if (errorElement) {
-        // Get the text content and find matching error
-        const errorText = errorElement.textContent || "";
-        matchingError = this.state.errors.find(
-          (error) =>
-            error.error_text === errorText ||
-            (error.suggestions &&
-              error.suggestions.some((s) => s.includes(errorText)))
-        );
-      }
-
-      // Method 2: Try browser-specific caret position methods
-      if (!matchingError) {
-        let clickIndex: number | null = null;
-
-        // Try caretPositionFromPoint (Chrome/Edge)
-        const caretPos = (
-          document as unknown as {
-            caretPositionFromPoint?: (
-              x: number,
-              y: number
-            ) => { offsetNode: Node; offset: number } | null;
-          }
-        ).caretPositionFromPoint?.(e.clientX, e.clientY);
-
-        if (caretPos) {
-          clickIndex = this.getCaretPosition(caretPos);
-        } else {
-          // Try caretRangeFromPoint (Safari/Firefox)
-          const range = (
-            document as unknown as {
-              caretRangeFromPoint?: (x: number, y: number) => Range | null;
-            }
-          ).caretRangeFromPoint?.(e.clientX, e.clientY);
-
-          if (range) {
-            clickIndex = this.getRangePosition(range);
-          }
-        }
-
-        if (clickIndex !== null) {
-          matchingError = this.state.errors.find(
-            (err) => err.start_index <= clickIndex && clickIndex < err.end_index
-          );
-        }
-      }
-
-      if (matchingError) {
-        // Calculate Chrome-compatible coordinates
-        let menuX = e.clientX;
-        let menuY = e.clientY;
-
-        // Detect browser for positioning adjustments
-        const userAgent = globalThis.navigator?.userAgent || "";
-        const isChrome =
-          userAgent.includes("Chrome") && !userAgent.includes("Edg");
-
-        if (isChrome) {
-          // Chrome calculates coordinates differently - need much larger offset
-          menuX = e.clientX;
-          menuY = e.clientY + 50; // Much larger offset for Chrome
-
-          // If we have error element, use element position but with Chrome-specific offset
-          if (errorElement) {
-            const rect = errorElement.getBoundingClientRect();
-            menuX = rect.left + rect.width / 2;
-            // Use element's bottom position plus large margin for Chrome
-            menuY = rect.bottom + 20;
-          }
-        } else {
-          // Firefox and Safari: use element-based positioning when available
-          if (errorElement) {
-            const rect = errorElement.getBoundingClientRect();
-            menuX = rect.left + rect.width / 2;
-            menuY = rect.bottom + 5;
-          } else {
-            // Use mouse coordinates for Firefox/Safari
-            menuX = e.clientX;
-            menuY = e.clientY + 5;
-          }
-        }
-
-        this.suggestionManager.showContextMenu(menuX, menuY, matchingError);
-      }
-    });
-
-    // Click on an error span to show suggestions
-    this.editor.root.addEventListener("click", (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const errorNode = target.closest(
-        ".grammar-typo, .grammar-other"
-      ) as HTMLElement;
-      if (!errorNode) return;
-
-      // Use Quill's blot find to determine index and length
-      try {
-        const blot = this.editor.findBlot
-          ? this.editor.findBlot(errorNode)
-          : undefined;
-        const index =
-          this.editor.getIndex && blot !== undefined
-            ? this.editor.getIndex(blot)
-            : 0;
-        const maybeLength =
-          blot && typeof (blot as { length?: unknown }).length === "function"
-            ? (blot as { length: () => number }).length()
-            : 0;
-        const length = maybeLength ?? 0;
-
-        // Find matching error by index
-        const matching = this.state.errors.find(
-          (err) =>
-            err.start_index === index &&
-            err.end_index - err.start_index === length
-        );
-        if (matching) {
-          this.suggestionManager.showSuggestionTooltip(
-            errorNode,
-            matching,
-            index,
-            length,
-            e as MouseEvent
-          );
-        }
-      } catch (_err) {
-        // ignore
-      }
-    });
+    // Let state machine handle the transition
+    this.stateMachine.handleTextChange();
   }
 
   private async handleIntelligentPasteCheck(
@@ -743,53 +562,12 @@ export class GrammarChecker {
     }
   }
 
-  private isUndoOperation(currentText: string, source: string): boolean {
-    // If source is not 'user', it's likely a programmatic change (like undo/redo)
-    if (source !== "user") {
-      console.debug("🔄 Non-user source detected:", source);
-      return true;
-    }
 
-    const now = Date.now();
-
-    // Check if we have a recent history of text changes
-    if (this.recentTextChanges.length >= 2) {
-      // Look for a pattern where text reverts to a previous state
-      const previousTexts = this.recentTextChanges
-        .slice(0, -1) // Exclude the current change
-        .map((change) => change.text);
-
-      // If current text matches any previous text from recent history, it's likely undo
-      if (previousTexts.includes(currentText)) {
-        console.debug("🔄 Text reverted to previous state - undo detected");
-        return true;
-      }
-
-      // Check for rapid changes that might indicate undo cascading
-      const recentChanges = this.recentTextChanges.filter(
-        (change) => now - change.timestamp < 1000 // Last 1 second
-      );
-
-      if (recentChanges.length > 3) {
-        console.debug("🔄 Rapid text changes detected - possible undo cascade");
-        return true;
-      }
-    }
-
-    // Check if this change happened very soon after user action but during highlighting
-    if (this.isHighlighting && now - this.lastUserActionTime < 2000) {
-      console.debug(
-        "🔄 Change during highlighting phase - likely undo of highlight"
-      );
-      return true;
-    }
-
-    return false;
-  }
 
   private finishHighlighting(): void {
     setTimeout(() => {
       this.isHighlighting = false;
+      this.eventManager.setHighlightingState(false);
 
       // Transition back to idle when highlighting is complete
       this.stateMachine.onHighlightingComplete();
@@ -862,6 +640,7 @@ export class GrammarChecker {
   private highlightLineErrors(errors: CheckerError[]): void {
     // Set highlighting flag to prevent triggering grammar checks during line highlighting
     this.isHighlighting = true;
+    this.eventManager.setHighlightingState(true);
 
     // AGGRESSIVE FIX: Always clear ALL formatting before highlighting
     try {
@@ -974,6 +753,7 @@ export class GrammarChecker {
   private highlightErrors(errors: CheckerError[]): void {
     // Set highlighting flag to prevent triggering grammar checks during highlighting
     this.isHighlighting = true;
+    this.eventManager.setHighlightingState(true);
 
     // Safari-specific approach: Completely disable all selection events during formatting
     const savedSelection = this.cursorManager.saveCursorPosition();
@@ -1373,34 +1153,7 @@ export class GrammarChecker {
     alert(`Error: ${message}`);
   }
 
-  private getCaretPosition(caret: {
-    offsetNode: Node;
-    offset: number;
-  }): number {
-    // Use Quill's built-in method to find position from DOM node
-    try {
-      const blot = this.editor.findBlot?.(caret.offsetNode);
-      if (blot && this.editor.getIndex) {
-        return this.editor.getIndex(blot) + caret.offset;
-      }
-    } catch (_err) {
-      // ignore
-    }
-    return 0;
-  }
 
-  private getRangePosition(range: Range): number {
-    // Convert DOM range to Quill index (for Safari/Firefox)
-    try {
-      const blot = this.editor.findBlot?.(range.startContainer);
-      if (blot && this.editor.getIndex) {
-        return this.editor.getIndex(blot) + range.startOffset;
-      }
-    } catch (_err) {
-      // ignore
-    }
-    return 0;
-  }
 
   private applySuggestion(error: CheckerError, suggestion: string): void {
     try {
@@ -1662,6 +1415,7 @@ export class GrammarChecker {
 
   clearErrors(): void {
     this.state.errors = [];
+    this.eventManager.updateErrors([]);
     this.state.errorSpans = [];
     this.updateErrorCount(0);
     // Remove any grammar-related formatting
