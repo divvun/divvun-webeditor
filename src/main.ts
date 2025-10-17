@@ -285,53 +285,64 @@ export class GrammarChecker {
   private handleEditDetected(editType: EditType, editInfo: EditInfo): void {
     console.debug(`📝 Handling ${editType}:`, editInfo);
 
-    switch (editType) {
-      case "single-line-edit":
-        if (editInfo.lineNumber !== undefined) {
+    try {
+      switch (editType) {
+        case "single-line-edit":
+          if (editInfo.lineNumber !== undefined) {
+            console.debug(
+              `🎯 Line-specific check for line ${editInfo.lineNumber}`
+            );
+            this.handleSingleLineEdit(editInfo.lineNumber).catch((err) => {
+              console.error(`❌ Error in single line edit handler:`, err);
+            });
+          } else {
+            console.warn(
+              "Single line edit detected but line number not provided"
+            );
+            this.textAnalyzer.checkGrammar(); // Fallback to full check
+          }
+          break;
+        case "newline-creation":
           console.debug(
-            `🎯 Line-specific check for line ${editInfo.lineNumber}`
+            `Newline created at line ${editInfo.lineNumber}, split at position ${editInfo.splitPosition}`
           );
-          this.handleSingleLineEdit(editInfo.lineNumber);
-        } else {
-          console.warn(
-            "Single line edit detected but line number not provided"
+          // For newlines, we need to check both the split line and the new line
+          if (editInfo.lineNumber !== undefined) {
+            this.handleNewlineEdit(editInfo.lineNumber).catch((err) => {
+              console.error(`❌ Error in newline edit handler:`, err);
+            });
+          }
+          break;
+        case "line-deletion":
+          console.debug(`Line deleted/merged at line ${editInfo.lineNumber}`);
+          // When lines are deleted, invalidate cache and check surrounding context
+          if (editInfo.lineNumber !== undefined) {
+            this.handleLineDeletion(editInfo.lineNumber).catch((err) => {
+              console.error(`❌ Error in line deletion handler:`, err);
+            });
+          }
+          break;
+        case "multi-line-edit":
+          console.debug(
+            `Multi-line edit from line ${editInfo.startLine} to ${editInfo.endLine}`
           );
-          this.textAnalyzer.checkGrammar(); // Fallback to full check
-        }
-        break;
-      case "newline-creation":
-        console.debug(
-          `Newline created at line ${editInfo.lineNumber}, split at position ${editInfo.splitPosition}`
-        );
-        // For newlines, we need to check both the split line and the new line
-        if (editInfo.lineNumber !== undefined) {
-          this.handleNewlineEdit(editInfo.lineNumber);
-        }
-        break;
-      case "line-deletion":
-        console.debug(`Line deleted/merged at line ${editInfo.lineNumber}`);
-        // When lines are deleted, invalidate cache and check surrounding context
-        if (editInfo.lineNumber !== undefined) {
-          this.handleLineDeletion(editInfo.lineNumber);
-        }
-        break;
-      case "multi-line-edit":
-        console.debug(
-          `Multi-line edit from line ${editInfo.startLine} to ${editInfo.endLine}`
-        );
-        // For multi-line edits, we fall back to full checking for now
-        // Could be optimized to check only affected line range
-        this.textAnalyzer.checkGrammar();
-        break;
-      case "paste":
-      case "cut":
-        console.debug(`${editType} operation detected`);
-        // Paste/cut operations affect potentially multiple lines, use full check
-        this.textAnalyzer.checkGrammar();
-        break;
+          // For multi-line edits, we fall back to full checking for now
+          // Could be optimized to check only affected line range
+          this.textAnalyzer.checkGrammar();
+          break;
+        case "paste":
+        case "cut":
+          console.debug(`${editType} operation detected`);
+          // Paste/cut operations affect potentially multiple lines, use full check
+          this.textAnalyzer.checkGrammar();
+          break;
+      }
+    } catch (error) {
+      console.error(`❌ Error in handleEditDetected:`, error);
+      // Fallback to full check if something goes wrong
+      this.textAnalyzer.checkGrammar();
     }
   }
-
   /**
    * Handle single line edit with line-specific checking
    */
@@ -360,6 +371,10 @@ export class GrammarChecker {
   private async performSingleLineCheck(lineNumber: number): Promise<void> {
     try {
       console.debug(`🔍 Checking specific line: ${lineNumber}`);
+
+      // Clear ALL existing highlighting first to prevent red text from previous runs
+      console.debug(`🧹 Clearing all existing highlights before line check`);
+      this.errorHighlighter.clearErrors();
 
       // Invalidate cache for this line since it was edited
       this.textAnalyzer.invalidateLineCache(lineNumber);
