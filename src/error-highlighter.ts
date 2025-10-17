@@ -231,12 +231,15 @@ export class ErrorHighlighter {
   ): void {
     // Try DOM isolation first for Safari
     if (this.trySafariDOMIsolation(errors, savedSelection)) {
+      // DOM isolation succeeded, highlighting is complete
+      this.finishHighlighting();
       return;
     }
 
     // Fallback: Use standard highlighting with additional delays
     setTimeout(() => {
       this.performHighlightingOperations(errors, savedSelection);
+      this.finishHighlighting();
     }, 10);
   }
 
