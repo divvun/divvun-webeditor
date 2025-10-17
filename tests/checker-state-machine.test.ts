@@ -447,3 +447,79 @@ Deno.test(
     mockStateMachine.cleanup();
   }
 );
+
+Deno.test(
+  "CheckerStateMachine - Multi-line Error Isolation Issue",
+  async () => {
+    // This test reproduces the issue where editing line 2 causes errors on line 1 to disappear
+
+    const { callbacks, calls } = createMockCallbacks();
+    const stateMachine = new CheckerStateMachine(50, callbacks); // Short delay
+
+    // Scenario: Line 1 has errors, user moves to line 2 and starts typing
+    // Expected: Line 1 errors should remain, only line 2 should be rechecked
+
+    // 1. User completes first line with errors: "Dqll mun leat stuoris."
+    stateMachine.handleEdit("", "Dqll mun leat stuoris.");
+    assertEquals(stateMachine.getCurrentState(), "editing");
+
+    // 2. Wait for checking to complete on line 1
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    stateMachine.onCheckComplete(); // Simulate errors found on line 1
+    stateMachine.onHighlightingComplete(); // Errors now highlighted on line 1
+    assertEquals(stateMachine.getCurrentState(), "idle");
+
+    // Clear previous calls to focus on the issue
+    calls.length = 0;
+
+    // 3. User adds newline and moves to line 2
+    stateMachine.handleEdit(
+      "Dqll mun leat stuoris.",
+      "Dqll mun leat stuoris.\n"
+    );
+    assertEquals(stateMachine.getCurrentState(), "editing");
+
+    // Verify this was detected as newline creation
+    const newlineCall = calls.find((call) => call.method === "onEditDetected");
+    assertEquals(newlineCall?.args[0], "newline-creation");
+
+    // 4. User starts typing on line 2: "H"
+    calls.length = 0; // Clear to focus on line 2 edits
+    stateMachine.handleEdit(
+      "Dqll mun leat stuoris.\n",
+      "Dqll mun leat stuoris.\nH"
+    );
+
+    // This should be detected as single-line-edit on line 1 (the new line)
+    const line2EditCall = calls.find(
+      (call) => call.method === "onEditDetected"
+    );
+    assertEquals(line2EditCall?.args[0], "single-line-edit");
+
+    const editInfo = line2EditCall?.args[1] as EditInfo;
+    assertEquals(editInfo.lineNumber, 1); // Should be line 1 (0-indexed line 2)
+
+    // 5. The critical issue: This line 2 edit should NOT affect line 1 errors
+    // In the real app, this triggers a full document grammar check which clears line 1 highlights
+
+    // Wait for checking
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // The issue is that onCheckRequested is called, which in the real app:
+    // 1. Sends the ENTIRE document text for grammar checking
+    // 2. The response includes errors for both lines
+    // 3. But error-highlighter.ts clears ALL existing highlights before applying new ones
+    // 4. If the grammar service doesn't return line 1 errors in this response, line 1 highlights disappear
+
+    const checkRequestedCalls = calls.filter(
+      (call) => call.method === "onCheckRequested"
+    );
+    assertEquals(checkRequestedCalls.length >= 1, true); // Grammar check should be requested
+
+    // This test documents the current behavior - the real fix needs to be in:
+    // 1. Either making grammar checking line-specific, OR
+    // 2. Making error highlighting preserve errors for unchanged lines
+
+    stateMachine.cleanup();
+  }
+);

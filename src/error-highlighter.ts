@@ -107,7 +107,7 @@ export class ErrorHighlighter {
   /**
    * Highlight all errors in the document
    */
-  highlightErrors(errors: CheckerError[]): void {
+  highlightErrors(errors: CheckerError[], _changedLines?: number[]): void {
     // Prevent multiple simultaneous highlighting operations
     if (this.isHighlighting) {
       console.debug(
@@ -325,56 +325,13 @@ export class ErrorHighlighter {
     }
 
     try {
-      // Clear existing error formatting across the document
-      console.debug("🎨 Clearing existing formatting before highlighting");
-      try {
-        const docLength = this.editor.getLength();
-        // Use silent mode to prevent cursor jumps during clearing
-        if (
-          this.editor._quill &&
-          typeof this.editor._quill.formatText === "function"
-        ) {
-          this.editor._quill.formatText(
-            0,
-            docLength,
-            "grammar-typo",
-            false,
-            "silent"
-          );
-          this.editor._quill.formatText(
-            0,
-            docLength,
-            "grammar-error",
-            false,
-            "silent"
-          );
-          this.editor._quill.formatText(
-            0,
-            docLength,
-            "grammar-other",
-            false,
-            "silent"
-          );
-        } else {
-          this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
-          this.editor.formatText(
-            0,
-            docLength,
-            "grammar-error",
-            false,
-            "silent"
-          );
-          this.editor.formatText(
-            0,
-            docLength,
-            "grammar-other",
-            false,
-            "silent"
-          );
-        }
-      } catch (_err) {
-        // Ignore clearing errors
-      }
+      // Clear existing error formatting across entire document
+      // For now, we clear all formatting (can be optimized later for specific lines)
+      console.debug("🎨 Clearing existing formatting across entire document");
+      const docLength = this.editor.getLength();
+      this.editor.formatText(0, docLength, "grammar-error", false, "silent");
+      this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
+      this.editor.formatText(0, docLength, "grammar-other", false, "silent");
 
       // Apply highlighting for each error
       console.debug(`🎨 Highlighting ${errors.length} errors`);

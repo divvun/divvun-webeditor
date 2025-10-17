@@ -127,6 +127,23 @@ export class TextAnalyzer {
   }
 
   /**
+   * Check a specific line only - for line-specific grammar checking
+   * This is the public API for checking individual lines
+   */
+  async checkSpecificLine(lineNumber: number): Promise<CheckerError[]> {
+    // Use the existing private method but notify callbacks about line-specific results
+    const errors = await this.checkSingleLine(lineNumber);
+
+    // Notify callbacks with line-specific information
+    if (errors.length > 0) {
+      this.callbacks.onErrorsFound(errors, lineNumber);
+      this.callbacks.onUpdateErrorCount(errors.length);
+    }
+
+    return errors;
+  }
+
+  /**
    * Check a single line with caching
    */
   private async checkSingleLine(lineNumber: number): Promise<CheckerError[]> {
