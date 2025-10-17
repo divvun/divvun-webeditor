@@ -108,6 +108,14 @@ export class ErrorHighlighter {
    * Highlight all errors in the document
    */
   highlightErrors(errors: CheckerError[]): void {
+    // Prevent multiple simultaneous highlighting operations
+    if (this.isHighlighting) {
+      console.debug(
+        "🔄 Highlighting already in progress, skipping duplicate call"
+      );
+      return;
+    }
+
     // Set highlighting flag to prevent triggering grammar checks during highlighting
     this.isHighlighting = true;
     this.callbacks.onHighlightingStart();
@@ -119,6 +127,7 @@ export class ErrorHighlighter {
       if (this.isSafari) {
         // For Safari, use a more aggressive approach
         this.performSafariSafeHighlighting(errors, savedSelection);
+        // Safari method handles its own finishHighlighting calls
       } else {
         // Use standard approach for other browsers
         requestAnimationFrame(() => {
@@ -126,13 +135,11 @@ export class ErrorHighlighter {
           // Clear highlighting flag after operations complete
           this.finishHighlighting();
         });
-        return; // Early return for async path
       }
-    } finally {
-      // Clear highlighting flag for synchronous Safari path
-      if (this.isSafari) {
-        this.finishHighlighting();
-      }
+    } catch (error) {
+      console.error("Error during highlighting:", error);
+      // Ensure highlighting flag is cleared even on error
+      this.finishHighlighting();
     }
   }
 

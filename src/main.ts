@@ -16,6 +16,8 @@ import { TextAnalyzer, type TextAnalysisCallbacks } from "./text-analyzer.ts";
 import {
   CheckerStateMachine,
   type StateTransitionCallbacks,
+  type EditType,
+  type EditInfo,
 } from "./checker-state-machine.ts";
 import { EventManager, type EventCallbacks } from "./event-manager.ts";
 import {
@@ -38,6 +40,7 @@ export class GrammarChecker {
   private state: EditorState;
   private checkingContext: CheckingContext | null = null;
   private isHighlighting: boolean = false;
+  private previousText: string = ""; // Track previous text for edit detection
 
   // Configuration management
   private configManager: ConfigManager;
@@ -104,6 +107,9 @@ export class GrammarChecker {
       },
     });
 
+    // Initialize previous text tracking for edit detection
+    this.previousText = this.editor.getText();
+
     // Initialize cursor manager
     this.cursorManager = new CursorManager(this.editor);
 
@@ -157,6 +163,8 @@ export class GrammarChecker {
       onStateEntry: (state: CheckerState) => this.onStateEntry(state),
       onStateExit: (state: CheckerState) => this.onStateExit(state),
       onCheckRequested: () => this.performGrammarCheck(),
+      onEditDetected: (editType: EditType, editInfo: EditInfo) =>
+        this.handleEditDetected(editType, editInfo),
     };
     this.stateMachine = new CheckerStateMachine(
       this.configManager.getAutoCheckDelay(),
@@ -244,7 +252,7 @@ export class GrammarChecker {
     return await this.configManager.initializeLanguages();
   }
 
-  private handleTextChange(_source: string, _currentText: string): void {
+  private handleTextChange(_source: string, currentText: string): void {
     // Handle state transitions via state machine
     if (this.stateMachine.getCurrentState() === "highlighting") {
       // Skip if currently highlighting
@@ -252,8 +260,47 @@ export class GrammarChecker {
       return;
     }
 
-    // Let state machine handle the transition
-    this.stateMachine.handleTextChange();
+    // Use the new edit detection approach
+    this.stateMachine.handleEdit(this.previousText, currentText);
+
+    // Update previous text for next comparison
+    this.previousText = currentText;
+  }
+
+  /**
+   * Handle detected edit operations
+   */
+  private handleEditDetected(editType: EditType, editInfo: EditInfo): void {
+    console.debug(`📝 Handling ${editType}:`, editInfo);
+
+    // For now, implement basic functionality - will expand in later phases
+    switch (editType) {
+      case "single-line-edit":
+        // TODO: Implement line-specific checking
+        console.debug(`Single line edit on line ${editInfo.lineNumber}`);
+        break;
+      case "newline-creation":
+        console.debug(
+          `Newline created at line ${editInfo.lineNumber}, split at position ${editInfo.splitPosition}`
+        );
+        // TODO: Implement newline-specific logic
+        break;
+      case "line-deletion":
+        console.debug(`Line deleted/merged at line ${editInfo.lineNumber}`);
+        // TODO: Implement line deletion logic
+        break;
+      case "multi-line-edit":
+        console.debug(
+          `Multi-line edit from line ${editInfo.startLine} to ${editInfo.endLine}`
+        );
+        // TODO: Implement multi-line logic
+        break;
+      case "paste":
+      case "cut":
+        console.debug(`${editType} operation detected`);
+        // TODO: Implement paste/cut specific logic
+        break;
+    }
   }
 
   private async handleIntelligentPasteCheck(
@@ -565,6 +612,9 @@ export class GrammarChecker {
 
   private applySuggestion(error: CheckerError, suggestion: string): void {
     try {
+      // Mark that we're applying a suggestion to prevent undo detection interference
+      this.eventManager.setSuggestionApplicationState(true);
+
       // Get line information before making changes
       const lineInfo = this.getLineFromError(error);
       const originalLength = error.end_index - error.start_index;
@@ -578,8 +628,15 @@ export class GrammarChecker {
         `Length change: ${originalLength} → ${newLength} (diff: ${lengthDifference})`
       );
 
-      // Apply the suggestion
+      // Apply the suggestion atomically to prevent spacing issues
       const start = error.start_index;
+
+      // Get current text to verify boundaries
+      const currentText = this.editor.getText();
+      const errorText = currentText.substring(start, start + originalLength);
+
+      console.log(`Expected error text: "${error.error_text}"`);
+      console.log(`Actual text at position: "${errorText}"`);
 
       // Clear formatting first
       this.editor.formatText(
@@ -589,7 +646,8 @@ export class GrammarChecker {
         false
       );
 
-      // Replace the text
+      // Use Quill's more reliable approach: delete then insert in immediate sequence
+      // This helps prevent spacing issues
       this.editor.deleteText(start, originalLength);
       this.editor.insertText(start, suggestion);
 
@@ -602,21 +660,29 @@ export class GrammarChecker {
         this.editor.focus();
       }
 
+      // Clear the suggestion application flag before async operations
+      this.eventManager.setSuggestionApplicationState(false);
+
       // Intelligent re-checking: only check the modified line and adjust indices
-      setTimeout(() => {
-        this.intelligentCorrection(
-          error,
-          suggestion,
-          lineInfo,
-          lengthDifference
-        );
-      }, 100);
-    } catch (_err) {
-      // ignore
+      // Use a more reliable async approach
+      this.performIntelligentCorrection(
+        error,
+        suggestion,
+        lineInfo,
+        lengthDifference
+      );
+    } catch (err) {
+      console.error("Error applying suggestion:", err);
+      // Ensure we clear the flag even on error
+      this.eventManager.setSuggestionApplicationState(false);
+      // Fallback to full recheck
+      this.state.lastCheckedContent = "";
+      this.errorHighlighter.clearErrors();
+      this.textAnalyzer.checkGrammar();
     }
   }
 
-  private async intelligentCorrection(
+  private async performIntelligentCorrection(
     originalError: CheckerError,
     _suggestion: string,
     lineInfo: {
@@ -644,7 +710,7 @@ export class GrammarChecker {
         );
       }
 
-      // Only recheck the modified line
+      // Only recheck the modified line - use immediate async to avoid setTimeout timing issues
       await this.recheckModifiedLine(lineInfo.lineNumber);
 
       // Update UI

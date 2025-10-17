@@ -45,7 +45,7 @@ export interface CheckerResponse {
 export interface CheckerApi {
   checkText(
     text: string,
-    language: SupportedLanguage,
+    language: SupportedLanguage
   ): Promise<CheckerResponse>;
   getSupportedLanguages(): Array<{ code: SupportedLanguage; name: string }>;
 }
@@ -73,11 +73,10 @@ export interface EditorState {
 
 // State Machine Types
 export type CheckerState =
-  | "idle"
-  | "editing"
-  | "timeout"
-  | "checking"
-  | "highlighting";
+  | "idle" // Ready for user input
+  | "editing" // User is making changes (debouncing)
+  | "checking" // Performing grammar check
+  | "highlighting"; // Updating visual highlights
 
 export interface CheckingContext {
   abortController: AbortController;

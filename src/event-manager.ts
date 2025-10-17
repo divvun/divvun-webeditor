@@ -51,6 +51,7 @@ export class EventManager {
   private recentTextChanges: Array<{ timestamp: number; text: string }> = [];
   private lastUserActionTime: number = 0;
   private isHighlighting: boolean = false;
+  private isApplyingSuggestion: boolean = false;
 
   constructor(
     editor: EditorEventInterface,
@@ -75,6 +76,13 @@ export class EventManager {
    */
   setHighlightingState(isHighlighting: boolean): void {
     this.isHighlighting = isHighlighting;
+  }
+
+  /**
+   * Update suggestion application state for undo detection
+   */
+  setSuggestionApplicationState(isApplying: boolean): void {
+    this.isApplyingSuggestion = isApplying;
   }
 
   private setupEventListeners(): void {
@@ -203,6 +211,14 @@ export class EventManager {
   }
 
   private isUndoOperation(currentText: string, source: string): boolean {
+    // Don't apply undo detection during suggestion application
+    if (this.isApplyingSuggestion) {
+      console.debug(
+        "🔧 Suggestion application in progress - skipping undo detection"
+      );
+      return false;
+    }
+
     // If source is not 'user', it's likely a programmatic change (like undo/redo)
     if (source !== "user") {
       console.debug("🔄 Non-user source detected:", source);
