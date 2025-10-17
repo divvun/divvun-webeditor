@@ -4,6 +4,8 @@ import type {
   SpellCheckerResponse,
   CheckerError,
   CheckerApi,
+  ApiLanguageResponse,
+  AvailableLanguage,
 } from "./types.ts";
 
 export class GrammarCheckerAPI implements CheckerApi {
@@ -166,5 +168,60 @@ export class SpellCheckerAPI implements CheckerApi {
   getSupportedLanguages(): Array<{ code: SupportedLanguage; name: string }> {
     // Return only SMS for spell checker
     return [{ code: "sms", name: "Nuõrttsääʹmǩiõll (Skolt sami)" }];
+  }
+}
+
+/**
+ * Fetch available languages from the API server and process them according to business rules:
+ * 1. Exclude SMS from grammar checking (SMS grammar doesn't work right now)
+ * 2. If a language has both grammar and speller, prefer grammar
+ * 3. Return the filtered and processed language list
+ */
+export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
+  try {
+    const response = await fetch("https://api-giellalt.uit.no/languages");
+    if (!response.ok) {
+      throw new Error(`Failed to fetch languages: ${response.status}`);
+    }
+    
+    const data: ApiLanguageResponse = await response.json();
+    const languages: AvailableLanguage[] = [];
+    
+    // Process grammar languages (exclude SMS as per requirements)
+    Object.entries(data.available.grammar).forEach(([code, name]) => {
+      if (code !== "sms") { // Exclude SMS from grammar as it doesn't work
+        languages.push({
+          code: code as SupportedLanguage,
+          name: name,
+          type: "grammar"
+        });
+      }
+    });
+    
+    // Process speller languages
+    Object.entries(data.available.speller).forEach(([code, name]) => {
+      // Only add speller languages that don't already have grammar support
+      const hasGrammar = languages.some(lang => lang.code === code);
+      if (!hasGrammar) {
+        languages.push({
+          code: code as SupportedLanguage,
+          name: name,
+          type: "speller"
+        });
+      }
+      // If a language has both grammar and speller, grammar takes precedence (already added above)
+    });
+    
+    // Sort by language code for consistent ordering
+    languages.sort((a, b) => a.code.localeCompare(b.code));
+    
+    return languages;
+  } catch (error) {
+    console.warn("Failed to fetch languages from API, falling back to defaults:", error);
+    // Fallback to some default languages if API fails
+    return [
+      { code: "se", name: "Davvisámegiella (Northern sami)", type: "grammar" },
+      { code: "sms", name: "Nuõrttsääʹmǩiõll (Skolt sami)", type: "speller" },
+    ];
   }
 }

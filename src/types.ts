@@ -90,3 +90,18 @@ export interface LineCacheEntry {
   errors: CheckerError[];
   timestamp: Date;
 }
+
+// API Server Response Types
+export interface ApiLanguageResponse {
+  available: {
+    grammar: Record<string, string>;
+    hyphenation: Record<string, string>;
+    speller: Record<string, string>;
+  };
+}
+
+export interface AvailableLanguage {
+  code: SupportedLanguage;
+  name: string;
+  type: "grammar" | "speller";
+}
