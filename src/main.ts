@@ -346,6 +346,9 @@ export class GrammarChecker {
       // The callbacks in TextAnalyzer will handle updating the UI
       // But we also need to update the highlighting
       this.updateLineSpecificHighlighting(lineNumber, errors);
+
+      // Cancel any pending debounce since line-specific check completed successfully
+      this.stateMachine.cancelPendingCheck();
     } catch (error) {
       console.error(
         `❌ Line-specific checking failed for line ${lineNumber}:`,
@@ -375,6 +378,9 @@ export class GrammarChecker {
       console.debug(
         `✅ Newline handling complete for lines ${lineNumber}-${lineNumber + 1}`
       );
+
+      // Cancel any pending debounce since line-specific check completed successfully
+      this.stateMachine.cancelPendingCheck();
     } catch (error) {
       console.error(`❌ Newline handling failed:`, error);
       this.textAnalyzer.checkGrammar();
@@ -407,6 +413,9 @@ export class GrammarChecker {
       }
 
       console.debug(`✅ Line deletion handling complete`);
+
+      // Cancel any pending debounce since line-specific check completed successfully
+      this.stateMachine.cancelPendingCheck();
     } catch (error) {
       console.error(`❌ Line deletion handling failed:`, error);
       this.textAnalyzer.checkGrammar();

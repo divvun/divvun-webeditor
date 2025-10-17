@@ -523,3 +523,37 @@ Deno.test(
     stateMachine.cleanup();
   }
 );
+
+Deno.test(
+  "cancelPendingCheck should clear timeout and transition to idle from editing",
+  async () => {
+    const { callbacks, calls } = createMockCallbacks();
+    const stateMachine = new CheckerStateMachine(150, callbacks);
+
+    // Start an edit that should create a debounce timer
+    stateMachine.handleEdit("hello", "hello!");
+
+    // Should be in editing state
+    assertEquals(stateMachine.getCurrentState(), "editing");
+
+    // Cancel the pending check (simulates line-specific check completing)
+    stateMachine.cancelPendingCheck();
+
+    // Should transition to idle immediately
+    assertEquals(stateMachine.getCurrentState(), "idle");
+
+    // Wait longer than the debounce delay to verify timer was cancelled
+    await delay(200);
+
+    // Should still be idle (timer was cancelled)
+    assertEquals(stateMachine.getCurrentState(), "idle");
+
+    // Should not have triggered onCheckRequested
+    const checkRequestedCalls = calls.filter(
+      (call) => call.method === "onCheckRequested"
+    );
+    assertEquals(checkRequestedCalls.length, 0);
+
+    stateMachine.cleanup();
+  }
+);

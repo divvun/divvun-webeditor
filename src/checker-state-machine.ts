@@ -250,6 +250,23 @@ export class CheckerStateMachine {
   }
 
   /**
+   * Cancel pending debounce when line-specific check completes successfully
+   * This prevents unnecessary full document checks when line-level checking is sufficient
+   */
+  cancelPendingCheck(): void {
+    if (this.checkTimeout) {
+      clearTimeout(this.checkTimeout);
+      this.checkTimeout = null;
+
+      // If we're still in editing state and had a pending check,
+      // we can transition to idle since line-specific check completed
+      if (this.currentState === "editing") {
+        this.transitionTo("idle", "line-specific-check-complete");
+      }
+    }
+  }
+
+  /**
    * Force transition to idle state (for cleanup)
    */
   forceIdle(): void {

@@ -293,3 +293,96 @@ Deno.test("Line-specific checking - Performance comparison", async () => {
     `Line-specific check took ${duration}ms, expected < 100ms`
   );
 });
+
+Deno.test(
+  "Line-specific checking - Should not trigger full check after line check",
+  async () => {
+    const mockEditor = new MockEditor();
+    const mockAPI = new MockAPI();
+    const { callbacks } = createMockCallbacks();
+
+    const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+    // Set up text with a simple line
+    mockEditor.setText("Dáll");
+
+    // Mock response - no errors in the line
+    mockAPI.setMockResponse("Dáll", []);
+
+    // Check specific line
+    const start = performance.now();
+    const errors = await analyzer.checkSpecificLine(0);
+    const duration = performance.now() - start;
+
+    // Verify line-specific check worked
+    assertEquals(errors.length, 0);
+    assertEquals(mockAPI.callLog.length, 1);
+    assertEquals(mockAPI.callLog[0].text, "Dáll");
+
+    // Clear call log to ensure no additional API calls happen
+    mockAPI.clearCallLog();
+
+    // Wait a bit to see if any delayed full check is triggered
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify no additional API calls were made (no full check triggered)
+    assertEquals(
+      mockAPI.callLog.length,
+      0,
+      "No additional API calls should be made after line-specific check"
+    );
+
+    // Verify performance is good
+    assert(
+      duration < 50,
+      `Line-specific check took ${duration}ms, should be very fast`
+    );
+  }
+);
+
+Deno.test("Line-specific checking - State machine integration", async () => {
+  const mockEditor = new MockEditor();
+  const mockAPI = new MockAPI();
+  const { callbacks } = createMockCallbacks();
+
+  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+  // Simulate the exact scenario from the console logs
+  // First line edit: "" -> "D"
+  mockEditor.setText("D");
+  mockAPI.setMockResponse("D", []);
+  const errors1 = await analyzer.checkSpecificLine(0);
+  assertEquals(errors1.length, 0);
+
+  // Second line edit: "D" -> "Dá"
+  mockEditor.setText("Dá");
+  mockAPI.setMockResponse("Dá", []);
+  const errors2 = await analyzer.checkSpecificLine(0);
+  assertEquals(errors2.length, 0);
+
+  // Third line edit: "Dá" -> "Dál"
+  mockEditor.setText("Dál");
+  mockAPI.setMockResponse("Dál", []);
+  const errors3 = await analyzer.checkSpecificLine(0);
+  assertEquals(errors3.length, 0);
+
+  // Should only have made 3 line-specific API calls, no full document checks
+  assertEquals(mockAPI.callLog.length, 3);
+
+  // Verify the progression of API calls
+  assertEquals(mockAPI.callLog[0].text, "D");
+  assertEquals(mockAPI.callLog[1].text, "Dá");
+  assertEquals(mockAPI.callLog[2].text, "Dál");
+
+  // All calls should be for the line content only
+  for (const call of mockAPI.callLog) {
+    assert(
+      call.text.length < 30,
+      "Should be line-specific calls, not full document"
+    );
+    assert(
+      !call.text.includes("\n"),
+      "Should not contain newlines (line-specific only)"
+    );
+  }
+});
