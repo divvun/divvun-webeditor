@@ -15,6 +15,7 @@ import type {
   SupportedLanguage,
 } from "./types.ts";
 import { CursorManager, type CursorPosition } from "./cursor-manager.ts";
+import { SuggestionManager, type SuggestionCallbacks } from "./suggestion-manager.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
 // Minimal Quill typings we need (Quill is loaded via CDN in the page)
@@ -204,6 +205,21 @@ export class GrammarChecker {
 
     // Initialize cursor manager
     this.cursorManager = new CursorManager(this.editor);
+
+    // Initialize suggestion manager
+    const suggestionCallbacks: SuggestionCallbacks = {
+      onSuggestionApplied: (error: CheckerError, suggestion: string) => {
+        this.applySuggestion(error, suggestion);
+      },
+      onClearErrors: () => {
+        this.state.lastCheckedContent = "";
+        this.clearErrors();
+      },
+      onCheckGrammar: () => {
+        this.checkGrammar();
+      }
+    };
+    this.suggestionManager = new SuggestionManager(this.editor, suggestionCallbacks);
 
     // Ensure editor root is focusable
     this.editor.root.setAttribute("aria-label", "Grammar editor");
@@ -440,7 +456,7 @@ export class GrammarChecker {
           }
         }
 
-        this.showContextMenu(menuX, menuY, matchingError);
+        this.suggestionManager.showContextMenu(menuX, menuY, matchingError);
       }
     });
 
@@ -473,7 +489,7 @@ export class GrammarChecker {
             err.end_index - err.start_index === length,
         );
         if (matching) {
-          this.showSuggestionTooltip(
+          this.suggestionManager.showSuggestionTooltip(
             errorNode,
             matching,
             index,
@@ -1480,84 +1496,6 @@ export class GrammarChecker {
 
 
 
-  private showSuggestionTooltip(
-    _anchor: HTMLElement,
-    error: CheckerError,
-    index: number,
-    length: number,
-    ev: MouseEvent,
-  ) {
-    // Remove existing tooltip
-    const existing = document.querySelector(".error-tooltip");
-    if (existing) existing.remove();
-
-    const tooltip = document.createElement("div");
-    tooltip.className = "error-tooltip";
-
-    const title = document.createElement("div");
-    title.className = "error-title";
-    title.textContent = error.title || "Suggestion";
-    tooltip.appendChild(title);
-
-    if (error.description) {
-      const desc = document.createElement("div");
-      desc.className = "error-description";
-      desc.textContent = error.description;
-      tooltip.appendChild(desc);
-    }
-
-    const ul = document.createElement("ul");
-    ul.className = "suggestions";
-
-    if (error.suggestions && error.suggestions.length > 0) {
-      // Show available suggestions
-      error.suggestions.forEach((sugg) => {
-        const li = document.createElement("li");
-        li.textContent = sugg;
-        li.addEventListener("click", (e) => {
-          e.stopPropagation();
-          // Replace text in editor
-          try {
-            this.editor.deleteText(index, length);
-            this.editor.insertText(index, sugg);
-            // After replacement, clear formatting for that range
-            this.editor.formatText(index, sugg.length, "grammar-typo", false);
-            this.editor.formatText(index, sugg.length, "grammar-other", false);
-            // Clear state errors and re-run check
-            this.state.lastCheckedContent = "";
-            this.clearErrors();
-            this.checkGrammar();
-          } catch (_err) {
-            // ignore
-          }
-          tooltip.remove();
-        });
-        ul.appendChild(li);
-      });
-    } else {
-      // Show no suggestions available message
-      const li = document.createElement("li");
-      li.className = "no-suggestions";
-      li.textContent = "No suggestions available for this error";
-      li.style.fontStyle = "italic";
-      li.style.color = "#666";
-      li.style.cursor = "default";
-      ul.appendChild(li);
-    }
-    tooltip.appendChild(ul);
-
-    document.body.appendChild(tooltip);
-
-    // Position near mouse but ensure within viewport
-    const x = ev.clientX + 8;
-    const y = ev.clientY + 8;
-    const win = globalThis as unknown as {
-      innerWidth: number;
-      innerHeight: number;
-    };
-    tooltip.style.left = `${Math.min(win.innerWidth - 320, x)}px`;
-    tooltip.style.top = `${Math.min(win.innerHeight - 200, y)}px`;
-  }
 
   private updateStatus(status: string, isChecking: boolean): void {
     this.statusText.textContent = status;
@@ -1619,103 +1557,7 @@ export class GrammarChecker {
     return 0;
   }
 
-  private showContextMenu(x: number, y: number, error: CheckerError): void {
-    // Remove existing context menu
-    const existing = document.getElementById("grammar-context-menu");
-    if (existing) existing.remove();
 
-    const menu = document.createElement("div");
-    menu.id = "grammar-context-menu";
-
-    // Use Tailwind classes for menu styling
-    menu.className =
-      "absolute bg-white border border-gray-300 rounded-md shadow-lg z-[1000] min-w-[120px] overflow-hidden";
-
-    // Adjust coordinates to prevent menu from appearing off-screen
-    // This helps with Chrome's different coordinate calculation
-    const viewportWidth = globalThis.innerWidth ||
-      document.documentElement.clientWidth;
-    const viewportHeight = globalThis.innerHeight ||
-      document.documentElement.clientHeight;
-
-    const adjustedX = Math.max(10, Math.min(x, viewportWidth - 200));
-    const adjustedY = Math.max(10, Math.min(y, viewportHeight - 150));
-
-    // Position the menu
-    menu.style.left = `${adjustedX}px`;
-    menu.style.top = `${adjustedY}px`;
-
-    // Add title if available
-    if (error.title) {
-      const title = document.createElement("div");
-      title.className =
-        "px-3 py-2 font-semibold border-b border-gray-200 text-xs text-gray-700 bg-gray-50";
-      title.textContent = error.title;
-      menu.appendChild(title);
-    }
-
-    // Add suggestions
-    if (error.suggestions && error.suggestions.length > 0) {
-      // Show available suggestions
-      error.suggestions.forEach((suggestion) => {
-        const btn = document.createElement("button");
-
-        // Use Tailwind classes for button styling
-        btn.className =
-          "block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors duration-150";
-        btn.textContent = suggestion;
-
-        btn.addEventListener("click", () => {
-          this.applySuggestion(error, suggestion);
-          menu.remove();
-        });
-
-        menu.appendChild(btn);
-      });
-    } else {
-      // Show no suggestions available message
-      const noSuggestionsDiv = document.createElement("div");
-      noSuggestionsDiv.className =
-        "px-3 py-2 text-sm text-gray-500 italic text-center border-b border-gray-200";
-      noSuggestionsDiv.textContent = "No suggestions available for this error";
-      menu.appendChild(noSuggestionsDiv);
-
-      // Add error text for reference in a non-clickable way
-      const errorTextDiv = document.createElement("div");
-      errorTextDiv.className =
-        "px-3 py-2 text-xs text-gray-600 bg-gray-50 font-mono break-words";
-      errorTextDiv.textContent = `Error: "${error.error_text}"`;
-      menu.appendChild(errorTextDiv);
-    }
-
-    document.body.appendChild(menu);
-
-    // Close menu when clicking outside - use longer delay to prevent immediate closure
-    setTimeout(() => {
-      const closeHandler = (e: Event) => {
-        if (!menu.contains(e.target as Node)) {
-          menu.remove();
-          document.removeEventListener("click", closeHandler);
-          document.removeEventListener("contextmenu", closeHandler);
-        }
-      };
-
-      // Handle both click and contextmenu events for closing
-      document.addEventListener("click", closeHandler);
-      document.addEventListener("contextmenu", closeHandler);
-
-      // Also close on escape key
-      const escHandler = (e: KeyboardEvent) => {
-        if (e.key === "Escape") {
-          menu.remove();
-          document.removeEventListener("keydown", escHandler);
-          document.removeEventListener("click", closeHandler);
-          document.removeEventListener("contextmenu", closeHandler);
-        }
-      };
-      document.addEventListener("keydown", escHandler);
-    }, 150); // Longer delay to prevent immediate closure from contextmenu event
-  }
 
   private applySuggestion(error: CheckerError, suggestion: string): void {
     try {
