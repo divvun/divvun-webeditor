@@ -380,12 +380,29 @@ export class TextAnalyzer {
       ) => void;
     }
   ): Promise<CheckerError[]> {
-    // First, check the line (this updates the cache)
-    const errors = await this.checkSpecificLine(lineNumber);
+    console.log(`🧪 checkAndHighlightLine ENTERED for line ${lineNumber}`);
 
-    // Then apply highlighting using the cached data
-    this.highlightLine(lineNumber, highlighter);
+    try {
+      // First, check the line (this updates the cache)
+      console.log(`🔍 About to call checkSpecificLine for line ${lineNumber}`);
+      const errors = await this.checkSpecificLine(lineNumber);
+      console.log(
+        `✅ checkSpecificLine completed for line ${lineNumber}, found ${errors.length} errors`
+      );
 
-    return errors;
+      // Then apply highlighting using the cached data
+      console.log(`🎨 About to call highlightLine for line ${lineNumber}`);
+      this.highlightLine(lineNumber, highlighter);
+      console.log(`✅ highlightLine completed for line ${lineNumber}`);
+
+      console.log(`🏁 checkAndHighlightLine COMPLETED for line ${lineNumber}`);
+      return errors;
+    } catch (error) {
+      console.error(
+        `❌ Error in checkAndHighlightLine for line ${lineNumber}:`,
+        error
+      );
+      throw error;
+    }
   }
 }

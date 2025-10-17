@@ -166,8 +166,13 @@ export class GrammarChecker {
       onStateEntry: (state: CheckerState) => this.onStateEntry(state),
       onStateExit: (state: CheckerState) => this.onStateExit(state),
       onCheckRequested: () => this.performGrammarCheck(),
-      onEditDetected: (editType: EditType, editInfo: EditInfo) =>
-        this.handleEditDetected(editType, editInfo),
+      onEditDetected: (editType: EditType, editInfo: EditInfo) => {
+        console.log(
+          `🚨 CALLBACK onEditDetected called with ${editType}`,
+          editInfo
+        );
+        this.handleEditDetected(editType, editInfo);
+      },
     };
     this.stateMachine = new CheckerStateMachine(
       this.configManager.getAutoCheckDelay(),
@@ -283,18 +288,31 @@ export class GrammarChecker {
    * Handle detected edit operations
    */
   private handleEditDetected(editType: EditType, editInfo: EditInfo): void {
+    console.log(
+      `🚨 MAIN.TS handleEditDetected called with ${editType}`,
+      editInfo
+    );
     console.debug(`📝 Handling ${editType}:`, editInfo);
 
     try {
+      console.log(`🔍 Switch statement executing for ${editType}`);
       switch (editType) {
         case "single-line-edit":
+          console.log(`🎯 Entering single-line-edit case`);
+          console.log(
+            `🔍 editInfo.lineNumber:`,
+            editInfo.lineNumber,
+            `(type: ${typeof editInfo.lineNumber})`
+          );
           if (editInfo.lineNumber !== undefined) {
-            console.debug(
+            console.log(
               `🎯 Line-specific check for line ${editInfo.lineNumber}`
             );
+            console.log(`🚀 About to call handleSingleLineEdit`);
             this.handleSingleLineEdit(editInfo.lineNumber).catch((err) => {
               console.error(`❌ Error in single line edit handler:`, err);
             });
+            console.log(`✅ handleSingleLineEdit call completed`);
           } else {
             console.warn(
               "Single line edit detected but line number not provided"
@@ -347,6 +365,7 @@ export class GrammarChecker {
    * Handle single line edit with line-specific checking
    */
   private async handleSingleLineEdit(lineNumber: number): Promise<void> {
+    console.log(`🎯 handleSingleLineEdit ENTERED for line ${lineNumber}`);
     // Check if there's already a pending check for this line
     if (this.pendingLineChecks.has(lineNumber)) {
       console.debug(
@@ -355,6 +374,7 @@ export class GrammarChecker {
       return;
     }
 
+    console.log(`🔄 Starting line check for line ${lineNumber}`);
     const checkPromise = this.performSingleLineCheck(lineNumber);
     this.pendingLineChecks.set(lineNumber, checkPromise);
 
@@ -369,23 +389,26 @@ export class GrammarChecker {
    * Perform the actual line check (extracted for better control)
    */
   private async performSingleLineCheck(lineNumber: number): Promise<void> {
+    console.log(`🔍 performSingleLineCheck ENTERED for line: ${lineNumber}`);
     try {
-      console.debug(`🔍 Checking specific line: ${lineNumber}`);
+      console.log(`🔍 Checking specific line: ${lineNumber}`);
 
-      // Clear ALL existing highlighting first to prevent red text from previous runs
-      console.debug(`🧹 Clearing all existing highlights before line check`);
+      // Clear existing highlights before applying new ones to prevent accumulation
+      console.log(`🧹 Clearing existing highlights before line check`);
       this.errorHighlighter.clearErrors();
 
       // Invalidate cache for this line since it was edited
+      console.log(`🗑️ Invalidating cache for line ${lineNumber}`);
       this.textAnalyzer.invalidateLineCache(lineNumber);
 
+      console.log(`🔬 About to call checkAndHighlightLine`);
       // Use atomic check + highlight - this prevents race conditions
       const errors = await this.textAnalyzer.checkAndHighlightLine(
         lineNumber,
         this.errorHighlighter
       );
 
-      console.debug(
+      console.log(
         `✅ Line ${lineNumber} atomic check+highlight complete: ${errors.length} errors found`
       );
 
