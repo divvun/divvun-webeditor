@@ -11,7 +11,6 @@ import type {
   CheckingContext,
   EditorState,
   GrammarCheckerConfig,
-
   SupportedLanguage,
 } from "./types.ts";
 import { CursorManager, type CursorPosition } from "./cursor-manager.ts";
@@ -19,10 +18,11 @@ import {
   SuggestionManager,
   type SuggestionCallbacks,
 } from "./suggestion-manager.ts";
+import { TextAnalyzer, type TextAnalysisCallbacks } from "./text-analyzer.ts";
 import {
-  TextAnalyzer,
-  type TextAnalysisCallbacks,
-} from "./text-analyzer.ts";
+  CheckerStateMachine,
+  type StateTransitionCallbacks,
+} from "./checker-state-machine.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
 // Minimal Quill typings we need (Quill is loaded via CDN in the page)
@@ -127,12 +127,7 @@ export class GrammarChecker {
   private api: CheckerApi;
   private config: GrammarCheckerConfig;
   private state: EditorState;
-  private checkTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  // State machine
-  private currentState: CheckerState = "idle";
   private checkingContext: CheckingContext | null = null;
-
 
   // Undo detection
   private recentTextChanges: Array<{ timestamp: number; text: string }> = [];
@@ -152,9 +147,12 @@ export class GrammarChecker {
 
   // Suggestion management
   private suggestionManager: SuggestionManager;
-  
+
   // Text analysis
   private textAnalyzer: TextAnalyzer;
+
+  // State machine
+  private stateMachine: CheckerStateMachine;
 
   private createApiForLanguage(language: SupportedLanguage): CheckerApi {
     // Find the language in our available languages list
@@ -251,9 +249,25 @@ export class GrammarChecker {
       },
       onShowErrorMessage: (message: string) => {
         this.showErrorMessage(message);
-      }
+      },
     };
-    this.textAnalyzer = new TextAnalyzer(this.api, this.editor, textAnalysisCallbacks, this.config.language);
+    this.textAnalyzer = new TextAnalyzer(
+      this.api,
+      this.editor,
+      textAnalysisCallbacks,
+      this.config.language
+    );
+
+    // Initialize state machine
+    const stateTransitionCallbacks: StateTransitionCallbacks = {
+      onStateEntry: (state: CheckerState) => this.onStateEntry(state),
+      onStateExit: (state: CheckerState) => this.onStateExit(state),
+      onCheckRequested: () => this.performGrammarCheck(),
+    };
+    this.stateMachine = new CheckerStateMachine(
+      this.config.autoCheckDelay,
+      stateTransitionCallbacks
+    );
 
     // Ensure editor root is focusable
     this.editor.root.setAttribute("aria-label", "Grammar editor");
@@ -318,33 +332,15 @@ export class GrammarChecker {
         this.lastUserActionTime = now;
       }
 
-      // State machine transitions based on current state
-      switch (this.currentState) {
-        case "idle":
-          this.transitionTo("editing", "text-change");
-          break;
-        case "editing":
-          // Reset to editing (interrupts any pending timeout)
-          this.transitionTo("editing", "continued-editing");
-          break;
-        case "timeout":
-          // Interrupt timeout and go back to editing
-          this.transitionTo("editing", "editing-during-timeout");
-          break;
-        case "checking":
-          // Interrupt ongoing check and start editing
-          this.transitionTo("editing", "editing-during-check");
-          break;
-        case "highlighting":
-          // Skip if currently highlighting
-          console.debug("🔄 Text change during highlighting, ignoring");
-          break;
+      // Handle state transitions via state machine
+      if (this.stateMachine.getCurrentState() === "highlighting") {
+        // Skip if currently highlighting
+        console.debug("🔄 Text change during highlighting, ignoring");
+        return;
       }
 
-      // If now in editing state, start the timeout
-      if (this.currentState === "editing") {
-        this.transitionTo("timeout", "editing-finished");
-      }
+      // Let state machine handle the transition
+      this.stateMachine.handleTextChange();
     });
 
     // Handle paste events for cursor positioning and intelligent checking
@@ -796,36 +792,13 @@ export class GrammarChecker {
       this.isHighlighting = false;
 
       // Transition back to idle when highlighting is complete
-      if (this.currentState === "highlighting") {
-        this.transitionTo("idle", "highlighting-complete");
-      }
+      this.stateMachine.onHighlightingComplete();
     }, 100); // Small delay to ensure all operations are complete
   }
 
-  // State Machine Methods
-  private transitionTo(newState: CheckerState, _trigger: string): void {
-    if (newState === this.currentState) {
-      return; // No transition needed
-    }
-
-    // Handle state exit
-    this.onStateExit(this.currentState);
-
-    // Update current state
-    this.currentState = newState;
-
-    // Handle state entry
-    this.onStateEntry(this.currentState);
-  }
-
+  // State Machine Callback Implementations
   private onStateExit(state: CheckerState): void {
     switch (state) {
-      case "timeout":
-        if (this.checkTimeout) {
-          clearTimeout(this.checkTimeout);
-          this.checkTimeout = null;
-        }
-        break;
       case "checking":
         // Abort any ongoing check
         this.textAnalyzer.clearCheckingContext();
@@ -840,24 +813,9 @@ export class GrammarChecker {
         this.updateStatus("Ready", false);
         this.textAnalyzer.clearCheckingContext();
         break;
-      case "editing":
-        // Clear any pending timeouts
-        if (this.checkTimeout) {
-          clearTimeout(this.checkTimeout);
-          this.checkTimeout = null;
-        }
-        break;
-      case "timeout":
-        // Start the timeout for checking
-        this.checkTimeout = setTimeout(() => {
-          this.transitionTo("checking", "timeout-expired");
-        }, this.config.autoCheckDelay);
-        break;
       case "checking":
         this.state.isChecking = true;
         this.updateStatus("Checking...", true);
-        // Perform the actual checking
-        this.performGrammarCheck();
         break;
       case "highlighting":
         this.updateStatus("Updating highlights...", true);
@@ -867,23 +825,19 @@ export class GrammarChecker {
 
   // Line-level caching methods
 
-
   private performGrammarCheck(): void {
     // Set up checking context in text analyzer
     this.checkingContext = this.textAnalyzer.startCheckingContext();
 
     // Perform the actual grammar check
-    this.textAnalyzer.checkGrammar()
+    this.textAnalyzer
+      .checkGrammar()
       .then(() => {
-        if (this.currentState === "checking") {
-          this.transitionTo("highlighting", "check-complete");
-        }
+        this.stateMachine.onCheckComplete();
       })
       .catch((error) => {
         console.warn("Grammar check failed:", error);
-        if (this.currentState === "checking") {
-          this.transitionTo("idle", "check-failed");
-        }
+        this.stateMachine.onCheckFailed();
       });
   }
 
@@ -903,11 +857,6 @@ export class GrammarChecker {
   async checkGrammar(): Promise<void> {
     // Delegate to TextAnalyzer
     await this.textAnalyzer.checkGrammar();
-    
-    // Handle state transitions
-    if (this.currentState === "checking") {
-      this.transitionTo("idle", "check-complete");
-    }
   }
 
   private highlightLineErrors(errors: CheckerError[]): void {

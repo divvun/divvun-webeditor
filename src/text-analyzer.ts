@@ -1,11 +1,16 @@
 /**
  * TextAnalyzer - Handles core text checking logic, line caching, and performance optimization
- * 
+ *
  * This class encapsulates all the logic for analyzing text content, managing
  * line-based caching for performance, and coordinating with the checking API.
  */
 
-import type { CheckerApi, CheckerError, LineCacheEntry, SupportedLanguage } from "./types.ts";
+import type {
+  CheckerApi,
+  CheckerError,
+  LineCacheEntry,
+  SupportedLanguage,
+} from "./types.ts";
 
 // Minimal editor interface for text analysis
 interface EditorTextInterface {
@@ -112,7 +117,6 @@ export class TextAnalyzer {
       // Update final error count and notify about all errors
       this.callbacks.onUpdateErrorCount(allErrors.length);
       this.callbacks.onErrorsFound(allErrors);
-
     } catch (error) {
       console.error("Grammar check failed:", error);
       this.callbacks.onUpdateStatus("Error checking grammar", false);
@@ -152,7 +156,10 @@ export class TextAnalyzer {
 
     // Cache miss or expired - check with API
     try {
-      const response = await this.api.checkText(lineContent, this.currentLanguage);
+      const response = await this.api.checkText(
+        lineContent,
+        this.currentLanguage
+      );
       const errors = response.errs || [];
 
       // Adjust error indices to match document position
@@ -258,20 +265,23 @@ export class TextAnalyzer {
   /**
    * Get cache statistics for debugging
    */
-  getCacheStats(): { size: number; entries: Array<{lineNumber: number, age: number}> } {
-    const entries: Array<{lineNumber: number, age: number}> = [];
+  getCacheStats(): {
+    size: number;
+    entries: Array<{ lineNumber: number; age: number }>;
+  } {
+    const entries: Array<{ lineNumber: number; age: number }> = [];
     const now = Date.now();
-    
+
     for (const [lineNumber, entry] of this.lineCache) {
       entries.push({
         lineNumber,
-        age: now - entry.timestamp.getTime()
+        age: now - entry.timestamp.getTime(),
       });
     }
-    
+
     return {
       size: this.lineCache.size,
-      entries
+      entries,
     };
   }
 }
