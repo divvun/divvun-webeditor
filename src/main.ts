@@ -24,6 +24,10 @@ import {
   type StateTransitionCallbacks,
 } from "./checker-state-machine.ts";
 import { EventManager, type EventCallbacks } from "./event-manager.ts";
+import {
+  ErrorHighlighter,
+  type HighlightingCallbacks,
+} from "./error-highlighter.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
 // Minimal Quill typings we need (Quill is loaded via CDN in the page)
@@ -154,6 +158,9 @@ export class GrammarChecker {
   // Event management
   private eventManager: EventManager;
 
+  // Error highlighting
+  private errorHighlighter: ErrorHighlighter;
+
   private createApiForLanguage(language: SupportedLanguage): CheckerApi {
     // Find the language in our available languages list
     const languageInfo = availableLanguages.find(
@@ -221,7 +228,7 @@ export class GrammarChecker {
       },
       onClearErrors: () => {
         this.state.lastCheckedContent = "";
-        this.clearErrors();
+        this.errorHighlighter.clearErrors();
       },
       onCheckGrammar: () => {
         this.textAnalyzer.checkGrammar();
@@ -236,7 +243,7 @@ export class GrammarChecker {
     const textAnalysisCallbacks: TextAnalysisCallbacks = {
       onErrorsFound: (errors: CheckerError[], lineNumber?: number) => {
         if (lineNumber !== undefined) {
-          this.highlightLineErrors(errors);
+          this.errorHighlighter.highlightLineErrors(errors);
         } else {
           this.state.errors = errors;
           this.eventManager.updateErrors(errors);
@@ -319,12 +326,41 @@ export class GrammarChecker {
         prePasteSelection: { index: number; length: number },
         prePasteText: string,
         pastedContent: string
-      ) => this.handleIntelligentPasteCheck(prePasteSelection, prePasteText, pastedContent),
+      ) =>
+        this.handleIntelligentPasteCheck(
+          prePasteSelection,
+          prePasteText,
+          pastedContent
+        ),
     };
     this.eventManager = new EventManager(
       this.editor,
       this.clearButton,
       eventCallbacks
+    );
+
+    // Initialize error highlighter
+    const highlightingCallbacks: HighlightingCallbacks = {
+      onHighlightingStart: () => {
+        this.isHighlighting = true;
+        this.eventManager.setHighlightingState(true);
+      },
+      onHighlightingComplete: () => {
+        this.isHighlighting = false;
+        this.eventManager.setHighlightingState(false);
+        this.stateMachine.onHighlightingComplete();
+      },
+      onErrorsCleared: () => {
+        this.state.errors = [];
+        this.eventManager.updateErrors([]);
+        this.state.errorSpans = [];
+        this.updateErrorCount(0);
+      },
+    };
+    this.errorHighlighter = new ErrorHighlighter(
+      this.editor,
+      this.cursorManager,
+      highlightingCallbacks
     );
   }
 
@@ -526,7 +562,7 @@ export class GrammarChecker {
 
               // Highlight errors for this line immediately
               if (adjustedErrors.length > 0) {
-                this.highlightLineErrors(adjustedErrors);
+                this.errorHighlighter.highlightLineErrors(adjustedErrors);
               }
             } catch (error) {
               console.warn(`Error checking affected line ${i + 1}:`, error);
@@ -542,7 +578,7 @@ export class GrammarChecker {
       this.state.lastCheckedContent = fullText;
 
       // Re-highlight all errors to ensure proper display
-      this.highlightErrors(this.state.errors);
+      this.errorHighlighter.highlightErrors(this.state.errors);
 
       const errorCount = this.state.errors.length;
       this.updateStatus("Ready", false);
@@ -563,16 +599,6 @@ export class GrammarChecker {
   }
 
 
-
-  private finishHighlighting(): void {
-    setTimeout(() => {
-      this.isHighlighting = false;
-      this.eventManager.setHighlightingState(false);
-
-      // Transition back to idle when highlighting is complete
-      this.stateMachine.onHighlightingComplete();
-    }, 100); // Small delay to ensure all operations are complete
-  }
 
   // State Machine Callback Implementations
   private onStateExit(state: CheckerState): void {
@@ -637,491 +663,17 @@ export class GrammarChecker {
     await this.textAnalyzer.checkGrammar();
   }
 
-  private highlightLineErrors(errors: CheckerError[]): void {
-    // Set highlighting flag to prevent triggering grammar checks during line highlighting
-    this.isHighlighting = true;
-    this.eventManager.setHighlightingState(true);
 
-    // AGGRESSIVE FIX: Always clear ALL formatting before highlighting
-    try {
-      const docLength = this.editor.getLength();
-      this.editor.formatText(0, docLength, "grammar-error", false, "silent");
-      this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
-      this.editor.formatText(0, docLength, "grammar-other", false, "silent");
-    } catch (_err) {
-      // ignore
-    }
 
-    // Highlight errors for a specific line without clearing existing highlights
-    const savedSelection = this.cursorManager.saveCursorPosition();
 
-    // Detect Safari
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-    try {
-      if (isSafari) {
-        this.performLineHighlightingOperations(errors, savedSelection);
-      } else {
-        requestAnimationFrame(() => {
-          this.performLineHighlightingOperations(errors, savedSelection);
-          // Clear highlighting flag after line operations complete
-          this.finishHighlighting();
-        });
-        return; // Early return for async path
-      }
-    } finally {
-      // Clear highlighting flag for synchronous Safari path
-      if (isSafari) {
-        this.finishHighlighting();
-      }
-    }
-  }
 
-  private performLineHighlightingOperations(
-    errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
-  ): void {
-    // Disable Quill history during line highlighting
-    const quillInstance = this.editor._quill as unknown as {
-      history?: {
-        disable?: () => void;
-        enable?: () => void;
-      };
-    };
-    let originalHistoryRecord: (() => void) | null = null;
 
-    if (quillInstance?.history) {
-      const history = quillInstance.history as unknown as {
-        record?: () => void;
-      };
-      if (history.record) {
-        originalHistoryRecord = history.record;
-        history.record = () => {}; // Disable recording temporarily
-      }
-    }
 
-    try {
-      // Apply highlighting for new errors without clearing existing ones
-      errors.forEach((error) => {
-        const start = error.start_index;
-        const len = error.end_index - error.start_index;
-        const isTypo =
-          error.error_code === "typo" ||
-          (error.title && String(error.title).toLowerCase().includes("typo"));
-        const formatName = isTypo ? "grammar-typo" : "grammar-other";
 
-        console.debug(
-          `🎨 Highlighting error: "${error.error_text}" at ${start}-${error.end_index} with format ${formatName}`
-        );
 
-        try {
-          // Use silent mode to prevent triggering selection changes during formatting
-          if (
-            this.editor._quill &&
-            typeof this.editor._quill.formatText === "function"
-          ) {
-            this.editor._quill.formatText(
-              start,
-              len,
-              formatName,
-              true,
-              "silent"
-            );
-          } else {
-            this.editor.formatText(start, len, formatName, true, "silent");
-          }
-        } catch (_err) {
-          // Ignore formatting errors
-        }
-      });
 
-      // Restore cursor position
-      this.cursorManager.restoreCursorPositionImmediate(savedSelection);
-    } finally {
-      // Restore original history recording if it was intercepted
-      if (originalHistoryRecord && quillInstance?.history) {
-        const history = quillInstance.history as unknown as {
-          record?: () => void;
-        };
-        if (history) {
-          history.record = originalHistoryRecord;
-        }
-      }
-    }
-  }
 
-  private highlightErrors(errors: CheckerError[]): void {
-    // Set highlighting flag to prevent triggering grammar checks during highlighting
-    this.isHighlighting = true;
-    this.eventManager.setHighlightingState(true);
-
-    // Safari-specific approach: Completely disable all selection events during formatting
-    const savedSelection = this.cursorManager.saveCursorPosition();
-
-    // Detect Safari
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-    try {
-      if (isSafari) {
-        // For Safari, use a more aggressive approach
-        this.performSafariSafeHighlighting(errors, savedSelection);
-      } else {
-        // Use standard approach for other browsers
-        requestAnimationFrame(() => {
-          this.performHighlightingOperations(errors, savedSelection);
-          // Clear highlighting flag after operations complete
-          this.finishHighlighting();
-        });
-        return; // Early return for async path
-      }
-    } finally {
-      // Clear highlighting flag for synchronous Safari path
-      if (isSafari) {
-        this.finishHighlighting();
-      }
-    }
-  }
-
-  private trySafariDOMIsolation(
-    errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
-  ): boolean {
-    try {
-      const quillInstance = this.editor._quill as unknown as {
-        container?: HTMLElement;
-      };
-      const container = quillInstance?.container;
-
-      if (!container || !container.parentNode) {
-        return false;
-      }
-
-      // Create a placeholder element
-      const placeholder = document.createComment("quill-temp-placeholder");
-      const parentNode = container.parentNode;
-
-      // Save scroll position
-      const scrollTop =
-        document.documentElement.scrollTop || document.body.scrollTop;
-      const scrollLeft =
-        document.documentElement.scrollLeft || document.body.scrollLeft;
-
-      // Remove container from DOM temporarily
-      parentNode.insertBefore(placeholder, container);
-      parentNode.removeChild(container);
-
-      // Perform formatting operations while detached from DOM
-      this.performHighlightingOperations(errors, null);
-
-      // Reattach container to DOM
-      parentNode.insertBefore(container, placeholder);
-      parentNode.removeChild(placeholder);
-
-      // Restore scroll position
-      globalThis.scrollTo(scrollLeft, scrollTop);
-
-      // Restore cursor position after a brief delay
-      setTimeout(() => {
-        if (savedSelection) {
-          const docLength = this.editor.getLength();
-          const safeIndex = Math.min(
-            savedSelection.index,
-            Math.max(0, docLength - 1)
-          );
-          const safeLength = Math.min(
-            savedSelection.length,
-            Math.max(0, docLength - safeIndex)
-          );
-
-          if (this.editor.setSelection) {
-            this.editor.setSelection(safeIndex, safeLength, "silent");
-          }
-        }
-      }, 10);
-
-      return true;
-    } catch (err) {
-      console.warn("Safari DOM isolation failed, falling back:", err);
-      return false;
-    }
-  }
-
-  private performSafariSafeHighlighting(
-    errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
-  ): void {
-    // Safari-specific implementation - try DOM isolation approach first
-    if (this.trySafariDOMIsolation(errors, savedSelection)) {
-      return;
-    }
-
-    // Fallback to selection method override approach
-    const quillInstance = this.editor._quill as unknown as {
-      setSelection?: (index: number, length: number, source?: string) => void;
-      updateSelection?: (source?: string) => void;
-      scrollSelectionIntoView?: () => void;
-      container?: HTMLElement;
-    };
-
-    if (!quillInstance) return;
-
-    // Store original selection methods
-    const originalSetSelection = quillInstance.setSelection;
-    const originalUpdateSelection = quillInstance.updateSelection;
-    const originalScrollSelectionIntoView =
-      quillInstance.scrollSelectionIntoView;
-
-    let container: HTMLElement | undefined;
-    try {
-      // Completely disable selection updates during formatting
-      if (quillInstance.setSelection) {
-        quillInstance.setSelection = () => {};
-      }
-      if (quillInstance.updateSelection) {
-        quillInstance.updateSelection = () => {};
-      }
-      if (quillInstance.scrollSelectionIntoView) {
-        quillInstance.scrollSelectionIntoView = () => {};
-      }
-
-      // Disable all events that could trigger selection changes
-      container = quillInstance.container;
-      if (container) {
-        container.style.pointerEvents = "none";
-      }
-
-      // Perform formatting operations
-      this.performHighlightingOperations(errors, null);
-
-      // Wait for DOM to settle, then restore selection
-      setTimeout(() => {
-        try {
-          // Restore original methods
-          if (originalSetSelection) {
-            quillInstance.setSelection = originalSetSelection;
-          }
-          if (originalUpdateSelection) {
-            quillInstance.updateSelection = originalUpdateSelection;
-          }
-          if (originalScrollSelectionIntoView) {
-            quillInstance.scrollSelectionIntoView =
-              originalScrollSelectionIntoView;
-          }
-
-          // Re-enable pointer events
-          if (container) {
-            container.style.pointerEvents = "";
-          }
-
-          // Force restore selection after methods are restored
-          if (savedSelection && originalSetSelection) {
-            const docLength = this.editor.getLength();
-            const safeIndex = Math.min(
-              savedSelection.index,
-              Math.max(0, docLength - 1)
-            );
-            const safeLength = Math.min(
-              savedSelection.length,
-              Math.max(0, docLength - safeIndex)
-            );
-
-            originalSetSelection.call(
-              quillInstance,
-              safeIndex,
-              safeLength,
-              "silent"
-            );
-          }
-        } catch (err) {
-          console.warn("Safari selection restoration failed:", err);
-        }
-      }, 0);
-    } catch (err) {
-      // Restore methods in case of error
-      if (originalSetSelection) {
-        quillInstance.setSelection = originalSetSelection;
-      }
-      if (originalUpdateSelection) {
-        quillInstance.updateSelection = originalUpdateSelection;
-      }
-      if (originalScrollSelectionIntoView) {
-        quillInstance.scrollSelectionIntoView = originalScrollSelectionIntoView;
-      }
-
-      if (container) {
-        container.style.pointerEvents = "";
-      }
-
-      throw err;
-    }
-  }
-
-  private performHighlightingOperations(
-    errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
-  ): void {
-    // Batch all operations together to minimize DOM thrashing
-    const quillInstance = this.editor._quill as unknown as {
-      history?: {
-        options?: { delay?: number };
-        disable?: () => void;
-        enable?: () => void;
-        clear?: () => void;
-      };
-      setSelection?: (index: number, length: number, source?: string) => void;
-    };
-
-    // Temporarily disable history recording during highlighting
-    let originalHistoryRecord: (() => void) | null = null;
-
-    // Try to intercept the history recording
-    if (quillInstance?.history) {
-      const history = quillInstance.history as unknown as {
-        record?: () => void;
-      };
-      if (history.record) {
-        originalHistoryRecord = history.record;
-        history.record = () => {}; // Disable recording temporarily
-      }
-    }
-
-    try {
-      // Clear existing error formatting across the document
-      console.debug("🎨 Clearing existing formatting before highlighting");
-      try {
-        const docLength = this.editor.getLength();
-        // Use silent mode to prevent cursor jumps during clearing
-        if (
-          this.editor._quill &&
-          typeof this.editor._quill.formatText === "function"
-        ) {
-          this.editor._quill.formatText(
-            0,
-            docLength,
-            "grammar-typo",
-            false,
-            "silent"
-          );
-          this.editor._quill.formatText(
-            0,
-            docLength,
-            "grammar-other",
-            false,
-            "silent"
-          );
-        } else {
-          this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
-          this.editor.formatText(
-            0,
-            docLength,
-            "grammar-other",
-            false,
-            "silent"
-          );
-        }
-      } catch (_err) {
-        // ignore
-      }
-
-      if (!errors || errors.length === 0) {
-        // Restore cursor position even when no errors
-        this.cursorManager.restoreCursorPositionImmediate(savedSelection);
-        return;
-      }
-
-      // Robust formatting: try index-based formatting first; if that fails, fallback to text search
-      const docText = this.editor.getText();
-      const docLen = docText.length;
-
-      errors.forEach((error) => {
-        const start =
-          typeof error.start_index === "number" ? error.start_index : null;
-        const end =
-          typeof error.end_index === "number" ? error.end_index : null;
-        const len =
-          start !== null && end !== null ? Math.max(0, end - start) : 0;
-        const isTypo =
-          error.error_code === "typo" ||
-          (error.title && String(error.title).toLowerCase().includes("typo"));
-        const formatName = isTypo ? "grammar-typo" : "grammar-other";
-
-        let applied = false;
-        if (start !== null && len > 0 && start < docLen) {
-          try {
-            // Use silent mode to prevent triggering selection changes during formatting
-            if (
-              this.editor._quill &&
-              typeof this.editor._quill.formatText === "function"
-            ) {
-              this.editor._quill.formatText(
-                start,
-                len,
-                formatName,
-                true,
-                "silent"
-              );
-            } else {
-              this.editor.formatText(start, len, formatName, true, "silent");
-            }
-            applied = true;
-          } catch (_err) {
-            applied = false;
-          }
-        }
-
-        if (!applied && error.error_text) {
-          try {
-            const needle = String(error.error_text).trim();
-            if (needle.length > 0) {
-              const foundIndex = docText.indexOf(needle);
-              if (foundIndex !== -1) {
-                // Use silent mode for fallback formatting as well
-                if (
-                  this.editor._quill &&
-                  typeof this.editor._quill.formatText === "function"
-                ) {
-                  this.editor._quill.formatText(
-                    foundIndex,
-                    needle.length,
-                    formatName,
-                    true,
-                    "silent"
-                  );
-                } else {
-                  this.editor.formatText(
-                    foundIndex,
-                    needle.length,
-                    formatName,
-                    true,
-                    "silent"
-                  );
-                }
-                applied = true;
-              }
-            }
-          } catch (_err) {
-            // ignore
-          }
-        }
-      });
-
-      // Force immediate cursor restoration
-      this.cursorManager.restoreCursorPositionImmediate(savedSelection);
-    } finally {
-      // Restore original history recording if it was intercepted
-      if (originalHistoryRecord && quillInstance?.history) {
-        console.debug(
-          "🎨 Restoring Quill history recording after highlighting"
-        );
-        const history = quillInstance.history as unknown as {
-          record?: () => void;
-        };
-        if (history) {
-          history.record = originalHistoryRecord;
-        }
-      }
-    }
-  }
 
   private updateStatus(status: string, isChecking: boolean): void {
     this.statusText.textContent = status;
@@ -1152,8 +704,6 @@ export class GrammarChecker {
     // Simple alert for now - in a full implementation, you'd want a nicer notification system
     alert(`Error: ${message}`);
   }
-
-
 
   private applySuggestion(error: CheckerError, suggestion: string): void {
     try {
@@ -1253,7 +803,7 @@ export class GrammarChecker {
       );
       // Fallback to full grammar check
       this.state.lastCheckedContent = "";
-      this.clearErrors();
+      this.errorHighlighter.clearErrors();
       this.textAnalyzer.checkGrammar();
     }
   }
@@ -1278,7 +828,7 @@ export class GrammarChecker {
     });
 
     // Re-highlight all errors with adjusted positions
-    this.highlightErrors(this.state.errors);
+    this.errorHighlighter.highlightErrors(this.state.errors);
   }
 
   private async recheckModifiedLine(lineNumber: number): Promise<void> {
@@ -1335,7 +885,7 @@ export class GrammarChecker {
 
         // Highlight the new errors for this line
         if (adjustedErrors.length > 0) {
-          this.highlightLineErrors(adjustedErrors);
+          this.errorHighlighter.highlightLineErrors(adjustedErrors);
         }
 
         console.log(
@@ -1354,7 +904,7 @@ export class GrammarChecker {
     // Update text analyzer with new API and language
     this.textAnalyzer.updateApi(this.api);
     this.textAnalyzer.updateLanguage(language);
-    this.clearErrors();
+    this.errorHighlighter.clearErrors();
     // Re-check with new language if there's content
     const text = this.getText();
     if (text && text.trim()) {
@@ -1409,29 +959,11 @@ export class GrammarChecker {
 
   clearEditor(): void {
     this.editor.setText("");
-    this.clearErrors();
+    this.errorHighlighter.clearErrors();
     this.editor.focus();
   }
 
-  clearErrors(): void {
-    this.state.errors = [];
-    this.eventManager.updateErrors([]);
-    this.state.errorSpans = [];
-    this.updateErrorCount(0);
-    // Remove any grammar-related formatting
-    try {
-      const docLength = this.editor.getLength();
-      this.editor.formatText(0, docLength, "grammar-error", false);
-      this.editor.formatText(0, docLength, "grammar-typo", false);
-      this.editor.formatText(0, docLength, "grammar-other", false);
-    } catch (_err) {
-      // ignore
-    }
 
-    // Remove any tooltips
-    const tooltips = document.querySelectorAll(".error-tooltip");
-    tooltips.forEach((tooltip) => tooltip.remove());
-  }
 }
 
 // Initialize the grammar checker when DOM is loaded

@@ -1,6 +1,6 @@
 /**
  * EventManager - Handles all DOM event registration and coordination
- * 
+ *
  * This class encapsulates DOM event handling, undo detection, caret positioning,
  * and intelligent paste operations to keep event logic separate from main business logic.
  */
@@ -46,7 +46,7 @@ export class EventManager {
   private clearButton: HTMLButtonElement;
   private callbacks: EventCallbacks;
   private errors: CheckerError[] = [];
-  
+
   // Undo detection state
   private recentTextChanges: Array<{ timestamp: number; text: string }> = [];
   private lastUserActionTime: number = 0;
