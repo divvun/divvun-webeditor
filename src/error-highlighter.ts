@@ -1,6 +1,6 @@
 /**
  * ErrorHighlighter - Handles error highlighting and visual formatting operations
- * 
+ *
  * This class encapsulates all Quill formatting operations, error highlighting logic,
  * Safari-specific workarounds, and DOM isolation techniques to keep visual formatting
  * separate from business logic.
@@ -347,8 +347,20 @@ export class ErrorHighlighter {
           );
         } else {
           this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
-          this.editor.formatText(0, docLength, "grammar-error", false, "silent");
-          this.editor.formatText(0, docLength, "grammar-other", false, "silent");
+          this.editor.formatText(
+            0,
+            docLength,
+            "grammar-error",
+            false,
+            "silent"
+          );
+          this.editor.formatText(
+            0,
+            docLength,
+            "grammar-other",
+            false,
+            "silent"
+          );
         }
       } catch (_err) {
         // Ignore clearing errors
@@ -391,7 +403,10 @@ export class ErrorHighlighter {
             this.editor.formatText(start, len, formatName, true, "silent");
           }
         } catch (err) {
-          console.warn(`Failed to highlight error at ${start}-${error.end_index}:`, err);
+          console.warn(
+            `Failed to highlight error at ${start}-${error.end_index}:`,
+            err
+          );
         }
       });
 

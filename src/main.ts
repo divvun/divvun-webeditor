@@ -1,19 +1,13 @@
-import {
-  getAvailableLanguages,
-  GrammarCheckerAPI,
-  SpellCheckerAPI,
-} from "./api.ts";
+// ConfigManager now handles API imports
 import type {
-  AvailableLanguage,
   CheckerApi,
   CheckerError,
   CheckerState,
   CheckingContext,
   EditorState,
-  GrammarCheckerConfig,
   SupportedLanguage,
 } from "./types.ts";
-import { CursorManager, type CursorPosition } from "./cursor-manager.ts";
+import { CursorManager } from "./cursor-manager.ts";
 import {
   SuggestionManager,
   type SuggestionCallbacks,
@@ -28,6 +22,10 @@ import {
   ErrorHighlighter,
   type HighlightingCallbacks,
 } from "./error-highlighter.ts";
+import {
+  ConfigManager,
+  type ConfigurationCallbacks,
+} from "./config-manager.ts";
 
 // Quill types are not shipped with Deno by default; use any to avoid type issues in this small app
 // Minimal Quill typings we need (Quill is loaded via CDN in the page)
@@ -125,23 +123,18 @@ if (!maybeBridge) {
 }
 const QuillBridge = maybeBridge;
 
-// Global variable to store available languages from API
-let availableLanguages: AvailableLanguage[] = [];
+// ConfigManager now handles available languages
 
 export class GrammarChecker {
-  private api: CheckerApi;
-  private config: GrammarCheckerConfig;
   private state: EditorState;
   private checkingContext: CheckingContext | null = null;
   private isHighlighting: boolean = false;
 
-  // DOM elements
+  // Configuration management
+  private configManager: ConfigManager;
+
+  // Editor instance
   private editor: QuillBridgeInstance; // Quill instance
-  private languageSelect: HTMLSelectElement;
-  private clearButton: HTMLButtonElement;
-  private statusText: HTMLElement;
-  private statusDisplay: HTMLElement;
-  private errorCount: HTMLElement;
 
   // Cursor management
   private cursorManager: CursorManager;
@@ -161,38 +154,9 @@ export class GrammarChecker {
   // Error highlighting
   private errorHighlighter: ErrorHighlighter;
 
-  private createApiForLanguage(language: SupportedLanguage): CheckerApi {
-    // Find the language in our available languages list
-    const languageInfo = availableLanguages.find(
-      (lang) => lang.code === language
-    );
-
-    if (languageInfo) {
-      // Use the API type specified by the server
-      if (languageInfo.type === "speller") {
-        return new SpellCheckerAPI();
-      } else {
-        return new GrammarCheckerAPI();
-      }
-    }
-
-    // Fallback logic if language not found in API data
-    // SMS uses spell checker, all others use grammar checker
-    if (language === "sms") {
-      return new SpellCheckerAPI();
-    } else {
-      return new GrammarCheckerAPI();
-    }
-  }
+  // ConfigManager now handles API creation
 
   constructor() {
-    this.config = {
-      language: "se",
-      apiUrl: "https://api-giellalt.uit.no/grammar",
-      autoCheckDelay: 600,
-      maxRetries: 3,
-    };
-
     this.state = {
       lastCheckedContent: "",
       errors: [],
@@ -200,7 +164,20 @@ export class GrammarChecker {
       errorSpans: [],
     };
 
-    this.api = this.createApiForLanguage(this.config.language);
+    // Initialize configuration manager with callbacks
+    const configCallbacks: ConfigurationCallbacks = {
+      onLanguageChanged: (language: SupportedLanguage, api: CheckerApi) => {
+        this.handleLanguageChange(language, api);
+      },
+      onConfigurationInitialized: () => {
+        console.log("🔧 Configuration initialized successfully");
+      },
+      onLanguageInitializationError: (error: unknown) => {
+        console.warn("⚠️ Language initialization failed:", error);
+      },
+    };
+
+    this.configManager = new ConfigManager(configCallbacks);
 
     // Register custom Quill blots for error highlighting
     registerQuillBlots();
@@ -260,10 +237,10 @@ export class GrammarChecker {
       },
     };
     this.textAnalyzer = new TextAnalyzer(
-      this.api,
+      this.configManager.getCurrentApi(),
       this.editor,
       textAnalysisCallbacks,
-      this.config.language
+      this.configManager.getCurrentLanguage()
     );
 
     // Initialize state machine
@@ -273,7 +250,7 @@ export class GrammarChecker {
       onCheckRequested: () => this.performGrammarCheck(),
     };
     this.stateMachine = new CheckerStateMachine(
-      this.config.autoCheckDelay,
+      this.configManager.getAutoCheckDelay(),
       stateTransitionCallbacks
     );
 
@@ -286,18 +263,7 @@ export class GrammarChecker {
       // ignore
     }
 
-    // Get other DOM elements
-    this.languageSelect = document.getElementById(
-      "language-select"
-    ) as HTMLSelectElement;
-    this.clearButton = document.getElementById(
-      "clear-btn"
-    ) as HTMLButtonElement;
-    this.statusText = document.getElementById("status-text") as HTMLElement;
-    this.statusDisplay = document.getElementById(
-      "status-display"
-    ) as HTMLElement;
-    this.errorCount = document.getElementById("error-count") as HTMLElement;
+    // DOM elements are now managed by ConfigManager
 
     // Initialize event manager
     const eventCallbacks: EventCallbacks = {
@@ -333,9 +299,10 @@ export class GrammarChecker {
           pastedContent
         ),
     };
+    const domElements = this.configManager.getDOMElements();
     this.eventManager = new EventManager(
       this.editor,
-      this.clearButton,
+      domElements.clearButton,
       eventCallbacks
     );
 
@@ -365,15 +332,7 @@ export class GrammarChecker {
   }
 
   async initializeLanguages(): Promise<void> {
-    // Fetch available languages from API
-    try {
-      availableLanguages = await getAvailableLanguages();
-      // Re-initialize the API with the default language using the new data
-      this.api = this.createApiForLanguage(this.config.language);
-    } catch (error) {
-      console.warn("Failed to initialize languages:", error);
-      // Continue with current API setup as fallback
-    }
+    return await this.configManager.initializeLanguages();
   }
 
   private handleTextChange(_source: string, _currentText: string): void {
@@ -546,10 +505,12 @@ export class GrammarChecker {
             this.updateStatus(`Checking affected line ${i + 1}...`, true);
 
             try {
-              const response = await this.api.checkText(
-                lineWithNewline,
-                this.config.language
-              );
+              const response = await this.configManager
+                .getCurrentApi()
+                .checkText(
+                  lineWithNewline,
+                  this.configManager.getCurrentLanguage()
+                );
 
               // Adjust error indices to account for position in full text
               const adjustedErrors = response.errs.map((error) => ({
@@ -597,8 +558,6 @@ export class GrammarChecker {
       this.state.isChecking = false;
     }
   }
-
-
 
   // State Machine Callback Implementations
   private onStateExit(state: CheckerState): void {
@@ -663,40 +622,30 @@ export class GrammarChecker {
     await this.textAnalyzer.checkGrammar();
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
   private updateStatus(status: string, isChecking: boolean): void {
-    this.statusText.textContent = status;
-    this.statusDisplay.className = isChecking
+    const domElements = this.configManager.getDOMElements();
+    domElements.statusText.textContent = status;
+    domElements.statusDisplay.className = isChecking
       ? "status checking"
       : "status complete";
 
     // Add/remove spinner
-    const existingSpinner = this.statusDisplay.querySelector(".spinner");
+    const existingSpinner = domElements.statusDisplay.querySelector(".spinner");
     if (isChecking && !existingSpinner) {
       const spinner = document.createElement("div");
       spinner.className = "spinner";
-      this.statusDisplay.appendChild(spinner);
+      domElements.statusDisplay.appendChild(spinner);
     } else if (!isChecking && existingSpinner) {
       existingSpinner.remove();
     }
   }
 
   private updateErrorCount(count: number): void {
-    this.errorCount.textContent = `${count} ${
+    const domElements = this.configManager.getDOMElements();
+    domElements.errorCount.textContent = `${count} ${
       count === 1 ? "error" : "errors"
     }`;
-    this.errorCount.className =
+    domElements.errorCount.className =
       count > 0 ? "error-count has-errors" : "error-count";
   }
 
@@ -859,10 +808,9 @@ export class GrammarChecker {
 
       // Only check if the line has content
       if (lineWithNewline.trim()) {
-        const response = await this.api.checkText(
-          lineWithNewline,
-          this.config.language
-        );
+        const response = await this.configManager
+          .getCurrentApi()
+          .checkText(lineWithNewline, this.configManager.getCurrentLanguage());
 
         // Adjust error indices to account for position in full text
         const adjustedErrors = response.errs.map((error) => ({
@@ -898,13 +846,20 @@ export class GrammarChecker {
   }
 
   setLanguage(language: SupportedLanguage): void {
-    this.config.language = language;
-    // Create appropriate API for the new language
-    this.api = this.createApiForLanguage(language);
+    this.configManager.setLanguage(language);
+  }
+
+  private handleLanguageChange(
+    language: SupportedLanguage,
+    api: CheckerApi
+  ): void {
+    console.debug("🔄 Handling language change to", language);
+
     // Update text analyzer with new API and language
-    this.textAnalyzer.updateApi(this.api);
+    this.textAnalyzer.updateApi(api);
     this.textAnalyzer.updateLanguage(language);
     this.errorHighlighter.clearErrors();
+
     // Re-check with new language if there's content
     const text = this.getText();
     if (text && text.trim()) {
@@ -962,8 +917,6 @@ export class GrammarChecker {
     this.errorHighlighter.clearErrors();
     this.editor.focus();
   }
-
-
 }
 
 // Initialize the grammar checker when DOM is loaded
