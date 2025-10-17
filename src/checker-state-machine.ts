@@ -35,7 +35,7 @@ export class CheckerStateMachine {
   private checkTimeout: ReturnType<typeof setTimeout> | null = null;
   private autoCheckDelay: number;
   private callbacks: StateTransitionCallbacks;
-  private pendingEditInfo: { type: EditType } & EditInfo | null = null;
+  private pendingEditInfo: ({ type: EditType } & EditInfo) | null = null;
 
   constructor(autoCheckDelay: number, callbacks: StateTransitionCallbacks) {
     this.autoCheckDelay = autoCheckDelay;
@@ -49,15 +49,26 @@ export class CheckerStateMachine {
   /**
    * Handle edit operations with intelligent type detection
    */
-  handleEdit(previousText: string, currentText: string, cursorPosition?: number): void {
+  handleEdit(
+    previousText: string,
+    currentText: string,
+    cursorPosition?: number
+  ): void {
     // Ignore edits if we're in a busy state
-    if (this.currentState === "checking" || this.currentState === "highlighting") {
+    if (
+      this.currentState === "checking" ||
+      this.currentState === "highlighting"
+    ) {
       console.log(`🚫 Edit ignored - state is ${this.currentState}`);
       return;
     }
 
     // Analyze the edit
-    const editInfo = this.analyzeEdit(previousText, currentText, cursorPosition);
+    const editInfo = this.analyzeEdit(
+      previousText,
+      currentText,
+      cursorPosition
+    );
 
     console.log(`📝 Edit detected: ${editInfo.type}`, editInfo);
 
@@ -82,11 +93,17 @@ export class CheckerStateMachine {
    */
   private processPendingEdit(): void {
     if (this.pendingEditInfo) {
-      console.debug(`📝 Processing debounced edit: ${this.pendingEditInfo.type}`, this.pendingEditInfo);
-      
+      console.debug(
+        `📝 Processing debounced edit: ${this.pendingEditInfo.type}`,
+        this.pendingEditInfo
+      );
+
       // Notify the callback with edit information
-      this.callbacks.onEditDetected(this.pendingEditInfo.type, this.pendingEditInfo);
-      
+      this.callbacks.onEditDetected(
+        this.pendingEditInfo.type,
+        this.pendingEditInfo
+      );
+
       // Clear pending edit
       this.pendingEditInfo = null;
     }
