@@ -395,11 +395,7 @@ export class GrammarChecker {
         }
       }
 
-      if (
-        matchingError &&
-        matchingError.suggestions &&
-        matchingError.suggestions.length > 0
-      ) {
+      if (matchingError) {
         // Calculate Chrome-compatible coordinates
         let menuX = e.clientX;
         let menuY = e.clientY;
@@ -1642,32 +1638,42 @@ export class GrammarChecker {
 
     const ul = document.createElement("ul");
     ul.className = "suggestions";
-    const suggestions = error.suggestions && error.suggestions.length > 0
-      ? error.suggestions
-      : [error.error_text];
-    suggestions.forEach((sugg) => {
-      const li = document.createElement("li");
-      li.textContent = sugg;
-      li.addEventListener("click", (e) => {
-        e.stopPropagation();
-        // Replace text in editor
-        try {
-          this.editor.deleteText(index, length);
-          this.editor.insertText(index, sugg);
-          // After replacement, clear formatting for that range
-          this.editor.formatText(index, sugg.length, "grammar-typo", false);
-          this.editor.formatText(index, sugg.length, "grammar-other", false);
-          // Clear state errors and re-run check
-          this.state.lastCheckedContent = "";
-          this.clearErrors();
-          this.checkGrammar();
-        } catch (_err) {
-          // ignore
-        }
-        tooltip.remove();
+
+    if (error.suggestions && error.suggestions.length > 0) {
+      // Show available suggestions
+      error.suggestions.forEach((sugg) => {
+        const li = document.createElement("li");
+        li.textContent = sugg;
+        li.addEventListener("click", (e) => {
+          e.stopPropagation();
+          // Replace text in editor
+          try {
+            this.editor.deleteText(index, length);
+            this.editor.insertText(index, sugg);
+            // After replacement, clear formatting for that range
+            this.editor.formatText(index, sugg.length, "grammar-typo", false);
+            this.editor.formatText(index, sugg.length, "grammar-other", false);
+            // Clear state errors and re-run check
+            this.state.lastCheckedContent = "";
+            this.clearErrors();
+            this.checkGrammar();
+          } catch (_err) {
+            // ignore
+          }
+          tooltip.remove();
+        });
+        ul.appendChild(li);
       });
+    } else {
+      // Show no suggestions available message
+      const li = document.createElement("li");
+      li.className = "no-suggestions";
+      li.textContent = "No suggestions available for this error";
+      li.style.fontStyle = "italic";
+      li.style.color = "#666";
+      li.style.cursor = "default";
       ul.appendChild(li);
-    });
+    }
     tooltip.appendChild(ul);
 
     document.body.appendChild(tooltip);
@@ -1779,25 +1785,38 @@ export class GrammarChecker {
     }
 
     // Add suggestions
-    const suggestions = error.suggestions && error.suggestions.length > 0
-      ? error.suggestions
-      : [error.error_text];
+    if (error.suggestions && error.suggestions.length > 0) {
+      // Show available suggestions
+      error.suggestions.forEach((suggestion) => {
+        const btn = document.createElement("button");
 
-    suggestions.forEach((suggestion) => {
-      const btn = document.createElement("button");
+        // Use Tailwind classes for button styling
+        btn.className =
+          "block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors duration-150";
+        btn.textContent = suggestion;
 
-      // Use Tailwind classes for button styling
-      btn.className =
-        "block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors duration-150";
-      btn.textContent = suggestion;
+        btn.addEventListener("click", () => {
+          this.applySuggestion(error, suggestion);
+          menu.remove();
+        });
 
-      btn.addEventListener("click", () => {
-        this.applySuggestion(error, suggestion);
-        menu.remove();
+        menu.appendChild(btn);
       });
+    } else {
+      // Show no suggestions available message
+      const noSuggestionsDiv = document.createElement("div");
+      noSuggestionsDiv.className =
+        "px-3 py-2 text-sm text-gray-500 italic text-center border-b border-gray-200";
+      noSuggestionsDiv.textContent = "No suggestions available for this error";
+      menu.appendChild(noSuggestionsDiv);
 
-      menu.appendChild(btn);
-    });
+      // Add error text for reference in a non-clickable way
+      const errorTextDiv = document.createElement("div");
+      errorTextDiv.className =
+        "px-3 py-2 text-xs text-gray-600 bg-gray-50 font-mono break-words";
+      errorTextDiv.textContent = `Error: "${error.error_text}"`;
+      menu.appendChild(errorTextDiv);
+    }
 
     document.body.appendChild(menu);
 
