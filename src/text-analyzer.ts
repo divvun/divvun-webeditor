@@ -375,9 +375,9 @@ export class TextAnalyzer {
     highlighter: {
       highlightSpecificLine: (
         lineNumber: number,
-        errors: CheckerError[],
-        lineStartIndex: number
+        errors: CheckerError[]
       ) => void;
+      clearSpecificLine: (lineNumber: number, lineLength: number) => void;
     }
   ): Promise<CheckerError[]> {
     console.log(`🧪 checkAndHighlightLine ENTERED for line ${lineNumber}`);
@@ -392,7 +392,9 @@ export class TextAnalyzer {
 
       // Then apply highlighting using the cached data
       console.log(`🎨 About to call highlightLine for line ${lineNumber}`);
-      this.highlightLine(lineNumber, highlighter);
+      const cached = this.lineCache.get(lineNumber);
+      highlighter.clearSpecificLine(lineNumber, cached!.content.length);
+      highlighter.highlightSpecificLine(lineNumber, errors);
       console.log(`✅ highlightLine completed for line ${lineNumber}`);
 
       console.log(`🏁 checkAndHighlightLine COMPLETED for line ${lineNumber}`);
