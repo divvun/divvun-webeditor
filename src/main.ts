@@ -410,8 +410,14 @@ export class GrammarChecker {
         `✅ Line ${lineNumber} atomic check+highlight complete: ${errors.length} errors found`
       );
 
-      // Update error count in UI
-      this.updateErrorCount(this.state.errors.length);
+      // Update state and EventManager with the new errors for click handling
+      if (errors.length > 0) {
+        console.log(`🔗 Setting up click handlers for ${errors.length} errors`);
+        this.state.errors = errors;
+        this.eventManager.updateErrors(errors);
+        // Update error count in UI
+        this.updateErrorCount(errors.length);
+      }
 
       // Cancel any pending debounce since line-specific check completed successfully
       this.stateMachine.cancelPendingCheck();
