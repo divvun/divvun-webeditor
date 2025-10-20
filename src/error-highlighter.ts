@@ -436,7 +436,6 @@ export class ErrorHighlighter {
   highlightSpecificLine(
     lineNumber: number,
     errors: CheckerError[],
-    _lineStartIndex: number
   ): void {
     if (errors.length === 0) {
       return; // Nothing to highlight
