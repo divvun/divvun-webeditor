@@ -394,9 +394,7 @@ export class GrammarChecker {
       console.log(`🔍 Checking specific line: ${lineNumber}`);
 
       // Clear existing highlights before applying new ones to prevent accumulation
-      console.log(`🧹 Clearing existing highlights before line check`);
-      this.errorHighlighter.clearErrors();
-
+      // console.log(`🧹 Clearing existing highlights before line check`);
       // Invalidate cache for this line since it was edited
       console.log(`🗑️ Invalidating cache for line ${lineNumber}`);
       this.textAnalyzer.invalidateLineCache(lineNumber);
