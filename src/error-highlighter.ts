@@ -482,11 +482,7 @@ export class ErrorHighlighter {
   /**
    * Clear highlighting for a specific line only
    */
-  clearSpecificLine(
-    lineNumber: number,
-    lineStartIndex: number,
-    lineLength: number
-  ): void {
+  clearSpecificLine(lineNumber: number, lineLength: number): void {
     console.debug(`🧹 Clearing highlighting for line ${lineNumber}`);
 
     const savedSelection = this.cursorManager.saveCursorPosition();
@@ -498,7 +494,7 @@ export class ErrorHighlighter {
       for (const formatType of formatTypes) {
         try {
           this.editor.formatText(
-            lineStartIndex,
+            lineNumber,
             lineLength,
             formatType,
             false,
