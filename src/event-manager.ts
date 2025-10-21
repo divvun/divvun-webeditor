@@ -92,6 +92,11 @@ export class EventManager {
       const now = Date.now();
       const currentText = this.editor.getText();
 
+      // Skip text change processing if we're programmatically applying a suggestion
+      if (this.isApplyingSuggestion) {
+        return;
+      }
+
       // Track text changes for undo detection
       this.recentTextChanges.push({ timestamp: now, text: currentText });
 
