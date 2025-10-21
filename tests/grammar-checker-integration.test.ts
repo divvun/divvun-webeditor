@@ -568,3 +568,46 @@ Deno.test("CheckerStateMachine - editing after failure transitions to editing", 
     stateMachine.cleanup();
   }
 });
+
+Deno.test("Paste multi-line text - newline-creation should use 0-based line numbers", () => {
+  // Test for the bug where pasting "Dqll.\nDqll. In die'e wat." only checks line 1, not line 0
+  // The state machine's analyzeEdit returns 0-based line numbers
+  // but handleNewlineEdit was passing them directly to recheckModifiedLine which expects 1-based
+
+  const editsDetected: Array<{ type: EditType; info: EditInfo }> = [];
+
+  const callbacks: StateTransitionCallbacks = {
+    onStateEntry: () => {},
+    onStateExit: () => {},
+    onCheckRequested: () => {},
+    onEditDetected: (type, info) => {
+      editsDetected.push({ type, info });
+    },
+  };
+
+  const stateMachine = new CheckerStateMachine(100, callbacks);
+
+  try {
+    // Simulate pasting "Dqll.\nDqll. In die'e wat." into an editor with just a newline
+    const previousText = "\n";
+    const currentText = "Dqll.\nDqll. In die'e wat.\n";
+
+    // Trigger the edit
+    stateMachine.handleEdit(previousText, currentText);
+
+    // Should detect a newline-creation edit
+    assertEquals(editsDetected.length, 1);
+    assertEquals(editsDetected[0].type, "newline-creation");
+
+    // The bug: lineNumber is 0 (0-based), but recheckModifiedLine expects 1-based
+    // So it needs to be converted: recheckModifiedLine(lineNumber + 1)
+    const lineNumber = editsDetected[0].info.lineNumber;
+    assertEquals(lineNumber, 0, "Line number should be 0 (0-based index)");
+
+    // When handleNewlineEdit is called with lineNumber 0, it should:
+    // - Convert to 1-based: recheckModifiedLine(0 + 1) = recheckModifiedLine(1) for line 0
+    // - Also check the next line: recheckModifiedLine(0 + 2) = recheckModifiedLine(2) for line 1
+  } finally {
+    stateMachine.cleanup();
+  }
+});

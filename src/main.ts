@@ -254,8 +254,9 @@ export class GrammarChecker {
       }
 
       console.log(`🔄 Starting line check for line ${lineNumber}`);
+      // Convert 0-based lineNumber from state machine to 1-based for recheckModifiedLine
       // Use recheckModifiedLine which handles everything robustly
-      const checkPromise = this.recheckModifiedLine(lineNumber);
+      const checkPromise = this.recheckModifiedLine(lineNumber + 1);
       this.pendingLineChecks.set(lineNumber, checkPromise);
 
       checkPromise
@@ -295,10 +296,11 @@ export class GrammarChecker {
     try {
       console.debug(`📄 Handling newline at line ${lineNumber}`);
 
+      // Convert 0-based lineNumber from state machine to 1-based for recheckModifiedLine
       // Use recheckModifiedLine for both lines affected by the split
       await Promise.all([
-        this.recheckModifiedLine(lineNumber),
-        this.recheckModifiedLine(lineNumber + 1),
+        this.recheckModifiedLine(lineNumber + 1), // The line where split occurred
+        this.recheckModifiedLine(lineNumber + 2), // The new line created
       ]);
 
       // Update EventManager with current errors for click handling
