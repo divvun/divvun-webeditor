@@ -1016,10 +1016,9 @@ export class GrammarChecker {
         // Add new errors from the rechecked line
         this.state.errors.push(...adjustedErrors);
 
-        // Highlight the new errors for this line
-        if (adjustedErrors.length > 0) {
-          this.errorHighlighter.highlightLineErrors(adjustedErrors);
-        }
+        // Always re-highlight the entire error set to ensure removed errors are cleared
+        // This is important when a line goes from having errors to having none
+        this.errorHighlighter.highlightErrors(this.state.errors);
 
         console.log(
           `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`
