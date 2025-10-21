@@ -254,9 +254,8 @@ export class GrammarChecker {
       }
 
       console.log(`🔄 Starting line check for line ${lineNumber}`);
-      // Convert 0-based lineNumber from state machine to 1-based for recheckModifiedLine
-      // Use recheckModifiedLine which handles everything robustly
-      const checkPromise = this.recheckModifiedLine(lineNumber + 1);
+      // recheckModifiedLine now uses 0-based line numbers (same as state machine)
+      const checkPromise = this.recheckModifiedLine(lineNumber);
       this.pendingLineChecks.set(lineNumber, checkPromise);
 
       checkPromise
@@ -296,11 +295,11 @@ export class GrammarChecker {
     try {
       console.debug(`📄 Handling newline at line ${lineNumber}`);
 
-      // Convert 0-based lineNumber from state machine to 1-based for recheckModifiedLine
-      // Use recheckModifiedLine for both lines affected by the split
+      // recheckModifiedLine now uses 0-based line numbers (same as state machine)
+      // Check both lines affected by the split
       await Promise.all([
-        this.recheckModifiedLine(lineNumber + 1), // The line where split occurred
-        this.recheckModifiedLine(lineNumber + 2), // The new line created
+        this.recheckModifiedLine(lineNumber), // The line where split occurred
+        this.recheckModifiedLine(lineNumber + 1), // The new line created
       ]);
 
       // Update EventManager with current errors for click handling
@@ -328,7 +327,7 @@ export class GrammarChecker {
     try {
       console.debug(`🗑️ Handling line deletion at ${lineNumber}`);
 
-      // Convert 0-based lineNumber from state machine to 1-based for recheckModifiedLine
+      // recheckModifiedLine now uses 0-based line numbers (same as state machine)
       // Check lines around the deletion point
       const currentText = this.editor.getText();
       const lines = currentText.split("\n");
@@ -336,12 +335,12 @@ export class GrammarChecker {
       const checkPromises = [];
       // Check the line at the deletion point (if it exists)
       if (lineNumber < lines.length) {
-        checkPromises.push(this.recheckModifiedLine(lineNumber + 1));
+        checkPromises.push(this.recheckModifiedLine(lineNumber));
       }
 
       // Check the line before (if it exists)
       if (lineNumber > 0) {
-        checkPromises.push(this.recheckModifiedLine(lineNumber)); // lineNumber is already the previous line in 1-based
+        checkPromises.push(this.recheckModifiedLine(lineNumber - 1));
       }
 
       await Promise.all(checkPromises);
@@ -830,19 +829,20 @@ export class GrammarChecker {
       const fullText = this.editor.getText();
       const lines = fullText.split("\n");
 
-      if (lineNumber < 1 || lineNumber > lines.length) {
+      // Use 0-based indexing for consistency with state machine and TextAnalyzer
+      if (lineNumber < 0 || lineNumber >= lines.length) {
         console.warn(`Invalid line number: ${lineNumber}`);
         return;
       }
 
-      // Get the modified line (convert from 1-based to 0-based index)
-      const lineIndex = lineNumber - 1;
-      const line = lines[lineIndex];
-      const lineWithNewline = lineIndex < lines.length - 1 ? line + "\n" : line;
+      const line = lines[lineNumber];
+      const lineWithNewline = lineNumber < lines.length - 1
+        ? line + "\n"
+        : line;
 
       // Calculate the start position of this line in the full text
       let lineStartPosition = 0;
-      for (let i = 0; i < lineIndex; i++) {
+      for (let i = 0; i < lineNumber; i++) {
         const prevLine = lines[i];
         const prevLineWithNewline = i < lines.length - 1
           ? prevLine + "\n"

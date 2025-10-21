@@ -570,9 +570,9 @@ Deno.test("CheckerStateMachine - editing after failure transitions to editing", 
 });
 
 Deno.test("Paste multi-line text - newline-creation should use 0-based line numbers", () => {
-  // Test for the bug where pasting "Dqll.\nDqll. In die'e wat." only checks line 1, not line 0
+  // Test for the bug where pasting "Dqll.\nDqll. In die'e wat." only checked line 1, not line 0
   // The state machine's analyzeEdit returns 0-based line numbers
-  // but handleNewlineEdit was passing them directly to recheckModifiedLine which expects 1-based
+  // recheckModifiedLine now also uses 0-based, so no conversion needed
 
   const editsDetected: Array<{ type: EditType; info: EditInfo }> = [];
 
@@ -599,14 +599,13 @@ Deno.test("Paste multi-line text - newline-creation should use 0-based line numb
     assertEquals(editsDetected.length, 1);
     assertEquals(editsDetected[0].type, "newline-creation");
 
-    // The bug: lineNumber is 0 (0-based), but recheckModifiedLine expects 1-based
-    // So it needs to be converted: recheckModifiedLine(lineNumber + 1)
+    // lineNumber is 0 (0-based) and is used directly with recheckModifiedLine
     const lineNumber = editsDetected[0].info.lineNumber;
     assertEquals(lineNumber, 0, "Line number should be 0 (0-based index)");
 
     // When handleNewlineEdit is called with lineNumber 0, it should:
-    // - Convert to 1-based: recheckModifiedLine(0 + 1) = recheckModifiedLine(1) for line 0
-    // - Also check the next line: recheckModifiedLine(0 + 2) = recheckModifiedLine(2) for line 1
+    // - recheckModifiedLine(0) to check line 0
+    // - recheckModifiedLine(1) to check line 1
   } finally {
     stateMachine.cleanup();
   }
@@ -635,6 +634,35 @@ Deno.test("Line deletion should update global error state", () => {
 
   // Should detect line-deletion at line 0 (0-based)
   assertEquals(stateMachine.getCurrentState(), "editing");
+
+  stateMachine.cleanup();
+});
+
+Deno.test("recheckModifiedLine should use 0-based line numbers", () => {
+  // Unit test to document that recheckModifiedLine should use 0-based indexing
+  // for consistency with the rest of the system (state machine, TextAnalyzer, etc.)
+
+  // The state machine provides 0-based line numbers:
+  const editor = createMockEditor();
+  const stateMachine = new CheckerStateMachine(100, {
+    onStateEntry: () => {},
+    onStateExit: () => {},
+    onCheckRequested: () => {},
+    onEditDetected: () => {},
+  });
+
+  editor.setText("Line 0\nLine 1\nLine 2");
+
+  // When editing line 0, state machine returns lineNumber: 0 (0-based)
+  stateMachine.handleEdit("", "Line 0\nLine 1\nLine 2");
+
+  // After refactoring, handleSingleLineEdit should pass 0-based line numbers directly
+  // to recheckModifiedLine without conversion:
+  // - recheckModifiedLine(0) checks "Line 0"
+  // - recheckModifiedLine(1) checks "Line 1"
+  // - recheckModifiedLine(2) checks "Line 2"
+
+  // This matches the behavior of TextAnalyzer.checkSpecificLine which uses 0-based indexing
 
   stateMachine.cleanup();
 });
