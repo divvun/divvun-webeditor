@@ -16,6 +16,7 @@ interface EditorWithQuill {
  * @param start - Start index of text to replace
  * @param length - Length of text to replace
  * @param replacement - Text to insert in place of the deleted text
+ * @throws Error if the replacement operation fails
  */
 export function atomicTextReplace(
   editor: EditorWithQuill,
@@ -28,15 +29,47 @@ export function atomicTextReplace(
   const quill = (editor as any)._quill;
 
   if (quill && quill.updateContents) {
-    // Create a delta that retains up to start, deletes length, inserts replacement
-    const replaceDelta = {
-      ops: [{ retain: start }, { delete: length }, { insert: replacement }],
-    };
-    quill.updateContents(replaceDelta, "api");
+    try {
+      // Create a delta that retains up to start, deletes length, inserts replacement
+      // Filter out any operations with zero length to avoid Quill errors
+      const ops: Array<Record<string, unknown>> = [];
+
+      if (start > 0) {
+        ops.push({ retain: start });
+      }
+      if (length > 0) {
+        ops.push({ delete: length });
+      }
+      if (replacement.length > 0) {
+        ops.push({ insert: replacement });
+      }
+
+      // Only proceed if we have operations to perform
+      if (ops.length > 0) {
+        const replaceDelta = { ops };
+        quill.updateContents(replaceDelta, "api");
+      }
+    } catch (error) {
+      console.error(
+        "Quill updateContents failed, falling back to separate operations:",
+        error
+      );
+      // Fallback on error
+      if (length > 0) {
+        editor.deleteText(start, length);
+      }
+      if (replacement.length > 0) {
+        editor.insertText(start, replacement);
+      }
+    }
   } else {
     // Fallback: Use delete + insert in immediate sequence
     // This may cause intermediate state issues but maintains backward compatibility
-    editor.deleteText(start, length);
-    editor.insertText(start, replacement);
+    if (length > 0) {
+      editor.deleteText(start, length);
+    }
+    if (replacement.length > 0) {
+      editor.insertText(start, replacement);
+    }
   }
 }
