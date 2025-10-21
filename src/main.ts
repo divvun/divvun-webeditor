@@ -76,7 +76,13 @@ export class GrammarChecker {
 
   // ConfigManager now handles API creation
 
-  constructor() {
+  /**
+   * Create a new GrammarChecker instance.
+   * 
+   * @param editor - Optional pre-created Quill editor instance. If not provided,
+   *                 will create one from the DOM element with id "editor".
+   */
+  constructor(editor?: QuillBridgeInstance) {
     this.state = {
       lastCheckedContent: "",
       errors: [],
@@ -102,18 +108,22 @@ export class GrammarChecker {
     // Register custom Quill blots for error highlighting
     registerQuillBlots();
 
-    // Initialize Quill editor via the bridge
-    const editorContainer = document.getElementById("editor") as HTMLElement;
-    this.editor = QuillBridge.create(editorContainer, {
-      theme: "snow",
-      modules: {
-        toolbar: [
-          [{ header: [1, 2, false] }],
-          ["bold", "italic", "underline"],
-          ["link", "clean"],
-        ],
-      },
-    });
+    // Initialize Quill editor - use provided editor or create from DOM
+    if (editor) {
+      this.editor = editor;
+    } else {
+      const editorContainer = document.getElementById("editor") as HTMLElement;
+      this.editor = QuillBridge.create(editorContainer, {
+        theme: "snow",
+        modules: {
+          toolbar: [
+            [{ header: [1, 2, false] }],
+            ["bold", "italic", "underline"],
+            ["link", "clean"],
+          ],
+        },
+      });
+    }
 
     // Initialize previous text tracking for edit detection
     this.previousText = this.editor.getText();
