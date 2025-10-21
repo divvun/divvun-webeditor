@@ -6,6 +6,7 @@
  */
 
 import type { CheckerError } from "./types.ts";
+import { atomicTextReplace } from "./editor-utils.ts";
 
 // Minimal editor interface for suggestion operations
 interface EditorInterface {
@@ -217,8 +218,9 @@ export class SuggestionManager {
     length: number
   ): void {
     try {
-      this.editor.deleteText(index, length);
-      this.editor.insertText(index, suggestion);
+      // Use atomic text replacement to prevent intermediate state issues
+      atomicTextReplace(this.editor, index, length, suggestion);
+
       // After replacement, clear formatting for that range
       this.editor.formatText(index, suggestion.length, "grammar-typo", false);
       this.editor.formatText(index, suggestion.length, "grammar-other", false);

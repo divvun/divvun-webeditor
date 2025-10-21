@@ -33,6 +33,7 @@ import {
   registerQuillBlots,
   QuillBridge,
 } from "./quill-bridge-instance.ts";
+import { atomicTextReplace } from "./editor-utils.ts";
 
 // ConfigManager now handles available languages
 
@@ -857,10 +858,8 @@ export class GrammarChecker {
         false
       );
 
-      // Use Quill's more reliable approach: delete then insert in immediate sequence
-      // This helps prevent spacing issues
-      this.editor.deleteText(start, originalLength);
-      this.editor.insertText(start, suggestion);
+      // Use atomic text replacement to prevent intermediate state issues
+      atomicTextReplace(this.editor, start, originalLength, suggestion);
 
       // Set cursor position after the replaced text
       const newCursorPosition = start + newLength;
