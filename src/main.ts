@@ -438,19 +438,10 @@ export class GrammarChecker {
     try {
       console.debug(`📄 Handling newline at line ${lineNumber}`);
 
-      // Invalidate cache for the line that was split and the new line
-      this.textAnalyzer.invalidateLineCache(lineNumber, lineNumber + 1);
-
       // Use atomic check + highlight for both lines
       await Promise.all([
-        this.textAnalyzer.checkAndHighlightLine(
-          lineNumber,
-          this.errorHighlighter
-        ),
-        this.textAnalyzer.checkAndHighlightLine(
-          lineNumber + 1,
-          this.errorHighlighter
-        ),
+        this.performSingleLineCheck(lineNumber),
+        this.performSingleLineCheck(lineNumber + 1),
       ]);
 
       console.debug(
