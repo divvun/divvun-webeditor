@@ -22,6 +22,7 @@ export interface EventCallbacks {
   onTextChange: (source: string, currentText: string) => void;
   onLanguageChange: (language: SupportedLanguage) => void;
   onClearEditor: () => void;
+  onRetryCheck: () => void;
   onErrorClick: (
     errorNode: HTMLElement,
     matching: CheckerError,
@@ -44,6 +45,7 @@ export interface EventCallbacks {
 export class EventManager {
   private editor: EditorEventInterface;
   private clearButton: HTMLButtonElement;
+  private retryButton: HTMLButtonElement;
   private callbacks: EventCallbacks;
   private errors: CheckerError[] = [];
 
@@ -56,10 +58,12 @@ export class EventManager {
   constructor(
     editor: EditorEventInterface,
     clearButton: HTMLButtonElement,
+    retryButton: HTMLButtonElement,
     callbacks: EventCallbacks,
   ) {
     this.editor = editor;
     this.clearButton = clearButton;
+    this.retryButton = retryButton;
     this.callbacks = callbacks;
     this.setupEventListeners();
   }
@@ -155,6 +159,11 @@ export class EventManager {
     // Clear button
     this.clearButton.addEventListener("click", () => {
       this.callbacks.onClearEditor();
+    });
+
+    // Retry button
+    this.retryButton.addEventListener("click", () => {
+      this.callbacks.onRetryCheck();
     });
 
     // Click outside to close tooltips

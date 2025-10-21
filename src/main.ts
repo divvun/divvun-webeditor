@@ -263,6 +263,19 @@ export class GrammarChecker {
           // Update EventManager with current errors for click handling
           this.eventManager.updateErrors(this.state.errors);
           this.updateErrorCount(this.state.errors.length);
+          // Notify state machine that check completed successfully
+          this.stateMachine.onCheckComplete();
+        })
+        .catch((error) => {
+          console.error(`Line ${lineNumber} check failed:`, error);
+          // Notify state machine that check failed
+          this.stateMachine.onCheckFailed();
+          // Show error to user with retry button
+          this.updateStatus(
+            "Grammar check failed",
+            false,
+            true, // Show retry button
+          );
         })
         .finally(() => {
           this.pendingLineChecks.delete(lineNumber);
@@ -623,7 +636,11 @@ export class GrammarChecker {
     await this.textAnalyzer.checkGrammar();
   }
 
-  public updateStatus(status: string, isChecking: boolean): void {
+  public updateStatus(
+    status: string,
+    isChecking: boolean,
+    showRetry = false,
+  ): void {
     const domElements = this.configManager.getDOMElements();
     domElements.statusText.textContent = status;
     domElements.statusDisplay.className = isChecking
@@ -638,6 +655,13 @@ export class GrammarChecker {
       domElements.statusDisplay.appendChild(spinner);
     } else if (!isChecking && existingSpinner) {
       existingSpinner.remove();
+    }
+
+    // Show/hide retry button
+    if (showRetry) {
+      domElements.retryButton.classList.remove("hidden");
+    } else {
+      domElements.retryButton.classList.add("hidden");
     }
   }
 
@@ -861,9 +885,21 @@ export class GrammarChecker {
         console.log(
           `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`,
         );
+      } else {
+        // Empty line - still remove any existing errors from this line
+        const lineEnd = lineStartPosition + lineWithNewline.length;
+        this.state.errors = this.state.errors.filter((error) => {
+          return !(
+            error.start_index >= lineStartPosition &&
+            error.start_index < lineEnd
+          );
+        });
+        this.errorHighlighter.highlightErrors(this.state.errors);
       }
     } catch (error) {
       console.error(`Error rechecking line ${lineNumber}:`, error);
+      // Re-throw so the caller can handle it
+      throw error;
     }
   }
 
@@ -1092,6 +1128,10 @@ document.addEventListener("DOMContentLoaded", () => {
       onClearEditor: () => {
         grammarCheckerRef?.clearEditor();
       },
+      onRetryCheck: () => {
+        // Retry the last failed grammar check
+        grammarCheckerRef?.performGrammarCheck();
+      },
       onErrorClick: (
         errorNode: HTMLElement,
         matching: CheckerError,
@@ -1134,6 +1174,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const eventManager = new EventManager(
       editor,
       domElements.clearButton,
+      domElements.retryButton,
       eventCallbacks,
     );
 

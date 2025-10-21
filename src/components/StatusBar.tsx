@@ -11,6 +11,14 @@ export default function StatusBar() {
           >
             <span id="status-text">Ready</span>
           </div>
+          <button
+            type="button"
+            id="retry-button"
+            className="hidden ml-2 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded transition-colors"
+            title="Retry grammar check"
+          >
+            Retry
+          </button>
         </div>
         <div
           id="error-count"

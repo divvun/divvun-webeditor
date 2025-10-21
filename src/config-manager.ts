@@ -42,6 +42,7 @@ export class ConfigManager {
   private statusText!: HTMLElement;
   private statusDisplay!: HTMLElement;
   private errorCount!: HTMLElement;
+  private retryButton!: HTMLButtonElement;
 
   constructor(callbacks: ConfigurationCallbacks) {
     this.callbacks = callbacks;
@@ -76,6 +77,9 @@ export class ConfigManager {
       "status-display",
     ) as HTMLElement;
     this.errorCount = document.getElementById("error-count") as HTMLElement;
+    this.retryButton = document.getElementById(
+      "retry-button",
+    ) as HTMLButtonElement;
   }
 
   /**
@@ -116,6 +120,7 @@ export class ConfigManager {
       statusText: this.statusText,
       statusDisplay: this.statusDisplay,
       errorCount: this.errorCount,
+      retryButton: this.retryButton,
     };
   }
 
