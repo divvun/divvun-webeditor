@@ -459,3 +459,112 @@ Deno.test("CheckerStateMachine - multiple state transitions", async () => {
     stateMachine.cleanup();
   }
 });
+
+// ============================================================================
+// Error Handling and Failed State Tests
+// ============================================================================
+
+Deno.test("CheckerStateMachine - onCheckFailed transitions to failed state", async () => {
+  const stateLog: CheckerState[] = [];
+  const callbacks: StateTransitionCallbacks = {
+    onStateEntry: (state) => {
+      stateLog.push(state);
+    },
+    onStateExit: () => {},
+    onCheckRequested: () => {},
+    onEditDetected: () => {},
+  };
+
+  const stateMachine = new CheckerStateMachine(10, callbacks);
+
+  try {
+    // Start an edit and let it transition to checking
+    stateMachine.handleEdit("", "Test");
+    assertEquals(stateMachine.getCurrentState(), "editing");
+
+    // Wait for debounce to trigger check
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assertEquals(stateMachine.getCurrentState(), "checking");
+
+    // Now call onCheckFailed
+    stateMachine.onCheckFailed();
+
+    // Should transition to failed state
+    assertEquals(stateMachine.getCurrentState(), "failed");
+    assertEquals(stateLog[stateLog.length - 1], "failed");
+  } finally {
+    stateMachine.cleanup();
+  }
+});
+
+Deno.test("CheckerStateMachine - retryCheck transitions from failed to checking", async () => {
+  const stateLog: CheckerState[] = [];
+  const callbacks: StateTransitionCallbacks = {
+    onStateEntry: (state) => {
+      stateLog.push(state);
+    },
+    onStateExit: () => {},
+    onCheckRequested: () => {},
+    onEditDetected: () => {},
+  };
+
+  const stateMachine = new CheckerStateMachine(10, callbacks);
+
+  try {
+    // Transition to checking then failed
+    stateMachine.handleEdit("", "Test");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    assertEquals(stateMachine.getCurrentState(), "checking");
+
+    stateMachine.onCheckFailed();
+    assertEquals(stateMachine.getCurrentState(), "failed");
+
+    // Now retry
+    stateMachine.retryCheck();
+    assertEquals(stateMachine.getCurrentState(), "checking");
+    assertEquals(stateLog[stateLog.length - 1], "checking");
+  } finally {
+    stateMachine.cleanup();
+  }
+});
+
+Deno.test("CheckerStateMachine - editing after failure transitions to editing", async () => {
+  const stateLog: CheckerState[] = [];
+  const callbacks: StateTransitionCallbacks = {
+    onStateEntry: (state) => {
+      stateLog.push(state);
+    },
+    onStateExit: () => {},
+    onCheckRequested: () => {},
+    onEditDetected: () => {},
+  };
+
+  const stateMachine = new CheckerStateMachine(10, callbacks);
+
+  try {
+    // Transition to checking then failed
+    stateMachine.handleEdit("", "Test");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    assertEquals(stateMachine.getCurrentState(), "checking");
+
+    stateMachine.onCheckFailed();
+    assertEquals(stateMachine.getCurrentState(), "failed");
+
+    // Clear state log to see only the next transition
+    const beforeEditStateCount = stateLog.length;
+
+    // User starts editing again after failure
+    stateMachine.handleEdit("Test", "Test2");
+
+    // Should transition to editing
+    assertEquals(stateMachine.getCurrentState(), "editing");
+    assertEquals(stateLog[stateLog.length - 1], "editing");
+
+    // Verify we had exactly one more state entry (editing)
+    assertEquals(stateLog.length, beforeEditStateCount + 1);
+  } finally {
+    stateMachine.cleanup();
+  }
+});

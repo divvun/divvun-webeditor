@@ -1130,7 +1130,10 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       onRetryCheck: () => {
         // Retry the last failed grammar check
-        grammarCheckerRef?.performGrammarCheck();
+        if (grammarCheckerRef) {
+          grammarCheckerRef.stateMachine.retryCheck();
+          grammarCheckerRef.performGrammarCheck();
+        }
       },
       onErrorClick: (
         errorNode: HTMLElement,

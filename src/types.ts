@@ -76,7 +76,8 @@ export type CheckerState =
   | "idle" // Ready for user input
   | "editing" // User is making changes (debouncing)
   | "checking" // Performing grammar check
-  | "highlighting"; // Updating visual highlights
+  | "highlighting" // Updating visual highlights
+  | "failed"; // Grammar check failed, awaiting retry
 
 export interface CheckingContext {
   abortController: AbortController;

@@ -78,8 +78,12 @@ export class CheckerStateMachine {
     // Immediately notify callback about the edit
     this.callbacks.onEditDetected(editInfo.type, editInfo);
 
-    // Only start debouncing if we're not already in editing state
-    if (this.currentState !== "editing") {
+    // Transition out of failed state if we were in it
+    if (this.currentState === "failed") {
+      this.transitionTo("editing", "edit-after-failure");
+      this.startEditDebounce();
+    } else if (this.currentState !== "editing") {
+      // Only start debouncing if we're not already in editing state
       // Transition to editing state
       this.transitionTo("editing", "edit-detected");
       // Start debounced checking
@@ -236,7 +240,16 @@ export class CheckerStateMachine {
    */
   onCheckFailed(): void {
     if (this.currentState === "checking") {
-      this.transitionTo("idle", "check-failed");
+      this.transitionTo("failed", "check-failed");
+    }
+  }
+
+  /**
+   * Retry a failed check - transitions from failed to checking
+   */
+  retryCheck(): void {
+    if (this.currentState === "failed") {
+      this.transitionTo("checking", "retry-after-failure");
     }
   }
 
