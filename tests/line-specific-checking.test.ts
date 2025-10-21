@@ -178,7 +178,7 @@ Deno.test("Line-specific checking - Empty and invalid lines", async () => {
   assertEquals(invalidLineErrors.length, 0);
 });
 
-Deno.test("Line-specific checking - Caching behavior", async () => {
+Deno.test("Line-specific checking - API calls without caching", async () => {
   const mockEditor = new MockEditor();
   const mockAPI = new MockAPI();
   const { callbacks } = createMockCallbacks();
@@ -195,14 +195,9 @@ Deno.test("Line-specific checking - Caching behavior", async () => {
 
   mockAPI.clearCallLog();
 
-  // Second check within cache window - should not call API
+  // Second check - should also call API (no caching)
   await analyzer.checkSpecificLine(0);
-  assertEquals(mockAPI.callLog.length, 0);
-
-  // Check cache statistics
-  const stats = analyzer.getCacheStats();
-  assertEquals(stats.size, 1);
-  assertEquals(stats.entries[0].lineNumber, 0);
+  assertEquals(mockAPI.callLog.length, 1);
 });
 
 Deno.test(
@@ -210,7 +205,7 @@ Deno.test(
   async () => {
     const mockEditor = new MockEditor();
     const mockAPI = new MockAPI();
-    const { callbacks, calls } = createMockCallbacks();
+    const { callbacks } = createMockCallbacks();
 
     const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
 
@@ -231,13 +226,13 @@ Deno.test(
     mockAPI.clearCallLog();
     mockAPI.setMockResponse("Line 1 is modified", []); // No errors in modified line
 
-    // Check line 1 - should not affect line 0 cache
+    // Check line 1
     await analyzer.checkSpecificLine(1);
 
-    // Line 0 should still have cached error
+    // Check line 0 again - without caching, will call API again
     const line0ErrorsAfterEdit = await analyzer.checkSpecificLine(0);
     assertEquals(line0ErrorsAfterEdit.length, 1);
-    assertEquals(mockAPI.callLog.length, 1); // Only called for line 1
+    assertEquals(mockAPI.callLog.length, 2); // Called for both line 1 and line 0
   }
 );
 

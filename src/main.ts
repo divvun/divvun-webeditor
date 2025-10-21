@@ -396,12 +396,6 @@ export class GrammarChecker {
     try {
       console.log(`🔍 Checking specific line: ${lineNumber}`);
 
-      // Clear existing highlights before applying new ones to prevent accumulation
-      // console.log(`🧹 Clearing existing highlights before line check`);
-      // Invalidate cache for this line since it was edited
-      console.log(`🗑️ Invalidating cache for line ${lineNumber}`);
-      this.textAnalyzer.invalidateLineCache(lineNumber);
-
       console.log(`🔬 About to call checkAndHighlightLine`);
       // Use atomic check + highlight - this prevents race conditions
       const errors = await this.textAnalyzer.checkAndHighlightLine(
@@ -465,12 +459,6 @@ export class GrammarChecker {
   private async handleLineDeletion(lineNumber: number): Promise<void> {
     try {
       console.debug(`🗑️ Handling line deletion at ${lineNumber}`);
-
-      // Invalidate a broader range around the deletion
-      this.textAnalyzer.invalidateLineCache(
-        Math.max(0, lineNumber - 1),
-        lineNumber + 1
-      );
 
       // Use atomic check + highlight for lines around the deletion point
       const currentText = this.editor.getText();

@@ -84,14 +84,6 @@ export interface CheckingContext {
   affectedLines?: number[];
 }
 
-export interface LineCacheEntry {
-  content: string;
-  errors: CheckerError[];
-  timestamp: Date;
-  isHighlighted: boolean; // Track if this line's errors are currently highlighted
-  lineStartIndex: number; // Cache the line's position in the document
-}
-
 // API Server Response Types
 export interface ApiLanguageResponse {
   available: {

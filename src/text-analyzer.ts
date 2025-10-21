@@ -1,16 +1,11 @@
 /**
- * TextAnalyzer - Handles core text checking logic, line caching, and performance optimization
+ * TextAnalyzer - Handles core text checking logic and performance optimization
  *
- * This class encapsulates all the logic for analyzing text content, managing
- * line-based caching for performance, and coordinating with the checking API.
+ * This class encapsulates all the logic for analyzing text content
+ * and coordinating with the checking API.
  */
 
-import type {
-  CheckerApi,
-  CheckerError,
-  LineCacheEntry,
-  SupportedLanguage,
-} from "./types.ts";
+import type { CheckerApi, CheckerError, SupportedLanguage } from "./types.ts";
 
 // Minimal editor interface for text analysis
 interface EditorTextInterface {
@@ -34,7 +29,6 @@ export class TextAnalyzer {
   private api: CheckerApi;
   private editor: EditorTextInterface;
   private callbacks: TextAnalysisCallbacks;
-  private lineCache: Map<number, LineCacheEntry> = new Map();
   private lastCheckedContent: string = "";
   private currentLanguage: SupportedLanguage;
   private checkingContext: CheckingContext | null = null;
@@ -56,8 +50,8 @@ export class TextAnalyzer {
    */
   updateApi(newApi: CheckerApi): void {
     this.api = newApi;
-    // Clear cache when API changes as different APIs may give different results
-    this.clearCache();
+    // Clear last checked content when API changes
+    this.lastCheckedContent = "";
   }
 
   /**
@@ -66,8 +60,8 @@ export class TextAnalyzer {
   updateLanguage(language: SupportedLanguage): void {
     if (language !== this.currentLanguage) {
       this.currentLanguage = language;
-      // Clear cache when language changes
-      this.clearCache();
+      // Clear last checked content when language changes
+      this.lastCheckedContent = "";
     }
   }
 
@@ -88,11 +82,11 @@ export class TextAnalyzer {
     }
 
     try {
-      // Use line-by-line checking with caching
+      // Check line-by-line
       const lines = currentText.split("\n");
       const allErrors: CheckerError[] = [];
 
-      // Check each line that might have changed
+      // Check each line
       for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
         // Check if we should abort (user might have interrupted)
         if (this.checkingContext?.abortController.signal.aborted) {
@@ -144,7 +138,7 @@ export class TextAnalyzer {
   }
 
   /**
-   * Check a single line with caching
+   * Check a single line
    */
   private async checkSingleLine(lineNumber: number): Promise<CheckerError[]> {
     const text = this.editor.getText();
@@ -161,17 +155,7 @@ export class TextAnalyzer {
       return [];
     }
 
-    // Check cache first
-    const cached = this.lineCache.get(lineNumber);
-    if (cached && cached.content === lineContent) {
-      const age = Date.now() - cached.timestamp.getTime();
-      if (age < 30000) {
-        // Cache valid for 30 seconds
-        return cached.errors;
-      }
-    }
-
-    // Cache miss or expired - check with API
+    // Check with API
     try {
       const response = await this.api.checkText(
         lineContent,
@@ -186,15 +170,6 @@ export class TextAnalyzer {
         start_index: error.start_index + lineStartIndex,
         end_index: error.end_index + lineStartIndex,
       }));
-
-      // Cache the results
-      this.lineCache.set(lineNumber, {
-        content: lineContent,
-        errors: adjustedErrors,
-        timestamp: new Date(),
-        isHighlighted: false,
-        lineStartIndex: lineStartIndex,
-      });
 
       return adjustedErrors;
     } catch (error) {
@@ -229,19 +204,9 @@ export class TextAnalyzer {
   }
 
   /**
-   * Invalidate cache for specific line range
-   */
-  invalidateLineCache(fromLine: number, toLine: number = fromLine): void {
-    for (let i = fromLine; i <= toLine; i++) {
-      this.lineCache.delete(i);
-    }
-  }
-
-  /**
-   * Clear all cached data
+   * Clear all cached data (no longer used, kept for compatibility)
    */
   clearCache(): void {
-    this.lineCache.clear();
     this.lastCheckedContent = "";
   }
 
@@ -282,91 +247,6 @@ export class TextAnalyzer {
   }
 
   /**
-   * Get cache statistics for debugging
-   */
-  getCacheStats(): {
-    size: number;
-    entries: Array<{ lineNumber: number; age: number }>;
-  } {
-    const entries: Array<{ lineNumber: number; age: number }> = [];
-    const now = Date.now();
-
-    for (const [lineNumber, entry] of this.lineCache) {
-      entries.push({
-        lineNumber,
-        age: now - entry.timestamp.getTime(),
-      });
-    }
-
-    return {
-      size: this.lineCache.size,
-      entries,
-    };
-  }
-
-  /**
-   * Apply highlighting for a specific line using cached data
-   */
-  highlightLine(
-    lineNumber: number,
-    highlighter: {
-      highlightSpecificLine: (
-        lineNumber: number,
-        errors: CheckerError[],
-        lineStartIndex: number
-      ) => void;
-    }
-  ): boolean {
-    const cached = this.lineCache.get(lineNumber);
-    if (!cached || cached.isHighlighted) {
-      return false; // Nothing to highlight or already highlighted
-    }
-
-    if (cached.errors.length > 0) {
-      highlighter.highlightSpecificLine(
-        lineNumber,
-        cached.errors,
-        cached.lineStartIndex
-      );
-    }
-
-    // Mark as highlighted
-    cached.isHighlighted = true;
-    return true;
-  }
-
-  /**
-   * Remove highlighting for a specific line and mark cache accordingly
-   */
-  unhighlightLine(
-    lineNumber: number,
-    highlighter: {
-      clearSpecificLine: (
-        lineNumber: number,
-        lineStartIndex: number,
-        lineLength: number
-      ) => void;
-    }
-  ): boolean {
-    const cached = this.lineCache.get(lineNumber);
-    if (!cached || !cached.isHighlighted) {
-      return false; // Nothing to unhighlight
-    }
-
-    // Calculate line length from cached content
-    const lineLength = cached.content.length;
-    highlighter.clearSpecificLine(
-      lineNumber,
-      cached.lineStartIndex,
-      lineLength
-    );
-
-    // Mark as not highlighted
-    cached.isHighlighted = false;
-    return true;
-  }
-
-  /**
    * Check and highlight a specific line atomically
    * This is the main entry point for line-by-line checking + highlighting
    */
@@ -383,25 +263,27 @@ export class TextAnalyzer {
     console.log(`🧪 checkAndHighlightLine ENTERED for line ${lineNumber}`);
 
     try {
-      // First, check the line (this updates the cache)
+      // First, check the line
       console.log(`🔍 About to call checkSpecificLine for line ${lineNumber}`);
       const errors = await this.checkSpecificLine(lineNumber);
       console.log(
         `✅ checkSpecificLine completed for line ${lineNumber}, found ${errors.length} errors`
       );
 
-      // Then apply highlighting using the cached data
-      console.log(`🎨 About to call highlightLine for line ${lineNumber}`);
-      const cached = this.lineCache.get(lineNumber);
-      if (cached) {
+      // Then apply highlighting
+      console.log(`🎨 About to apply highlighting for line ${lineNumber}`);
+      const text = this.editor.getText();
+      const lines = text.split("\n");
+      if (lineNumber >= 0 && lineNumber < lines.length) {
+        const lineContent = lines[lineNumber];
         // Clear old highlights for this line
-        highlighter.clearSpecificLine(lineNumber, cached.content.length);
+        highlighter.clearSpecificLine(lineNumber, lineContent.length);
         // Apply new highlights if there are errors
         if (errors.length > 0) {
           highlighter.highlightSpecificLine(lineNumber, errors);
         }
       }
-      console.log(`✅ highlightLine completed for line ${lineNumber}`);
+      console.log(`✅ Highlighting completed for line ${lineNumber}`);
 
       console.log(`🏁 checkAndHighlightLine COMPLETED for line ${lineNumber}`);
       return errors;
