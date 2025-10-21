@@ -4,8 +4,9 @@
 
 import { assertEquals } from "jsr:@std/assert@1";
 import type { QuillBridgeInstance } from "../src/quill-bridge-instance.ts";
+import type { ConfigManager } from "../src/config-manager.ts";
 
-Deno.test("GrammarChecker constructor requires editor parameter", () => {
+Deno.test("GrammarChecker constructor requires editor and configManager parameters", () => {
   // Create a minimal mock Quill editor
   const mockEditor: QuillBridgeInstance = {
     root: {
@@ -44,24 +45,47 @@ Deno.test("GrammarChecker constructor requires editor parameter", () => {
     },
   } as unknown as QuillBridgeInstance;
 
-  // Test that we can pass an editor to the constructor
-  // This verifies the constructor accepts the editor parameter
+  // Create a minimal mock ConfigManager
+  const mockConfigManager = {
+    getCurrentApi: () => ({
+      checkText: () => Promise.resolve({ text: "", errs: [] }),
+      getSupportedLanguages: () => [],
+    }),
+    getCurrentLanguage: () => "se",
+    getAutoCheckDelay: () => 600,
+    getDOMElements: () => ({
+      languageSelect: {} as HTMLSelectElement,
+      clearButton: {} as HTMLButtonElement,
+      statusText: {} as HTMLElement,
+      statusDisplay: {} as HTMLElement,
+      errorCount: {} as HTMLElement,
+    }),
+  } as unknown as ConfigManager;
+
+  // Test that we can pass both parameters to the constructor
+  // This verifies the constructor accepts the parameters
   // We can't fully instantiate GrammarChecker in a test without DOM,
   // but we can at least verify the type signature is correct
 
-  const constructorAcceptsEditor = (editor: QuillBridgeInstance) => {
+  const constructorAcceptsParams = (
+    editor: QuillBridgeInstance,
+    configManager: ConfigManager
+  ) => {
     // This is a type check - if it compiles, the signature is correct
-    return typeof editor !== "undefined";
+    return typeof editor !== "undefined" && typeof configManager !== "undefined";
   };
 
-  assertEquals(constructorAcceptsEditor(mockEditor), true);
+  assertEquals(constructorAcceptsParams(mockEditor, mockConfigManager), true);
 });
 
-Deno.test("GrammarChecker type signature requires editor", () => {
+Deno.test("GrammarChecker type signature requires editor and configManager", () => {
   // This test verifies the type signature at compile time
-  // If this file compiles, the constructor requires an editor parameter
+  // If this file compiles, the constructor requires both parameters
 
-  type ConstructorType = new (editor: QuillBridgeInstance) => unknown;
+  type ConstructorType = new (
+    editor: QuillBridgeInstance,
+    configManager: ConfigManager
+  ) => unknown;
 
   // This is a compile-time assertion
   // If GrammarChecker doesn't match this signature, TypeScript will error

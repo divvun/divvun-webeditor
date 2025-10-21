@@ -80,8 +80,9 @@ export class GrammarChecker {
    * Create a new GrammarChecker instance.
    *
    * @param editor - Quill editor instance to use for the grammar checker.
+   * @param configManager - Configuration manager instance.
    */
-  constructor(editor: QuillBridgeInstance) {
+  constructor(editor: QuillBridgeInstance, configManager: ConfigManager) {
     this.state = {
       lastCheckedContent: "",
       errors: [],
@@ -89,22 +90,8 @@ export class GrammarChecker {
       errorSpans: [],
     };
 
-    // Initialize configuration manager with callbacks
-    const configCallbacks: ConfigurationCallbacks = {
-      onLanguageChanged: (language: SupportedLanguage, api: CheckerApi) => {
-        this.handleLanguageChange(language, api);
-      },
-      onConfigurationInitialized: () => {
-        console.log("🔧 Configuration initialized successfully");
-      },
-      onLanguageInitializationError: (error: unknown) => {
-        console.warn("⚠️ Language initialization failed:", error);
-      },
-    };
-
-    this.configManager = new ConfigManager(configCallbacks);
-
-    // Use the provided editor
+    // Use the provided dependencies
+    this.configManager = configManager;
     this.editor = editor;
 
     // Initialize previous text tracking for edit detection
@@ -999,7 +986,7 @@ export class GrammarChecker {
     this.configManager.setLanguage(language);
   }
 
-  private handleLanguageChange(
+  handleLanguageChange(
     language: SupportedLanguage,
     api: CheckerApi
   ): void {
@@ -1113,8 +1100,27 @@ document.addEventListener("DOMContentLoaded", () => {
       },
     });
 
-    // Create the grammar checker with the editor
-    const grammarChecker = new GrammarChecker(editor);
+    // Create the configuration manager with callbacks
+    // Note: Callbacks reference grammarChecker methods, which we'll set up after instantiation
+    let grammarCheckerInstance: GrammarChecker | null = null;
+
+    const configCallbacks: ConfigurationCallbacks = {
+      onLanguageChanged: (language: SupportedLanguage, api: CheckerApi) => {
+        grammarCheckerInstance?.handleLanguageChange(language, api);
+      },
+      onConfigurationInitialized: () => {
+        console.log("🔧 Configuration initialized successfully");
+      },
+      onLanguageInitializationError: (error: unknown) => {
+        console.warn("⚠️ Language initialization failed:", error);
+      },
+    };
+
+    const configManager = new ConfigManager(configCallbacks);
+
+    // Create the grammar checker with the editor and config manager
+    const grammarChecker = new GrammarChecker(editor, configManager);
+    grammarCheckerInstance = grammarChecker;
 
     // Initialize languages asynchronously
     grammarChecker
