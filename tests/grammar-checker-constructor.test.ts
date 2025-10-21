@@ -5,7 +5,7 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import type { QuillBridgeInstance } from "../src/quill-bridge-instance.ts";
 
-Deno.test("GrammarChecker constructor accepts optional editor parameter", () => {
+Deno.test("GrammarChecker constructor requires editor parameter", () => {
   // Create a minimal mock Quill editor
   const mockEditor: QuillBridgeInstance = {
     root: {
@@ -28,7 +28,14 @@ Deno.test("GrammarChecker constructor accepts optional editor parameter", () => 
     deleteText: () => {},
     getFormat: () => ({}),
     setContents: () => {},
-    getBounds: () => ({ top: 0, left: 0, height: 0, width: 0, bottom: 0, right: 0 }),
+    getBounds: () => ({
+      top: 0,
+      left: 0,
+      height: 0,
+      width: 0,
+      bottom: 0,
+      right: 0,
+    }),
     getLine: () => [null, 0],
     getLines: () => [],
     getLeaf: () => [null, 0],
@@ -38,28 +45,27 @@ Deno.test("GrammarChecker constructor accepts optional editor parameter", () => 
   } as unknown as QuillBridgeInstance;
 
   // Test that we can pass an editor to the constructor
-  // This verifies the constructor accepts the optional parameter
+  // This verifies the constructor accepts the editor parameter
   // We can't fully instantiate GrammarChecker in a test without DOM,
   // but we can at least verify the type signature is correct
-  
-  const constructorAcceptsEditor = (editor?: QuillBridgeInstance) => {
+
+  const constructorAcceptsEditor = (editor: QuillBridgeInstance) => {
     // This is a type check - if it compiles, the signature is correct
     return typeof editor !== "undefined";
   };
 
   assertEquals(constructorAcceptsEditor(mockEditor), true);
-  assertEquals(constructorAcceptsEditor(undefined), false);
 });
 
-Deno.test("GrammarChecker type signature allows optional editor", () => {
+Deno.test("GrammarChecker type signature requires editor", () => {
   // This test verifies the type signature at compile time
-  // If this file compiles, the constructor accepts optional editor parameter
-  
-  type ConstructorType = new (editor?: QuillBridgeInstance) => unknown;
-  
+  // If this file compiles, the constructor requires an editor parameter
+
+  type ConstructorType = new (editor: QuillBridgeInstance) => unknown;
+
   // This is a compile-time assertion
   // If GrammarChecker doesn't match this signature, TypeScript will error
   const _typeCheck: ConstructorType = null as unknown as ConstructorType;
-  
+
   assertEquals(typeof _typeCheck, "object");
 });

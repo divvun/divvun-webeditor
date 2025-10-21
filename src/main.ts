@@ -78,11 +78,10 @@ export class GrammarChecker {
 
   /**
    * Create a new GrammarChecker instance.
-   * 
-   * @param editor - Optional pre-created Quill editor instance. If not provided,
-   *                 will create one from the DOM element with id "editor".
+   *
+   * @param editor - Quill editor instance to use for the grammar checker.
    */
-  constructor(editor?: QuillBridgeInstance) {
+  constructor(editor: QuillBridgeInstance) {
     this.state = {
       lastCheckedContent: "",
       errors: [],
@@ -105,25 +104,8 @@ export class GrammarChecker {
 
     this.configManager = new ConfigManager(configCallbacks);
 
-    // Register custom Quill blots for error highlighting
-    registerQuillBlots();
-
-    // Initialize Quill editor - use provided editor or create from DOM
-    if (editor) {
-      this.editor = editor;
-    } else {
-      const editorContainer = document.getElementById("editor") as HTMLElement;
-      this.editor = QuillBridge.create(editorContainer, {
-        theme: "snow",
-        modules: {
-          toolbar: [
-            [{ header: [1, 2, false] }],
-            ["bold", "italic", "underline"],
-            ["link", "clean"],
-          ],
-        },
-      });
-    }
+    // Use the provided editor
+    this.editor = editor;
 
     // Initialize previous text tracking for edit detection
     this.previousText = this.editor.getText();
@@ -1115,7 +1097,24 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   try {
-    const grammarChecker = new GrammarChecker();
+    // Register custom Quill blots for error highlighting
+    registerQuillBlots();
+
+    // Create the Quill editor
+    const editorContainer = document.getElementById("editor") as HTMLElement;
+    const editor = QuillBridge.create(editorContainer, {
+      theme: "snow",
+      modules: {
+        toolbar: [
+          [{ header: [1, 2, false] }],
+          ["bold", "italic", "underline"],
+          ["link", "clean"],
+        ],
+      },
+    });
+
+    // Create the grammar checker with the editor
+    const grammarChecker = new GrammarChecker(editor);
 
     // Initialize languages asynchronously
     grammarChecker
