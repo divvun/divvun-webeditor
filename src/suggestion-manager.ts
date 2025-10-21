@@ -19,12 +19,14 @@ interface EditorInterface {
   ): void;
   setSelection(index: number, length: number): void;
   focus(): void;
+  getText(): string;
 }
 
 export interface SuggestionCallbacks {
   onSuggestionApplied: (error: CheckerError, suggestion: string) => void;
   onClearErrors: () => void;
   onCheckGrammar: () => void;
+  onRecheckLine: (lineNumber: number) => void;
 }
 
 export class SuggestionManager {
@@ -220,9 +222,13 @@ export class SuggestionManager {
       // After replacement, clear formatting for that range
       this.editor.formatText(index, suggestion.length, "grammar-typo", false);
       this.editor.formatText(index, suggestion.length, "grammar-other", false);
-      // Clear state errors and re-run check
-      this.callbacks.onClearErrors();
-      this.callbacks.onCheckGrammar();
+
+      // Calculate line number from index
+      const text = this.editor.getText();
+      const lineNumber = text.substring(0, index).split("\n").length - 1;
+
+      // Re-check only the affected line
+      this.callbacks.onRecheckLine(lineNumber);
     } catch (_err) {
       // ignore
     }

@@ -128,6 +128,9 @@ export class GrammarChecker {
       onCheckGrammar: () => {
         this.textAnalyzer.checkGrammar();
       },
+      onRecheckLine: (lineNumber: number) => {
+        this.performSingleLineCheck(lineNumber);
+      },
     };
     this.suggestionManager = new SuggestionManager(
       this.editor,
