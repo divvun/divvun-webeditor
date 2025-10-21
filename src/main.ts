@@ -191,8 +191,13 @@ export class GrammarChecker {
             `Newline created at line ${editInfo.lineNumber}, split at position ${editInfo.splitPosition}`,
           );
           // For newlines, we need to check both the split line and the new line
+          // Special case: if pasting into empty buffer, check all lines progressively
           if (editInfo.lineNumber !== undefined) {
-            this.handleNewlineEdit(editInfo.lineNumber).catch((err) => {
+            this.handleNewlineEdit(
+              editInfo.lineNumber,
+              editInfo.previousText,
+              editInfo.currentText,
+            ).catch((err) => {
               console.error(`❌ Error in newline edit handler:`, err);
             });
           }
@@ -291,26 +296,59 @@ export class GrammarChecker {
   /**
    * Handle newline creation by checking affected lines
    */
-  private async handleNewlineEdit(lineNumber: number): Promise<void> {
+  private async handleNewlineEdit(
+    lineNumber: number,
+    previousText?: string,
+    currentText?: string,
+  ): Promise<void> {
     try {
       console.debug(`📄 Handling newline at line ${lineNumber}`);
 
-      // recheckModifiedLine now uses 0-based line numbers (same as state machine)
-      // Check both lines affected by the split
-      await Promise.all([
-        this.recheckModifiedLine(lineNumber), // The line where split occurred
-        this.recheckModifiedLine(lineNumber + 1), // The new line created
-      ]);
+      // Special case: if pasting into empty/near-empty buffer, check all lines progressively
+      // This provides a nice progressive highlighting experience
+      // Consider buffer empty if previousText is empty, just whitespace, or a single newline
+      const isEmptyBuffer = !previousText || previousText.trim() === "" ||
+        previousText === "\n";
 
-      // Update EventManager with current errors for click handling
-      this.eventManager.updateErrors(this.state.errors);
-      this.updateErrorCount(this.state.errors.length);
+      if (isEmptyBuffer && currentText) {
+        const lines = currentText.split("\n");
+        console.debug(
+          `🎨 Paste into empty buffer detected (previousText: ${
+            JSON.stringify(previousText)
+          }) - checking all ${lines.length} lines progressively`,
+        );
 
-      console.debug(
-        `✅ Newline handling complete for lines ${lineNumber}-${
-          lineNumber + 1
-        }`,
-      );
+        // Check each line sequentially for progressive highlighting
+        for (let i = 0; i < lines.length; i++) {
+          await this.recheckModifiedLine(i);
+        }
+
+        // Update EventManager with current errors for click handling
+        this.eventManager.updateErrors(this.state.errors);
+        this.updateErrorCount(this.state.errors.length);
+
+        console.debug(
+          `✅ Progressive check complete for ${lines.length} lines`,
+        );
+      } else {
+        // Normal newline handling - just check the two affected lines
+        // recheckModifiedLine now uses 0-based line numbers (same as state machine)
+        // Check both lines affected by the split
+        await Promise.all([
+          this.recheckModifiedLine(lineNumber), // The line where split occurred
+          this.recheckModifiedLine(lineNumber + 1), // The new line created
+        ]);
+
+        // Update EventManager with current errors for click handling
+        this.eventManager.updateErrors(this.state.errors);
+        this.updateErrorCount(this.state.errors.length);
+
+        console.debug(
+          `✅ Newline handling complete for lines ${lineNumber}-${
+            lineNumber + 1
+          }`,
+        );
+      }
 
       // Cancel any pending debounce since line-specific check completed successfully
       this.stateMachine.cancelPendingCheck();

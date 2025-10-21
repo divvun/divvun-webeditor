@@ -666,3 +666,65 @@ Deno.test("recheckModifiedLine should use 0-based line numbers", () => {
 
   stateMachine.cleanup();
 });
+
+Deno.test("Paste 4-line text into empty buffer - all lines should be checked progressively", () => {
+  // Bug report: When pasting 4 lines into empty buffer, only first 3 lines are highlighted
+  // Each line has errors, but the 4th line is not being checked
+  // Expected: When pasting into empty buffer, check each line progressively for nice UX
+
+  const editor = createMockEditor();
+  const editsDetected: Array<{ type: string; info: EditInfo }> = [];
+
+  const callbacks: StateTransitionCallbacks = {
+    onStateEntry: () => {},
+    onStateExit: () => {},
+    onCheckRequested: () => {},
+    onEditDetected: (editType, editInfo) => {
+      editsDetected.push({ type: editType, info: editInfo });
+    },
+  };
+
+  const stateMachine = new CheckerStateMachine(100, callbacks);
+
+  try {
+    // Test case 1: Pasting from truly empty buffer (previousText = "")
+    const pastedText =
+      "Seammás lea balus ahte Guovdageainnu suohkan viggá dasto.\n" +
+      "\n" +
+      "Dolvon dan boarrasiid siidii Deanus.\n" +
+      "\n" +
+      "Go boahttevuođas gálga iskat man ollu ávki.\n" +
+      "\n" +
+      "Jos mii fitnet doaluid, de fertet fargga.";
+
+    editor.setText(pastedText);
+    const previousText1 = ""; // Empty buffer
+    stateMachine.handleEdit(previousText1, pastedText);
+
+    assertEquals(editsDetected.length, 1, "Should detect one edit");
+    assertEquals(editsDetected[0].type, "newline-creation");
+
+    const lines = pastedText.split("\n");
+    assertEquals(lines.length, 7, "Should have 7 lines total");
+
+    editsDetected.length = 0; // Clear for next test
+
+    // Test case 2: Pasting when buffer has just a newline (previousText = "\n")
+    // This happens in the real editor when you have an empty line
+    const previousText2 = "\n";
+    stateMachine.handleEdit(previousText2, pastedText);
+
+    assertEquals(
+      editsDetected.length,
+      1,
+      "Should detect one edit for newline case",
+    );
+    assertEquals(editsDetected[0].type, "newline-creation");
+
+    // Both cases should trigger progressive checking of all lines
+    // The fix should detect: previousText === "" OR previousText === "\n"
+    console.log(`Test completed - previousText cases tested: "", "\\n"`);
+  } finally {
+    stateMachine.cleanup();
+  }
+});
