@@ -328,30 +328,27 @@ export class GrammarChecker {
     try {
       console.debug(`🗑️ Handling line deletion at ${lineNumber}`);
 
-      // Use atomic check + highlight for lines around the deletion point
+      // Convert 0-based lineNumber from state machine to 1-based for recheckModifiedLine
+      // Check lines around the deletion point
       const currentText = this.editor.getText();
       const lines = currentText.split("\n");
 
       const checkPromises = [];
+      // Check the line at the deletion point (if it exists)
       if (lineNumber < lines.length) {
-        checkPromises.push(
-          this.textAnalyzer.checkAndHighlightLine(
-            lineNumber,
-            this.errorHighlighter,
-          ),
-        );
+        checkPromises.push(this.recheckModifiedLine(lineNumber + 1));
       }
 
+      // Check the line before (if it exists)
       if (lineNumber > 0) {
-        checkPromises.push(
-          this.textAnalyzer.checkAndHighlightLine(
-            lineNumber - 1,
-            this.errorHighlighter,
-          ),
-        );
+        checkPromises.push(this.recheckModifiedLine(lineNumber)); // lineNumber is already the previous line in 1-based
       }
 
       await Promise.all(checkPromises);
+
+      // Update EventManager with current errors for click handling
+      this.eventManager.updateErrors(this.state.errors);
+      this.updateErrorCount(this.state.errors.length);
 
       console.debug(`✅ Line deletion handling complete`);
 
