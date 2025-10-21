@@ -393,8 +393,14 @@ export class TextAnalyzer {
       // Then apply highlighting using the cached data
       console.log(`🎨 About to call highlightLine for line ${lineNumber}`);
       const cached = this.lineCache.get(lineNumber);
-      highlighter.clearSpecificLine(lineNumber, cached!.content.length);
-      highlighter.highlightSpecificLine(lineNumber, errors);
+      if (cached) {
+        // Clear old highlights for this line
+        highlighter.clearSpecificLine(lineNumber, cached.content.length);
+        // Apply new highlights if there are errors
+        if (errors.length > 0) {
+          highlighter.highlightSpecificLine(lineNumber, errors);
+        }
+      }
       console.log(`✅ highlightLine completed for line ${lineNumber}`);
 
       console.log(`🏁 checkAndHighlightLine COMPLETED for line ${lineNumber}`);
