@@ -69,6 +69,10 @@ export class GrammarChecker {
   // Line checking coordination
   private pendingLineChecks: Map<number, Promise<void>> = new Map();
 
+  // Debounce timers for line checking (per-line debouncing)
+  private lineDebounceTimers: Map<number, number> = new Map();
+  private readonly LINE_CHECK_DEBOUNCE_MS = 500; // Wait 500ms after last keystroke
+
   // ConfigManager now handles API creation
 
   constructor() {
@@ -312,9 +316,7 @@ export class GrammarChecker {
               `🎯 Line-specific check for line ${editInfo.lineNumber}`
             );
             console.log(`🚀 About to call handleSingleLineEdit`);
-            this.handleSingleLineEdit(editInfo.lineNumber).catch((err) => {
-              console.error(`❌ Error in single line edit handler:`, err);
-            });
+            this.handleSingleLineEdit(editInfo.lineNumber);
             console.log(`✅ handleSingleLineEdit call completed`);
           } else {
             console.warn(
@@ -365,27 +367,44 @@ export class GrammarChecker {
     }
   }
   /**
-   * Handle single line edit with line-specific checking
+   * Handle single line edit with line-specific checking (debounced)
    */
-  private async handleSingleLineEdit(lineNumber: number): Promise<void> {
+  private handleSingleLineEdit(lineNumber: number): void {
     console.log(`🎯 handleSingleLineEdit ENTERED for line ${lineNumber}`);
-    // Check if there's already a pending check for this line
-    if (this.pendingLineChecks.has(lineNumber)) {
-      console.debug(
-        `⏸️ Line ${lineNumber} check already in progress, skipping`
-      );
-      return;
+
+    // Clear any existing debounce timer for this line
+    const existingTimer = this.lineDebounceTimers.get(lineNumber);
+    if (existingTimer !== undefined) {
+      console.log(`⏱️ Clearing existing debounce timer for line ${lineNumber}`);
+      clearTimeout(existingTimer);
     }
 
-    console.log(`🔄 Starting line check for line ${lineNumber}`);
-    const checkPromise = this.performSingleLineCheck(lineNumber);
-    this.pendingLineChecks.set(lineNumber, checkPromise);
+    // Set a new debounce timer
+    const timerId = setTimeout(() => {
+      console.log(`⏰ Debounce timer fired for line ${lineNumber}`);
+      this.lineDebounceTimers.delete(lineNumber);
 
-    try {
-      await checkPromise;
-    } finally {
-      this.pendingLineChecks.delete(lineNumber);
-    }
+      // Check if there's already a pending check for this line
+      if (this.pendingLineChecks.has(lineNumber)) {
+        console.debug(
+          `⏸️ Line ${lineNumber} check already in progress, skipping`
+        );
+        return;
+      }
+
+      console.log(`🔄 Starting line check for line ${lineNumber}`);
+      const checkPromise = this.performSingleLineCheck(lineNumber);
+      this.pendingLineChecks.set(lineNumber, checkPromise);
+
+      checkPromise.finally(() => {
+        this.pendingLineChecks.delete(lineNumber);
+      });
+    }, this.LINE_CHECK_DEBOUNCE_MS);
+
+    this.lineDebounceTimers.set(lineNumber, timerId);
+    console.log(
+      `⏱️ Set debounce timer for line ${lineNumber} (${this.LINE_CHECK_DEBOUNCE_MS}ms)`
+    );
   }
 
   /**
