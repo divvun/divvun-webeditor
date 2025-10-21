@@ -53,7 +53,7 @@ export class GrammarChecker {
   private cursorManager: CursorManager;
 
   // Suggestion management
-  private suggestionManager: SuggestionManager;
+  public suggestionManager: SuggestionManager;
 
   // Text analysis
   public textAnalyzer: TextAnalyzer;
@@ -85,6 +85,7 @@ export class GrammarChecker {
    * @param suggestionManager - Suggestion manager instance.
    * @param textAnalyzer - Text analyzer instance.
    * @param stateMachine - Checker state machine instance.
+   * @param eventManager - Event manager instance.
    */
   constructor(
     editor: QuillBridgeInstance,
@@ -92,7 +93,8 @@ export class GrammarChecker {
     cursorManager: CursorManager,
     suggestionManager: SuggestionManager,
     textAnalyzer: TextAnalyzer,
-    stateMachine: CheckerStateMachine
+    stateMachine: CheckerStateMachine,
+    eventManager: EventManager
   ) {
     this.state = {
       lastCheckedContent: "",
@@ -108,6 +110,7 @@ export class GrammarChecker {
     this.suggestionManager = suggestionManager;
     this.textAnalyzer = textAnalyzer;
     this.stateMachine = stateMachine;
+    this.eventManager = eventManager;
 
     // Initialize previous text tracking for edit detection
     this.previousText = this.editor.getText();
@@ -122,47 +125,6 @@ export class GrammarChecker {
     }
 
     // DOM elements are now managed by ConfigManager
-
-    // Initialize event manager
-    const eventCallbacks: EventCallbacks = {
-      onTextChange: (source: string, currentText: string) =>
-        this.handleTextChange(source, currentText),
-      onLanguageChange: (language: SupportedLanguage) =>
-        this.setLanguage(language),
-      onClearEditor: () => this.clearEditor(),
-      onErrorClick: (
-        errorNode: HTMLElement,
-        matching: CheckerError,
-        index: number,
-        length: number,
-        event: MouseEvent
-      ) =>
-        this.suggestionManager.showSuggestionTooltip(
-          errorNode,
-          matching,
-          index,
-          length,
-          event
-        ),
-      onErrorRightClick: (x: number, y: number, matchingError: CheckerError) =>
-        this.suggestionManager.showContextMenu(x, y, matchingError),
-      onIntelligentPasteCheck: (
-        prePasteSelection: { index: number; length: number },
-        prePasteText: string,
-        pastedContent: string
-      ) =>
-        this.handleIntelligentPasteCheck(
-          prePasteSelection,
-          prePasteText,
-          pastedContent
-        ),
-    };
-    const domElements = this.configManager.getDOMElements();
-    this.eventManager = new EventManager(
-      this.editor,
-      domElements.clearButton,
-      eventCallbacks
-    );
 
     // Initialize error highlighter
     const highlightingCallbacks: HighlightingCallbacks = {
@@ -193,7 +155,7 @@ export class GrammarChecker {
     return await this.configManager.initializeLanguages();
   }
 
-  private handleTextChange(_source: string, currentText: string): void {
+  public handleTextChange(_source: string, currentText: string): void {
     // Skip processing during highlighting or if any line checks are pending
     const shouldProcessEdit =
       this.stateMachine.getCurrentState() !== "highlighting" &&
@@ -411,7 +373,7 @@ export class GrammarChecker {
     }
   }
 
-  private async handleIntelligentPasteCheck(
+  public async handleIntelligentPasteCheck(
     prePasteSelection: { index: number; length: number },
     prePasteText: string,
     pastedContent: string
@@ -1142,6 +1104,54 @@ document.addEventListener("DOMContentLoaded", () => {
       stateTransitionCallbacks
     );
 
+    // Create the event manager with callbacks
+    const eventCallbacks: EventCallbacks = {
+      onTextChange: (source: string, currentText: string) => {
+        grammarCheckerRef?.handleTextChange(source, currentText);
+      },
+      onLanguageChange: (language: SupportedLanguage) => {
+        grammarCheckerRef?.setLanguage(language);
+      },
+      onClearEditor: () => {
+        grammarCheckerRef?.clearEditor();
+      },
+      onErrorClick: (
+        errorNode: HTMLElement,
+        matching: CheckerError,
+        index: number,
+        length: number,
+        event: MouseEvent
+      ) => {
+        grammarCheckerRef?.suggestionManager.showSuggestionTooltip(
+          errorNode,
+          matching,
+          index,
+          length,
+          event
+        );
+      },
+      onErrorRightClick: (x: number, y: number, matchingError: CheckerError) => {
+        grammarCheckerRef?.suggestionManager.showContextMenu(x, y, matchingError);
+      },
+      onIntelligentPasteCheck: (
+        prePasteSelection: { index: number; length: number },
+        prePasteText: string,
+        pastedContent: string
+      ) => {
+        grammarCheckerRef?.handleIntelligentPasteCheck(
+          prePasteSelection,
+          prePasteText,
+          pastedContent
+        );
+      },
+    };
+    const domElements = configManager.getDOMElements();
+    const eventManager = new EventManager(
+      editor,
+      domElements.clearButton,
+      eventCallbacks
+    );
+
     // Create the grammar checker with all dependencies
     const grammarChecker = new GrammarChecker(
       editor,
@@ -1149,7 +1159,8 @@ document.addEventListener("DOMContentLoaded", () => {
       cursorManager,
       suggestionManager,
       textAnalyzer,
-      stateMachine
+      stateMachine,
+      eventManager
     );
     grammarCheckerInstance = grammarChecker;
     grammarCheckerRef = grammarChecker;
