@@ -894,6 +894,9 @@ export class GrammarChecker {
       // Only recheck the modified line - use immediate async to avoid setTimeout timing issues
       await this.recheckModifiedLine(lineInfo.lineNumber);
 
+      // Update EventManager with the new error positions so click handlers work correctly
+      this.eventManager.updateErrors(this.state.errors);
+
       // Update UI
       this.updateErrorCount(this.state.errors.length);
       this.updateStatus("Ready", false);
