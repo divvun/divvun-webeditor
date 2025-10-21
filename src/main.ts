@@ -62,7 +62,7 @@ export class GrammarChecker {
   private stateMachine: CheckerStateMachine;
 
   // Event management
-  private eventManager: EventManager;
+  public eventManager: EventManager;
 
   // Error highlighting
   public errorHighlighter: ErrorHighlighter;
@@ -83,12 +83,14 @@ export class GrammarChecker {
    * @param configManager - Configuration manager instance.
    * @param cursorManager - Cursor manager instance.
    * @param suggestionManager - Suggestion manager instance.
+   * @param textAnalyzer - Text analyzer instance.
    */
   constructor(
     editor: QuillBridgeInstance,
     configManager: ConfigManager,
     cursorManager: CursorManager,
-    suggestionManager: SuggestionManager
+    suggestionManager: SuggestionManager,
+    textAnalyzer: TextAnalyzer
   ) {
     this.state = {
       lastCheckedContent: "",
@@ -102,36 +104,10 @@ export class GrammarChecker {
     this.editor = editor;
     this.cursorManager = cursorManager;
     this.suggestionManager = suggestionManager;
+    this.textAnalyzer = textAnalyzer;
 
     // Initialize previous text tracking for edit detection
     this.previousText = this.editor.getText();
-
-    // Initialize text analyzer
-    const textAnalysisCallbacks: TextAnalysisCallbacks = {
-      onErrorsFound: (errors: CheckerError[], lineNumber?: number) => {
-        if (lineNumber !== undefined) {
-          this.errorHighlighter.highlightLineErrors(errors);
-        } else {
-          this.state.errors = errors;
-          this.eventManager.updateErrors(errors);
-        }
-      },
-      onUpdateErrorCount: (count: number) => {
-        this.updateErrorCount(count);
-      },
-      onUpdateStatus: (status: string, isChecking: boolean) => {
-        this.updateStatus(status, isChecking);
-      },
-      onShowErrorMessage: (message: string) => {
-        this.showErrorMessage(message);
-      },
-    };
-    this.textAnalyzer = new TextAnalyzer(
-      this.configManager.getCurrentApi(),
-      this.editor,
-      textAnalysisCallbacks,
-      this.configManager.getCurrentLanguage()
-    );
 
     // Initialize state machine
     const stateTransitionCallbacks: StateTransitionCallbacks = {
@@ -725,7 +701,7 @@ export class GrammarChecker {
     await this.textAnalyzer.checkGrammar();
   }
 
-  private updateStatus(status: string, isChecking: boolean): void {
+  public updateStatus(status: string, isChecking: boolean): void {
     const domElements = this.configManager.getDOMElements();
     domElements.statusText.textContent = status;
     domElements.statusDisplay.className = isChecking
@@ -743,7 +719,7 @@ export class GrammarChecker {
     }
   }
 
-  private updateErrorCount(count: number): void {
+  public updateErrorCount(count: number): void {
     const domElements = this.configManager.getDOMElements();
     domElements.errorCount.textContent = `${count} ${
       count === 1 ? "error" : "errors"
@@ -752,7 +728,7 @@ export class GrammarChecker {
       count > 0 ? "error-count has-errors" : "error-count";
   }
 
-  private showErrorMessage(message: string): void {
+  public showErrorMessage(message: string): void {
     // Simple alert for now - in a full implementation, you'd want a nicer notification system
     alert(`Error: ${message}`);
   }
@@ -1128,12 +1104,42 @@ document.addEventListener("DOMContentLoaded", () => {
       suggestionCallbacks
     );
 
+    // Create the text analyzer with callbacks
+    const textAnalysisCallbacks: TextAnalysisCallbacks = {
+      onErrorsFound: (errors: CheckerError[], lineNumber?: number) => {
+        if (lineNumber !== undefined) {
+          grammarCheckerRef?.errorHighlighter.highlightLineErrors(errors);
+        } else {
+          if (grammarCheckerRef) {
+            grammarCheckerRef.state.errors = errors;
+            grammarCheckerRef.eventManager.updateErrors(errors);
+          }
+        }
+      },
+      onUpdateErrorCount: (count: number) => {
+        grammarCheckerRef?.updateErrorCount(count);
+      },
+      onUpdateStatus: (status: string, isChecking: boolean) => {
+        grammarCheckerRef?.updateStatus(status, isChecking);
+      },
+      onShowErrorMessage: (message: string) => {
+        grammarCheckerRef?.showErrorMessage(message);
+      },
+    };
+    const textAnalyzer = new TextAnalyzer(
+      configManager.getCurrentApi(),
+      editor,
+      textAnalysisCallbacks,
+      configManager.getCurrentLanguage()
+    );
+
     // Create the grammar checker with all dependencies
     const grammarChecker = new GrammarChecker(
       editor,
       configManager,
       cursorManager,
-      suggestionManager
+      suggestionManager,
+      textAnalyzer
     );
     grammarCheckerInstance = grammarChecker;
     grammarCheckerRef = grammarChecker;
