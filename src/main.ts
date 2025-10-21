@@ -84,13 +84,15 @@ export class GrammarChecker {
    * @param cursorManager - Cursor manager instance.
    * @param suggestionManager - Suggestion manager instance.
    * @param textAnalyzer - Text analyzer instance.
+   * @param stateMachine - Checker state machine instance.
    */
   constructor(
     editor: QuillBridgeInstance,
     configManager: ConfigManager,
     cursorManager: CursorManager,
     suggestionManager: SuggestionManager,
-    textAnalyzer: TextAnalyzer
+    textAnalyzer: TextAnalyzer,
+    stateMachine: CheckerStateMachine
   ) {
     this.state = {
       lastCheckedContent: "",
@@ -105,27 +107,10 @@ export class GrammarChecker {
     this.cursorManager = cursorManager;
     this.suggestionManager = suggestionManager;
     this.textAnalyzer = textAnalyzer;
+    this.stateMachine = stateMachine;
 
     // Initialize previous text tracking for edit detection
     this.previousText = this.editor.getText();
-
-    // Initialize state machine
-    const stateTransitionCallbacks: StateTransitionCallbacks = {
-      onStateEntry: (state: CheckerState) => this.onStateEntry(state),
-      onStateExit: (state: CheckerState) => this.onStateExit(state),
-      onCheckRequested: () => this.performGrammarCheck(),
-      onEditDetected: (editType: EditType, editInfo: EditInfo) => {
-        console.log(
-          `🚨 CALLBACK onEditDetected called with ${editType}`,
-          editInfo
-        );
-        this.handleEditDetected(editType, editInfo);
-      },
-    };
-    this.stateMachine = new CheckerStateMachine(
-      this.configManager.getAutoCheckDelay(),
-      stateTransitionCallbacks
-    );
 
     // Ensure editor root is focusable
     this.editor.root.setAttribute("aria-label", "Grammar editor");
@@ -235,7 +220,7 @@ export class GrammarChecker {
   /**
    * Handle detected edit operations
    */
-  private handleEditDetected(editType: EditType, editInfo: EditInfo): void {
+  public handleEditDetected(editType: EditType, editInfo: EditInfo): void {
     console.log(
       `🚨 MAIN.TS handleEditDetected called with ${editType}`,
       editInfo
@@ -639,7 +624,7 @@ export class GrammarChecker {
   }
 
   // State Machine Callback Implementations
-  private onStateExit(state: CheckerState): void {
+  public onStateExit(state: CheckerState): void {
     switch (state) {
       case "checking":
         // Abort any ongoing check
@@ -649,7 +634,7 @@ export class GrammarChecker {
     }
   }
 
-  private onStateEntry(state: CheckerState): void {
+  public onStateEntry(state: CheckerState): void {
     switch (state) {
       case "idle":
         this.updateStatus("Ready", false);
@@ -667,7 +652,7 @@ export class GrammarChecker {
 
   // Line-level caching methods
 
-  private performGrammarCheck(): void {
+  public performGrammarCheck(): void {
     // Set up checking context in text analyzer
     this.checkingContext = this.textAnalyzer.startCheckingContext();
 
@@ -1133,13 +1118,38 @@ document.addEventListener("DOMContentLoaded", () => {
       configManager.getCurrentLanguage()
     );
 
+    // Create the state machine with callbacks
+    const stateTransitionCallbacks: StateTransitionCallbacks = {
+      onStateEntry: (state: CheckerState) => {
+        grammarCheckerRef?.onStateEntry(state);
+      },
+      onStateExit: (state: CheckerState) => {
+        grammarCheckerRef?.onStateExit(state);
+      },
+      onCheckRequested: () => {
+        grammarCheckerRef?.performGrammarCheck();
+      },
+      onEditDetected: (editType: EditType, editInfo: EditInfo) => {
+        console.log(
+          `🚨 CALLBACK onEditDetected called with ${editType}`,
+          editInfo
+        );
+        grammarCheckerRef?.handleEditDetected(editType, editInfo);
+      },
+    };
+    const stateMachine = new CheckerStateMachine(
+      configManager.getAutoCheckDelay(),
+      stateTransitionCallbacks
+    );
+
     // Create the grammar checker with all dependencies
     const grammarChecker = new GrammarChecker(
       editor,
       configManager,
       cursorManager,
       suggestionManager,
-      textAnalyzer
+      textAnalyzer,
+      stateMachine
     );
     grammarCheckerInstance = grammarChecker;
     grammarCheckerRef = grammarChecker;
