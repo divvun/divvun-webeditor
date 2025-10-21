@@ -27,17 +27,17 @@ export interface EventCallbacks {
     matching: CheckerError,
     index: number,
     length: number,
-    event: MouseEvent
+    event: MouseEvent,
   ) => void;
   onErrorRightClick: (
     x: number,
     y: number,
-    matchingError: CheckerError
+    matchingError: CheckerError,
   ) => void;
   onIntelligentPasteCheck: (
     prePasteSelection: { index: number; length: number },
     prePasteText: string,
-    pastedContent: string
+    pastedContent: string,
   ) => void;
 }
 
@@ -56,7 +56,7 @@ export class EventManager {
   constructor(
     editor: EditorEventInterface,
     clearButton: HTMLButtonElement,
-    callbacks: EventCallbacks
+    callbacks: EventCallbacks,
   ) {
     this.editor = editor;
     this.clearButton = clearButton;
@@ -102,7 +102,7 @@ export class EventManager {
 
       // Keep only recent changes (last 5 seconds)
       this.recentTextChanges = this.recentTextChanges.filter(
-        (change) => now - change.timestamp < 5000
+        (change) => now - change.timestamp < 5000,
       );
 
       // Check if this is likely an undo operation
@@ -139,7 +139,7 @@ export class EventManager {
           this.callbacks.onIntelligentPasteCheck(
             prePasteSelection,
             prePasteText,
-            e.clipboardData?.getData("text") || ""
+            e.clipboardData?.getData("text") || "",
           );
         }, 50); // Allow paste to complete
       }
@@ -181,7 +181,7 @@ export class EventManager {
     this.editor.root.addEventListener("click", (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       const errorNode = target.closest(
-        ".grammar-typo, .grammar-other"
+        ".grammar-typo, .grammar-other",
       ) as HTMLElement;
       if (!errorNode) return;
 
@@ -190,10 +190,9 @@ export class EventManager {
         const blot = this.editor.findBlot
           ? this.editor.findBlot(errorNode)
           : undefined;
-        const index =
-          this.editor.getIndex && blot !== undefined
-            ? this.editor.getIndex(blot)
-            : 0;
+        const index = this.editor.getIndex && blot !== undefined
+          ? this.editor.getIndex(blot)
+          : 0;
         const maybeLength =
           blot && typeof (blot as { length?: unknown }).length === "function"
             ? (blot as { length: () => number }).length()
@@ -204,7 +203,7 @@ export class EventManager {
         const matching = this.errors.find(
           (err) =>
             err.start_index === index &&
-            err.end_index - err.start_index === length
+            err.end_index - err.start_index === length,
         );
         if (matching) {
           this.callbacks.onErrorClick(errorNode, matching, index, length, e);
@@ -219,7 +218,7 @@ export class EventManager {
     // Don't apply undo detection during suggestion application
     if (this.isApplyingSuggestion) {
       console.debug(
-        "🔧 Suggestion application in progress - skipping undo detection"
+        "🔧 Suggestion application in progress - skipping undo detection",
       );
       return false;
     }
@@ -247,7 +246,7 @@ export class EventManager {
 
       // Check for rapid changes that might indicate undo cascading
       const recentChanges = this.recentTextChanges.filter(
-        (change) => now - change.timestamp < 500 // Reduced to 500ms for tighter detection
+        (change) => now - change.timestamp < 500, // Reduced to 500ms for tighter detection
       );
 
       if (recentChanges.length > 5) {
@@ -267,7 +266,7 @@ export class EventManager {
 
       if (previousTexts.includes(currentText)) {
         console.debug(
-          "🔄 Change during highlighting phase - likely undo of highlight"
+          "🔄 Change during highlighting phase - likely undo of highlight",
         );
         return true;
       }
@@ -283,7 +282,7 @@ export class EventManager {
     // Method 1: Check if right-clicking directly on an error element
     const target = e.target as HTMLElement;
     const errorElement = target.closest(
-      ".grammar-typo, .grammar-other"
+      ".grammar-typo, .grammar-other",
     ) as HTMLElement;
 
     if (errorElement) {
@@ -293,7 +292,7 @@ export class EventManager {
         (error) =>
           error.error_text === errorText ||
           (error.suggestions &&
-            error.suggestions.some((s) => s.includes(errorText)))
+            error.suggestions.some((s) => s.includes(errorText))),
       );
     }
 
@@ -306,7 +305,7 @@ export class EventManager {
         document as unknown as {
           caretPositionFromPoint?: (
             x: number,
-            y: number
+            y: number,
           ) => { offsetNode: Node; offset: number } | null;
         }
       ).caretPositionFromPoint?.(e.clientX, e.clientY);
@@ -328,7 +327,7 @@ export class EventManager {
 
       if (clickIndex !== null) {
         matchingError = this.errors.find(
-          (err) => err.start_index <= clickIndex && clickIndex < err.end_index
+          (err) => err.start_index <= clickIndex && clickIndex < err.end_index,
         );
       }
     }
@@ -349,7 +348,7 @@ export class EventManager {
 
     const target = e.target as HTMLElement;
     const errorElement = target.closest(
-      ".grammar-typo, .grammar-other"
+      ".grammar-typo, .grammar-other",
     ) as HTMLElement;
 
     if (isChrome) {

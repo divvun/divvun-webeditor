@@ -37,7 +37,7 @@ export class TextAnalyzer {
     api: CheckerApi,
     editor: EditorTextInterface,
     callbacks: TextAnalysisCallbacks,
-    initialLanguage: SupportedLanguage
+    initialLanguage: SupportedLanguage,
   ) {
     this.api = api;
     this.editor = editor;
@@ -115,7 +115,7 @@ export class TextAnalyzer {
       console.error("Grammar check failed:", error);
       this.callbacks.onUpdateStatus("Error checking grammar", false);
       this.callbacks.onShowErrorMessage(
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
   }
@@ -159,7 +159,7 @@ export class TextAnalyzer {
     try {
       const response = await this.api.checkText(
         lineContent,
-        this.currentLanguage
+        this.currentLanguage,
       );
       const errors = response.errs || [];
 
@@ -255,10 +255,10 @@ export class TextAnalyzer {
     highlighter: {
       highlightSpecificLine: (
         lineNumber: number,
-        errors: CheckerError[]
+        errors: CheckerError[],
       ) => void;
       clearSpecificLine: (lineNumber: number, lineLength: number) => void;
-    }
+    },
   ): Promise<CheckerError[]> {
     console.log(`🧪 checkAndHighlightLine ENTERED for line ${lineNumber}`);
 
@@ -267,7 +267,7 @@ export class TextAnalyzer {
       console.log(`🔍 About to call checkSpecificLine for line ${lineNumber}`);
       const errors = await this.checkSpecificLine(lineNumber);
       console.log(
-        `✅ checkSpecificLine completed for line ${lineNumber}, found ${errors.length} errors`
+        `✅ checkSpecificLine completed for line ${lineNumber}, found ${errors.length} errors`,
       );
 
       // Then apply highlighting
@@ -290,7 +290,7 @@ export class TextAnalyzer {
     } catch (error) {
       console.error(
         `❌ Error in checkAndHighlightLine for line ${lineNumber}:`,
-        error
+        error,
       );
       throw error;
     }

@@ -11,7 +11,7 @@ export interface QuillBridgeInstance {
     len: number,
     format: string,
     value: unknown,
-    source?: string
+    source?: string,
   ): void;
   setText(text: string): void;
   deleteText(index: number, len: number): void;
@@ -27,7 +27,7 @@ export interface QuillBridgeInstance {
       length: number,
       format: string,
       value: unknown,
-      source?: string
+      source?: string,
     ) => void;
     setSelection: (index: number, length: number, source?: string) => void;
   };
@@ -80,14 +80,14 @@ const maybeBridge = (
     QuillBridge?: {
       create: (
         container: string | HTMLElement,
-        options?: unknown
+        options?: unknown,
       ) => QuillBridgeInstance;
     };
   }
 ).QuillBridge;
 if (!maybeBridge) {
   throw new Error(
-    "QuillBridge is not available. Ensure src/quill-bridge.js is loaded."
+    "QuillBridge is not available. Ensure src/quill-bridge.js is loaded.",
   );
 }
 export const QuillBridge = maybeBridge;

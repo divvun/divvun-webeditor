@@ -58,8 +58,8 @@ export class CursorManager {
           const endBlot = this.editor.findBlot(range.endContainer);
 
           if (startBlot && endBlot) {
-            const startIndex =
-              this.editor.getIndex(startBlot) + range.startOffset;
+            const startIndex = this.editor.getIndex(startBlot) +
+              range.startOffset;
             const endIndex = this.editor.getIndex(endBlot) + range.endOffset;
 
             return {
@@ -88,7 +88,7 @@ export class CursorManager {
     try {
       // Use multiple restoration attempts with different delays for Safari
       const isSafari = /^((?!chrome|android).)*safari/i.test(
-        navigator.userAgent
+        navigator.userAgent,
       );
 
       const restoreAttempt = (attempt: number = 0) => {
@@ -99,12 +99,12 @@ export class CursorManager {
             const safeIndex = Math.min(selection.index, docLength - 1);
             const safeLength = Math.min(
               selection.length,
-              docLength - safeIndex
+              docLength - safeIndex,
             );
 
             this.editor.setSelection(
               Math.max(0, safeIndex),
-              Math.max(0, safeLength)
+              Math.max(0, safeLength),
             );
 
             // Verify the selection was actually set correctly
@@ -165,13 +165,13 @@ export class CursorManager {
           this.editor._quill.setSelection(
             Math.max(0, safeIndex),
             Math.max(0, safeLength),
-            "silent"
+            "silent",
           );
         } else {
           this.editor.setSelection(
             Math.max(0, safeIndex),
             Math.max(0, safeLength),
-            "silent"
+            "silent",
           );
         }
       }

@@ -22,7 +22,7 @@ export function atomicTextReplace(
   editor: EditorWithQuill,
   start: number,
   length: number,
-  replacement: string
+  replacement: string,
 ): void {
   // Access the underlying Quill instance for the updateContents method
   // deno-lint-ignore no-explicit-any
@@ -52,7 +52,7 @@ export function atomicTextReplace(
     } catch (error) {
       console.error(
         "Quill updateContents failed, falling back to separate operations:",
-        error
+        error,
       );
       // Fallback on error
       if (length > 0) {

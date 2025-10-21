@@ -52,7 +52,7 @@ export class CheckerStateMachine {
   handleEdit(
     previousText: string,
     currentText: string,
-    cursorPosition?: number
+    cursorPosition?: number,
   ): void {
     // Ignore edits if we're in a busy state
     if (
@@ -67,7 +67,7 @@ export class CheckerStateMachine {
     const editInfo = this.analyzeEdit(
       previousText,
       currentText,
-      cursorPosition
+      cursorPosition,
     );
 
     console.log(`📝 Edit detected: ${editInfo.type}`, editInfo);
@@ -95,13 +95,13 @@ export class CheckerStateMachine {
     if (this.pendingEditInfo) {
       console.debug(
         `📝 Processing debounced edit: ${this.pendingEditInfo.type}`,
-        this.pendingEditInfo
+        this.pendingEditInfo,
       );
 
       // Notify the callback with edit information
       this.callbacks.onEditDetected(
         this.pendingEditInfo.type,
-        this.pendingEditInfo
+        this.pendingEditInfo,
       );
 
       // Clear pending edit
@@ -115,7 +115,7 @@ export class CheckerStateMachine {
   private analyzeEdit(
     previousText: string,
     currentText: string,
-    cursorPosition?: number
+    cursorPosition?: number,
   ): { type: EditType } & EditInfo {
     const prevLines = previousText.split("\n");
     const currLines = currentText.split("\n");
@@ -190,7 +190,7 @@ export class CheckerStateMachine {
    */
   private findAllChangedLines(
     prevLines: string[],
-    currLines: string[]
+    currLines: string[],
   ): number[] {
     const changedLines: number[] = [];
 

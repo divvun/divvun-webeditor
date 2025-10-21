@@ -9,17 +9,17 @@ import type {
 } from "./types.ts";
 import { CursorManager } from "./cursor-manager.ts";
 import {
-  SuggestionManager,
   type SuggestionCallbacks,
+  SuggestionManager,
 } from "./suggestion-manager.ts";
-import { TextAnalyzer, type TextAnalysisCallbacks } from "./text-analyzer.ts";
+import { type TextAnalysisCallbacks, TextAnalyzer } from "./text-analyzer.ts";
 import {
   CheckerStateMachine,
-  type StateTransitionCallbacks,
-  type EditType,
   type EditInfo,
+  type EditType,
+  type StateTransitionCallbacks,
 } from "./checker-state-machine.ts";
-import { EventManager, type EventCallbacks } from "./event-manager.ts";
+import { type EventCallbacks, EventManager } from "./event-manager.ts";
 import {
   ErrorHighlighter,
   type HighlightingCallbacks,
@@ -29,9 +29,9 @@ import {
   type ConfigurationCallbacks,
 } from "./config-manager.ts";
 import {
+  QuillBridge,
   QuillBridgeInstance,
   registerQuillBlots,
-  QuillBridge,
 } from "./quill-bridge-instance.ts";
 import { atomicTextReplace } from "./editor-utils.ts";
 
@@ -95,7 +95,7 @@ export class GrammarChecker {
     textAnalyzer: TextAnalyzer,
     stateMachine: CheckerStateMachine,
     eventManager: EventManager,
-    errorHighlighter: ErrorHighlighter
+    errorHighlighter: ErrorHighlighter,
   ) {
     this.state = {
       lastCheckedContent: "",
@@ -139,9 +139,7 @@ export class GrammarChecker {
     if (!shouldProcessEdit) {
       // Skip processing but still update previousText to prevent stale state
       console.debug(
-        `🔄 Text change while ${this.stateMachine.getCurrentState()} or ${
-          this.pendingLineChecks.size
-        } line checks pending, ignoring edit processing but updating baseline`
+        `🔄 Text change while ${this.stateMachine.getCurrentState()} or ${this.pendingLineChecks.size} line checks pending, ignoring edit processing but updating baseline`,
       );
       this.previousText = currentText;
       return;
@@ -160,7 +158,7 @@ export class GrammarChecker {
   public handleEditDetected(editType: EditType, editInfo: EditInfo): void {
     console.log(
       `🚨 MAIN.TS handleEditDetected called with ${editType}`,
-      editInfo
+      editInfo,
     );
     console.debug(`📝 Handling ${editType}:`, editInfo);
 
@@ -172,25 +170,25 @@ export class GrammarChecker {
           console.log(
             `🔍 editInfo.lineNumber:`,
             editInfo.lineNumber,
-            `(type: ${typeof editInfo.lineNumber})`
+            `(type: ${typeof editInfo.lineNumber})`,
           );
           if (editInfo.lineNumber !== undefined) {
             console.log(
-              `🎯 Line-specific check for line ${editInfo.lineNumber}`
+              `🎯 Line-specific check for line ${editInfo.lineNumber}`,
             );
             console.log(`🚀 About to call handleSingleLineEdit`);
             this.handleSingleLineEdit(editInfo.lineNumber);
             console.log(`✅ handleSingleLineEdit call completed`);
           } else {
             console.warn(
-              "Single line edit detected but line number not provided"
+              "Single line edit detected but line number not provided",
             );
             this.textAnalyzer.checkGrammar(); // Fallback to full check
           }
           break;
         case "newline-creation":
           console.debug(
-            `Newline created at line ${editInfo.lineNumber}, split at position ${editInfo.splitPosition}`
+            `Newline created at line ${editInfo.lineNumber}, split at position ${editInfo.splitPosition}`,
           );
           // For newlines, we need to check both the split line and the new line
           if (editInfo.lineNumber !== undefined) {
@@ -210,7 +208,7 @@ export class GrammarChecker {
           break;
         case "multi-line-edit":
           console.debug(
-            `Multi-line edit from line ${editInfo.startLine} to ${editInfo.endLine}`
+            `Multi-line edit from line ${editInfo.startLine} to ${editInfo.endLine}`,
           );
           // For multi-line edits, we fall back to full checking for now
           // Could be optimized to check only affected line range
@@ -250,7 +248,7 @@ export class GrammarChecker {
       // Check if there's already a pending check for this line
       if (this.pendingLineChecks.has(lineNumber)) {
         console.debug(
-          `⏸️ Line ${lineNumber} check already in progress, skipping`
+          `⏸️ Line ${lineNumber} check already in progress, skipping`,
         );
         return;
       }
@@ -273,7 +271,7 @@ export class GrammarChecker {
 
     this.lineDebounceTimers.set(lineNumber, timerId);
     console.log(
-      `⏱️ Set debounce timer for line ${lineNumber} (${this.LINE_CHECK_DEBOUNCE_MS}ms)`
+      `⏱️ Set debounce timer for line ${lineNumber} (${this.LINE_CHECK_DEBOUNCE_MS}ms)`,
     );
   }
 
@@ -295,7 +293,9 @@ export class GrammarChecker {
       this.updateErrorCount(this.state.errors.length);
 
       console.debug(
-        `✅ Newline handling complete for lines ${lineNumber}-${lineNumber + 1}`
+        `✅ Newline handling complete for lines ${lineNumber}-${
+          lineNumber + 1
+        }`,
       );
 
       // Cancel any pending debounce since line-specific check completed successfully
@@ -322,8 +322,8 @@ export class GrammarChecker {
         checkPromises.push(
           this.textAnalyzer.checkAndHighlightLine(
             lineNumber,
-            this.errorHighlighter
-          )
+            this.errorHighlighter,
+          ),
         );
       }
 
@@ -331,8 +331,8 @@ export class GrammarChecker {
         checkPromises.push(
           this.textAnalyzer.checkAndHighlightLine(
             lineNumber - 1,
-            this.errorHighlighter
-          )
+            this.errorHighlighter,
+          ),
         );
       }
 
@@ -351,7 +351,7 @@ export class GrammarChecker {
   public async handleIntelligentPasteCheck(
     prePasteSelection: { index: number; length: number },
     prePasteText: string,
-    pastedContent: string
+    pastedContent: string,
   ): Promise<void> {
     try {
       // Get current text after paste
@@ -372,7 +372,7 @@ export class GrammarChecker {
         pasteStartIndex,
         actualPastedLength,
         prePasteText,
-        postPasteText
+        postPasteText,
       );
 
       // Perform intelligent checking
@@ -380,12 +380,12 @@ export class GrammarChecker {
         linesToCheck,
         pasteStartIndex,
         lengthDifference,
-        postPasteText
+        postPasteText,
       );
     } catch (error) {
       console.error(
         "Intelligent paste check failed, falling back to full check:",
-        error
+        error,
       );
       // Fallback to full check
       this.state.lastCheckedContent = "";
@@ -397,7 +397,7 @@ export class GrammarChecker {
     pasteStartIndex: number,
     pastedLength: number,
     prePasteText: string,
-    postPasteText: string
+    postPasteText: string,
   ): { startLine: number; endLine: number; needsIndexAdjustment: boolean } {
     // Find which lines contain the paste
     const preLines = prePasteText.split("\n");
@@ -422,8 +422,8 @@ export class GrammarChecker {
     let endLine = startLine;
 
     for (let i = 0; i < postLines.length; i++) {
-      const lineLength =
-        postLines[i].length + (i < postLines.length - 1 ? 1 : 0);
+      const lineLength = postLines[i].length +
+        (i < postLines.length - 1 ? 1 : 0);
       if (currentIndex + lineLength >= pasteEndIndex) {
         endLine = i;
         break;
@@ -450,7 +450,7 @@ export class GrammarChecker {
     },
     pasteStartIndex: number,
     lengthDifference: number,
-    fullText: string
+    fullText: string,
   ): Promise<void> {
     if (this.state.isChecking) return;
 
@@ -465,11 +465,11 @@ export class GrammarChecker {
       let currentIndex = 0;
       const affectedStartIndex = this.getLineStartIndex(
         linesToCheck.startLine,
-        lines
+        lines,
       );
       const affectedEndIndex = this.getLineStartIndex(
         linesToCheck.endLine + 1,
-        lines
+        lines,
       );
 
       this.state.errors = this.state.errors.filter((error) => {
@@ -510,7 +510,7 @@ export class GrammarChecker {
                 .getCurrentApi()
                 .checkText(
                   lineWithNewline,
-                  this.configManager.getCurrentLanguage()
+                  this.configManager.getCurrentLanguage(),
                 );
 
               // Adjust error indices to account for position in full text
@@ -549,7 +549,7 @@ export class GrammarChecker {
       console.log(
         `Intelligent paste check complete. Checked lines ${
           linesToCheck.startLine + 1
-        }-${linesToCheck.endLine + 1}. Total errors: ${errorCount}`
+        }-${linesToCheck.endLine + 1}. Total errors: ${errorCount}`,
       );
     } catch (error) {
       console.error("Affected lines check failed:", error);
@@ -646,8 +646,9 @@ export class GrammarChecker {
     domElements.errorCount.textContent = `${count} ${
       count === 1 ? "error" : "errors"
     }`;
-    domElements.errorCount.className =
-      count > 0 ? "error-count has-errors" : "error-count";
+    domElements.errorCount.className = count > 0
+      ? "error-count has-errors"
+      : "error-count";
   }
 
   public showErrorMessage(message: string): void {
@@ -667,10 +668,10 @@ export class GrammarChecker {
       const lengthDifference = newLength - originalLength;
 
       console.log(
-        `Applying suggestion on line ${lineInfo.lineNumber}: "${error.error_text}" → "${suggestion}"`
+        `Applying suggestion on line ${lineInfo.lineNumber}: "${error.error_text}" → "${suggestion}"`,
       );
       console.log(
-        `Length change: ${originalLength} → ${newLength} (diff: ${lengthDifference})`
+        `Length change: ${originalLength} → ${newLength} (diff: ${lengthDifference})`,
       );
 
       // Apply the suggestion atomically to prevent spacing issues
@@ -688,7 +689,7 @@ export class GrammarChecker {
         start,
         originalLength,
         error.error_code === "typo" ? "grammar-typo" : "grammar-other",
-        false
+        false,
       );
 
       // Use atomic text replacement to prevent intermediate state issues
@@ -712,7 +713,7 @@ export class GrammarChecker {
         error,
         suggestion,
         lineInfo,
-        lengthDifference
+        lengthDifference,
       );
     } catch (err) {
       console.error("Error applying suggestion:", err);
@@ -733,23 +734,23 @@ export class GrammarChecker {
       lineContent: string;
       positionInLine: number;
     },
-    lengthDifference: number
+    lengthDifference: number,
   ): Promise<void> {
     try {
       console.log(
-        `Starting intelligent correction for line ${lineInfo.lineNumber}`
+        `Starting intelligent correction for line ${lineInfo.lineNumber}`,
       );
 
       // Remove the corrected error from state
       this.state.errors = this.state.errors.filter(
-        (err) => err !== originalError
+        (err) => err !== originalError,
       );
 
       // If there's a length difference, adjust indices of subsequent errors
       if (lengthDifference !== 0) {
         this.adjustSubsequentErrorIndices(
           originalError.start_index,
-          lengthDifference
+          lengthDifference,
         );
       }
 
@@ -764,12 +765,12 @@ export class GrammarChecker {
       this.updateStatus("Ready", false);
 
       console.log(
-        `Intelligent correction complete. Total errors: ${this.state.errors.length}`
+        `Intelligent correction complete. Total errors: ${this.state.errors.length}`,
       );
     } catch (error) {
       console.error(
         "Intelligent correction failed, falling back to full check:",
-        error
+        error,
       );
       // Fallback to full grammar check
       this.state.lastCheckedContent = "";
@@ -780,10 +781,10 @@ export class GrammarChecker {
 
   private adjustSubsequentErrorIndices(
     correctionPosition: number,
-    lengthDifference: number
+    lengthDifference: number,
   ): void {
     console.log(
-      `Adjusting error indices after position ${correctionPosition} by ${lengthDifference}`
+      `Adjusting error indices after position ${correctionPosition} by ${lengthDifference}`,
     );
 
     this.state.errors = this.state.errors.map((error) => {
@@ -820,8 +821,9 @@ export class GrammarChecker {
       let lineStartPosition = 0;
       for (let i = 0; i < lineIndex; i++) {
         const prevLine = lines[i];
-        const prevLineWithNewline =
-          i < lines.length - 1 ? prevLine + "\n" : prevLine;
+        const prevLineWithNewline = i < lines.length - 1
+          ? prevLine + "\n"
+          : prevLine;
         lineStartPosition += prevLineWithNewline.length;
       }
 
@@ -857,7 +859,7 @@ export class GrammarChecker {
         this.errorHighlighter.highlightErrors(this.state.errors);
 
         console.log(
-          `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`
+          `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`,
         );
       }
     } catch (error) {
@@ -1023,7 +1025,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     const suggestionManager = new SuggestionManager(
       editor,
-      suggestionCallbacks
+      suggestionCallbacks,
     );
 
     // Create the text analyzer with callbacks
@@ -1052,7 +1054,7 @@ document.addEventListener("DOMContentLoaded", () => {
       configManager.getCurrentApi(),
       editor,
       textAnalysisCallbacks,
-      configManager.getCurrentLanguage()
+      configManager.getCurrentLanguage(),
     );
 
     // Create the state machine with callbacks
@@ -1069,14 +1071,14 @@ document.addEventListener("DOMContentLoaded", () => {
       onEditDetected: (editType: EditType, editInfo: EditInfo) => {
         console.log(
           `🚨 CALLBACK onEditDetected called with ${editType}`,
-          editInfo
+          editInfo,
         );
         grammarCheckerRef?.handleEditDetected(editType, editInfo);
       },
     };
     const stateMachine = new CheckerStateMachine(
       configManager.getAutoCheckDelay(),
-      stateTransitionCallbacks
+      stateTransitionCallbacks,
     );
 
     // Create the event manager with callbacks
@@ -1095,36 +1097,36 @@ document.addEventListener("DOMContentLoaded", () => {
         matching: CheckerError,
         index: number,
         length: number,
-        event: MouseEvent
+        event: MouseEvent,
       ) => {
         grammarCheckerRef?.suggestionManager.showSuggestionTooltip(
           errorNode,
           matching,
           index,
           length,
-          event
+          event,
         );
       },
       onErrorRightClick: (
         x: number,
         y: number,
-        matchingError: CheckerError
+        matchingError: CheckerError,
       ) => {
         grammarCheckerRef?.suggestionManager.showContextMenu(
           x,
           y,
-          matchingError
+          matchingError,
         );
       },
       onIntelligentPasteCheck: (
         prePasteSelection: { index: number; length: number },
         prePasteText: string,
-        pastedContent: string
+        pastedContent: string,
       ) => {
         grammarCheckerRef?.handleIntelligentPasteCheck(
           prePasteSelection,
           prePasteText,
-          pastedContent
+          pastedContent,
         );
       },
     };
@@ -1132,7 +1134,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const eventManager = new EventManager(
       editor,
       domElements.clearButton,
-      eventCallbacks
+      eventCallbacks,
     );
 
     // Create the error highlighter with callbacks
@@ -1162,7 +1164,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const errorHighlighter = new ErrorHighlighter(
       editor,
       cursorManager,
-      highlightingCallbacks
+      highlightingCallbacks,
     );
 
     // Create the grammar checker with all dependencies
@@ -1174,7 +1176,7 @@ document.addEventListener("DOMContentLoaded", () => {
       textAnalyzer,
       stateMachine,
       eventManager,
-      errorHighlighter
+      errorHighlighter,
     );
     grammarCheckerInstance = grammarChecker;
     grammarCheckerRef = grammarChecker;

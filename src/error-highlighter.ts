@@ -18,7 +18,7 @@ interface EditorHighlightInterface {
     len: number,
     format: string,
     value: unknown,
-    source?: string
+    source?: string,
   ): void;
   _quill?: {
     formatText?: (
@@ -26,7 +26,7 @@ interface EditorHighlightInterface {
       len: number,
       format: string,
       value: unknown,
-      source?: string
+      source?: string,
     ) => void;
     container?: HTMLElement;
     history?: {
@@ -56,7 +56,7 @@ export class ErrorHighlighter {
   constructor(
     editor: EditorHighlightInterface,
     cursorManager: CursorManager,
-    callbacks: HighlightingCallbacks
+    callbacks: HighlightingCallbacks,
   ) {
     this.editor = editor;
     this.cursorManager = cursorManager;
@@ -119,7 +119,7 @@ export class ErrorHighlighter {
             length,
             formatType,
             false,
-            "silent"
+            "silent",
           );
         } catch (_err) {
           // ignore individual format failures
@@ -135,7 +135,7 @@ export class ErrorHighlighter {
     // Prevent multiple simultaneous highlighting operations
     if (this.isHighlighting) {
       console.debug(
-        "🔄 Highlighting already in progress, skipping duplicate call"
+        "🔄 Highlighting already in progress, skipping duplicate call",
       );
       return;
     }
@@ -190,7 +190,7 @@ export class ErrorHighlighter {
 
   private performLineHighlightingOperations(
     errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
+    savedSelection: { index: number; length: number } | null,
   ): void {
     // Disable Quill history during line highlighting
     const quillInstance = this.editor._quill;
@@ -211,13 +211,12 @@ export class ErrorHighlighter {
       errors.forEach((error) => {
         const start = error.start_index;
         const len = error.end_index - error.start_index;
-        const isTypo =
-          error.error_code === "typo" ||
+        const isTypo = error.error_code === "typo" ||
           (error.title && String(error.title).toLowerCase().includes("typo"));
         const formatName = isTypo ? "grammar-typo" : "grammar-other";
 
         console.debug(
-          `🎨 Highlighting error: "${error.error_text}" at ${start}-${error.end_index} with format ${formatName}`
+          `🎨 Highlighting error: "${error.error_text}" at ${start}-${error.end_index} with format ${formatName}`,
         );
 
         try {
@@ -231,7 +230,7 @@ export class ErrorHighlighter {
               len,
               formatName,
               true,
-              "silent"
+              "silent",
             );
           } else {
             this.editor.formatText(start, len, formatName, true, "silent");
@@ -258,7 +257,7 @@ export class ErrorHighlighter {
 
   private performSafariSafeHighlighting(
     errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
+    savedSelection: { index: number; length: number } | null,
   ): void {
     // Try DOM isolation first for Safari
     if (this.trySafariDOMIsolation(errors, savedSelection)) {
@@ -276,7 +275,7 @@ export class ErrorHighlighter {
 
   private trySafariDOMIsolation(
     errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
+    savedSelection: { index: number; length: number } | null,
   ): boolean {
     try {
       const quillInstance = this.editor._quill;
@@ -291,10 +290,10 @@ export class ErrorHighlighter {
       const parentNode = container.parentNode;
 
       // Save scroll position
-      const scrollTop =
-        document.documentElement.scrollTop || document.body.scrollTop;
-      const scrollLeft =
-        document.documentElement.scrollLeft || document.body.scrollLeft;
+      const scrollTop = document.documentElement.scrollTop ||
+        document.body.scrollTop;
+      const scrollLeft = document.documentElement.scrollLeft ||
+        document.body.scrollLeft;
 
       // Remove container from DOM temporarily
       parentNode.insertBefore(placeholder, container);
@@ -329,7 +328,7 @@ export class ErrorHighlighter {
 
   private performHighlightingOperations(
     errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null
+    savedSelection: { index: number; length: number } | null,
   ): void {
     // Batch all operations together to minimize DOM thrashing
     const quillInstance = this.editor._quill;
@@ -368,13 +367,12 @@ export class ErrorHighlighter {
           return;
         }
 
-        const isTypo =
-          error.error_code === "typo" ||
+        const isTypo = error.error_code === "typo" ||
           (error.title && String(error.title).toLowerCase().includes("typo"));
         const formatName = isTypo ? "grammar-typo" : "grammar-other";
 
         console.debug(
-          `🎨 [${index}] Highlighting "${error.error_text}" at ${start}-${error.end_index} with ${formatName}`
+          `🎨 [${index}] Highlighting "${error.error_text}" at ${start}-${error.end_index} with ${formatName}`,
         );
 
         try {
@@ -388,7 +386,7 @@ export class ErrorHighlighter {
               len,
               formatName,
               true,
-              "silent"
+              "silent",
             );
           } else {
             this.editor.formatText(start, len, formatName, true, "silent");
@@ -396,7 +394,7 @@ export class ErrorHighlighter {
         } catch (err) {
           console.warn(
             `Failed to highlight error at ${start}-${error.end_index}:`,
-            err
+            err,
           );
         }
       });
@@ -442,7 +440,7 @@ export class ErrorHighlighter {
     }
 
     console.debug(
-      `🎨 Highlighting line ${lineNumber} with ${errors.length} errors`
+      `🎨 Highlighting line ${lineNumber} with ${errors.length} errors`,
     );
 
     const savedSelection = this.cursorManager.saveCursorPosition();
@@ -459,12 +457,12 @@ export class ErrorHighlighter {
             length,
             errorClass,
             true,
-            "silent"
+            "silent",
           );
         } catch (err) {
           console.warn(
             `Failed to highlight error at ${error.start_index}-${error.end_index}:`,
-            err
+            err,
           );
         }
       }
@@ -497,12 +495,12 @@ export class ErrorHighlighter {
             lineLength,
             formatType,
             false,
-            "silent"
+            "silent",
           );
         } catch (err) {
           console.warn(
             `Failed to clear ${formatType} for line ${lineNumber}:`,
-            err
+            err,
           );
         }
       }
@@ -520,8 +518,7 @@ export class ErrorHighlighter {
    * Get the appropriate CSS class for an error code
    */
   private getErrorClass(errorCode: string): string {
-    const isTypo =
-      errorCode === "typo" ||
+    const isTypo = errorCode === "typo" ||
       errorCode === "unknown-word" ||
       errorCode.toLowerCase().includes("spell");
     return isTypo ? "grammar-typo" : "grammar-other";

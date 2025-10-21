@@ -66,14 +66,14 @@ export class ConfigManager {
    */
   private initializeDOMElements(): void {
     this.languageSelect = document.getElementById(
-      "language-select"
+      "language-select",
     ) as HTMLSelectElement;
     this.clearButton = document.getElementById(
-      "clear-btn"
+      "clear-btn",
     ) as HTMLButtonElement;
     this.statusText = document.getElementById("status-text") as HTMLElement;
     this.statusDisplay = document.getElementById(
-      "status-display"
+      "status-display",
     ) as HTMLElement;
     this.errorCount = document.getElementById("error-count") as HTMLElement;
   }
@@ -125,7 +125,7 @@ export class ConfigManager {
   private createApiForLanguage(language: SupportedLanguage): CheckerApi {
     // Find the language in our available languages list
     const languageInfo = this.availableLanguages.find(
-      (lang) => lang.code === language
+      (lang) => lang.code === language,
     );
 
     if (languageInfo) {
@@ -162,7 +162,7 @@ export class ConfigManager {
       "🔧 ConfigManager: Language changed from",
       previousLanguage,
       "to",
-      language
+      language,
     );
 
     // Notify callback about language change
@@ -196,7 +196,7 @@ export class ConfigManager {
       console.debug(
         "🔧 ConfigManager: Loaded",
         this.availableLanguages.length,
-        "languages"
+        "languages",
       );
 
       // Re-initialize the API with the current language using the new data
@@ -206,7 +206,7 @@ export class ConfigManager {
       this.callbacks.onConfigurationInitialized();
 
       console.debug(
-        "🔧 ConfigManager: Language initialization completed successfully"
+        "🔧 ConfigManager: Language initialization completed successfully",
       );
     } catch (error) {
       console.warn("⚠️ ConfigManager: Failed to initialize languages:", error);

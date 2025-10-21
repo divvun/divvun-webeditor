@@ -16,7 +16,7 @@ interface EditorInterface {
     index: number,
     length: number,
     format: string,
-    value: boolean
+    value: boolean,
   ): void;
   setSelection(index: number, length: number): void;
   focus(): void;
@@ -47,7 +47,7 @@ export class SuggestionManager {
     error: CheckerError,
     index: number,
     length: number,
-    ev: MouseEvent
+    ev: MouseEvent,
   ): void {
     // Remove existing tooltip
     const existing = document.querySelector(".error-tooltip");
@@ -124,10 +124,10 @@ export class SuggestionManager {
       "absolute bg-white border border-gray-300 rounded-md shadow-lg z-[1000] min-w-[120px] overflow-hidden";
 
     // Adjust coordinates to prevent menu from appearing off-screen
-    const viewportWidth =
-      globalThis.innerWidth || document.documentElement.clientWidth;
-    const viewportHeight =
-      globalThis.innerHeight || document.documentElement.clientHeight;
+    const viewportWidth = globalThis.innerWidth ||
+      document.documentElement.clientWidth;
+    const viewportHeight = globalThis.innerHeight ||
+      document.documentElement.clientHeight;
 
     const adjustedX = Math.max(10, Math.min(x, viewportWidth - 200));
     const adjustedY = Math.max(10, Math.min(y, viewportHeight - 150));
@@ -215,7 +215,7 @@ export class SuggestionManager {
     _error: CheckerError,
     suggestion: string,
     index: number,
-    length: number
+    length: number,
   ): void {
     try {
       // Use atomic text replacement to prevent intermediate state issues
