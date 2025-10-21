@@ -134,7 +134,7 @@ export class GrammarChecker {
         this.textAnalyzer.checkGrammar();
       },
       onRecheckLine: (lineNumber: number) => {
-        this.performSingleLineCheck(lineNumber);
+        this.recheckModifiedLine(lineNumber);
       },
     };
     this.suggestionManager = new SuggestionManager(
@@ -394,12 +394,19 @@ export class GrammarChecker {
       }
 
       console.log(`🔄 Starting line check for line ${lineNumber}`);
-      const checkPromise = this.performSingleLineCheck(lineNumber);
+      // Use recheckModifiedLine which handles everything robustly
+      const checkPromise = this.recheckModifiedLine(lineNumber);
       this.pendingLineChecks.set(lineNumber, checkPromise);
 
-      checkPromise.finally(() => {
-        this.pendingLineChecks.delete(lineNumber);
-      });
+      checkPromise
+        .then(() => {
+          // Update EventManager with current errors for click handling
+          this.eventManager.updateErrors(this.state.errors);
+          this.updateErrorCount(this.state.errors.length);
+        })
+        .finally(() => {
+          this.pendingLineChecks.delete(lineNumber);
+        });
     }, this.LINE_CHECK_DEBOUNCE_MS);
 
     this.lineDebounceTimers.set(lineNumber, timerId);
@@ -409,57 +416,21 @@ export class GrammarChecker {
   }
 
   /**
-   * Perform the actual line check (extracted for better control)
-   */
-  private async performSingleLineCheck(lineNumber: number): Promise<void> {
-    console.log(`🔍 performSingleLineCheck ENTERED for line: ${lineNumber}`);
-    try {
-      console.log(`🔍 Checking specific line: ${lineNumber}`);
-
-      console.log(`🔬 About to call checkAndHighlightLine`);
-      // Use atomic check + highlight - this prevents race conditions
-      const errors = await this.textAnalyzer.checkAndHighlightLine(
-        lineNumber,
-        this.errorHighlighter
-      );
-
-      console.log(
-        `✅ Line ${lineNumber} atomic check+highlight complete: ${errors.length} errors found`
-      );
-
-      // Update state and EventManager with the new errors for click handling
-      if (errors.length > 0) {
-        console.log(`🔗 Setting up click handlers for ${errors.length} errors`);
-        this.state.errors = errors;
-        this.eventManager.updateErrors(errors);
-        // Update error count in UI
-        this.updateErrorCount(errors.length);
-      }
-
-      // Cancel any pending debounce since line-specific check completed successfully
-      this.stateMachine.cancelPendingCheck();
-    } catch (error) {
-      console.error(
-        `❌ Line-specific checking failed for line ${lineNumber}:`,
-        error
-      );
-      // Fallback to full document check
-      this.textAnalyzer.checkGrammar();
-    }
-  }
-
-  /**
    * Handle newline creation by checking affected lines
    */
   private async handleNewlineEdit(lineNumber: number): Promise<void> {
     try {
       console.debug(`📄 Handling newline at line ${lineNumber}`);
 
-      // Use atomic check + highlight for both lines
+      // Use recheckModifiedLine for both lines affected by the split
       await Promise.all([
-        this.performSingleLineCheck(lineNumber),
-        this.performSingleLineCheck(lineNumber + 1),
+        this.recheckModifiedLine(lineNumber),
+        this.recheckModifiedLine(lineNumber + 1),
       ]);
+
+      // Update EventManager with current errors for click handling
+      this.eventManager.updateErrors(this.state.errors);
+      this.updateErrorCount(this.state.errors.length);
 
       console.debug(
         `✅ Newline handling complete for lines ${lineNumber}-${lineNumber + 1}`
