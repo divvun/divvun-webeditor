@@ -1,3 +1,5 @@
+import RetryButton from "./RetryButton.tsx";
+
 export default function StatusBar() {
   return (
     <div className="bg-gray-50 border-t border-gray-200 px-6 py-4">
@@ -10,14 +12,7 @@ export default function StatusBar() {
           >
             <span id="status-text">Ready</span>
           </div>
-          <button
-            type="button"
-            id="retry-button"
-            className="hidden ml-2 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded transition-colors"
-            title="Retry grammar check"
-          >
-            Retry
-          </button>
+          <RetryButton />
         </div>
         <div
           id="error-count"
