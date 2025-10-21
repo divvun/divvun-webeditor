@@ -40,7 +40,7 @@ import { atomicTextReplace } from "./editor-utils.ts";
 export class GrammarChecker {
   public state: EditorState;
   private checkingContext: CheckingContext | null = null;
-  private isHighlighting: boolean = false;
+  public isHighlighting: boolean = false;
   private previousText: string = ""; // Track previous text for edit detection
 
   // Configuration management
@@ -59,7 +59,7 @@ export class GrammarChecker {
   public textAnalyzer: TextAnalyzer;
 
   // State machine
-  private stateMachine: CheckerStateMachine;
+  public stateMachine: CheckerStateMachine;
 
   // Event management
   public eventManager: EventManager;
@@ -94,7 +94,8 @@ export class GrammarChecker {
     suggestionManager: SuggestionManager,
     textAnalyzer: TextAnalyzer,
     stateMachine: CheckerStateMachine,
-    eventManager: EventManager
+    eventManager: EventManager,
+    errorHighlighter: ErrorHighlighter
   ) {
     this.state = {
       lastCheckedContent: "",
@@ -103,7 +104,6 @@ export class GrammarChecker {
       errorSpans: [],
     };
 
-    // Use the provided dependencies
     this.configManager = configManager;
     this.editor = editor;
     this.cursorManager = cursorManager;
@@ -111,6 +111,7 @@ export class GrammarChecker {
     this.textAnalyzer = textAnalyzer;
     this.stateMachine = stateMachine;
     this.eventManager = eventManager;
+    this.errorHighlighter = errorHighlighter;
 
     // Initialize previous text tracking for edit detection
     this.previousText = this.editor.getText();
@@ -123,32 +124,6 @@ export class GrammarChecker {
     } catch (_err) {
       // ignore
     }
-
-    // DOM elements are now managed by ConfigManager
-
-    // Initialize error highlighter
-    const highlightingCallbacks: HighlightingCallbacks = {
-      onHighlightingStart: () => {
-        this.isHighlighting = true;
-        this.eventManager.setHighlightingState(true);
-      },
-      onHighlightingComplete: () => {
-        this.isHighlighting = false;
-        this.eventManager.setHighlightingState(false);
-        this.stateMachine.onHighlightingComplete();
-      },
-      onErrorsCleared: () => {
-        this.state.errors = [];
-        this.eventManager.updateErrors([]);
-        this.state.errorSpans = [];
-        this.updateErrorCount(0);
-      },
-    };
-    this.errorHighlighter = new ErrorHighlighter(
-      this.editor,
-      this.cursorManager,
-      highlightingCallbacks
-    );
   }
 
   async initializeLanguages(): Promise<void> {
@@ -1130,8 +1105,16 @@ document.addEventListener("DOMContentLoaded", () => {
           event
         );
       },
-      onErrorRightClick: (x: number, y: number, matchingError: CheckerError) => {
-        grammarCheckerRef?.suggestionManager.showContextMenu(x, y, matchingError);
+      onErrorRightClick: (
+        x: number,
+        y: number,
+        matchingError: CheckerError
+      ) => {
+        grammarCheckerRef?.suggestionManager.showContextMenu(
+          x,
+          y,
+          matchingError
+        );
       },
       onIntelligentPasteCheck: (
         prePasteSelection: { index: number; length: number },
@@ -1152,6 +1135,36 @@ document.addEventListener("DOMContentLoaded", () => {
       eventCallbacks
     );
 
+    // Create the error highlighter with callbacks
+    const highlightingCallbacks: HighlightingCallbacks = {
+      onHighlightingStart: () => {
+        if (grammarCheckerRef) {
+          grammarCheckerRef.isHighlighting = true;
+          grammarCheckerRef.eventManager.setHighlightingState(true);
+        }
+      },
+      onHighlightingComplete: () => {
+        if (grammarCheckerRef) {
+          grammarCheckerRef.isHighlighting = false;
+          grammarCheckerRef.eventManager.setHighlightingState(false);
+          grammarCheckerRef.stateMachine.onHighlightingComplete();
+        }
+      },
+      onErrorsCleared: () => {
+        if (grammarCheckerRef) {
+          grammarCheckerRef.state.errors = [];
+          grammarCheckerRef.eventManager.updateErrors([]);
+          grammarCheckerRef.state.errorSpans = [];
+          grammarCheckerRef.updateErrorCount(0);
+        }
+      },
+    };
+    const errorHighlighter = new ErrorHighlighter(
+      editor,
+      cursorManager,
+      highlightingCallbacks
+    );
+
     // Create the grammar checker with all dependencies
     const grammarChecker = new GrammarChecker(
       editor,
@@ -1160,7 +1173,8 @@ document.addEventListener("DOMContentLoaded", () => {
       suggestionManager,
       textAnalyzer,
       stateMachine,
-      eventManager
+      eventManager,
+      errorHighlighter
     );
     grammarCheckerInstance = grammarChecker;
     grammarCheckerRef = grammarChecker;
