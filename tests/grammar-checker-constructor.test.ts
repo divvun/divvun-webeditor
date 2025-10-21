@@ -6,9 +6,10 @@ import { assertEquals } from "jsr:@std/assert@1";
 import type { QuillBridgeInstance } from "../src/quill-bridge-instance.ts";
 import type { ConfigManager } from "../src/config-manager.ts";
 import type { CursorManager } from "../src/cursor-manager.ts";
+import type { SuggestionManager } from "../src/suggestion-manager.ts";
 
 Deno.test(
-  "GrammarChecker constructor requires editor, configManager, and cursorManager parameters",
+  "GrammarChecker constructor requires editor, configManager, cursorManager, and suggestionManager parameters",
   () => {
     // Create a minimal mock Quill editor
     const mockEditor: QuillBridgeInstance = {
@@ -71,6 +72,13 @@ Deno.test(
       restoreCursorPosition: () => {},
     } as unknown as CursorManager;
 
+    // Create a minimal mock SuggestionManager
+    const mockSuggestionManager = {
+      showSuggestionTooltip: () => {},
+      hideSuggestionTooltip: () => {},
+      showContextMenu: () => {},
+    } as unknown as SuggestionManager;
+
     // Test that we can pass all parameters to the constructor
     // This verifies the constructor accepts the parameters
     // We can't fully instantiate GrammarChecker in a test without DOM,
@@ -79,13 +87,15 @@ Deno.test(
     const constructorAcceptsParams = (
       editor: QuillBridgeInstance,
       configManager: ConfigManager,
-      cursorManager: CursorManager
+      cursorManager: CursorManager,
+      suggestionManager: SuggestionManager
     ) => {
       // This is a type check - if it compiles, the signature is correct
       return (
         typeof editor !== "undefined" &&
         typeof configManager !== "undefined" &&
-        typeof cursorManager !== "undefined"
+        typeof cursorManager !== "undefined" &&
+        typeof suggestionManager !== "undefined"
       );
     };
 
@@ -93,7 +103,8 @@ Deno.test(
       constructorAcceptsParams(
         mockEditor,
         mockConfigManager,
-        mockCursorManager
+        mockCursorManager,
+        mockSuggestionManager
       ),
       true
     );
@@ -101,15 +112,16 @@ Deno.test(
 );
 
 Deno.test(
-  "GrammarChecker type signature requires editor, configManager, and cursorManager",
+  "GrammarChecker type signature requires editor, configManager, cursorManager, and suggestionManager",
   () => {
     // This test verifies the type signature at compile time
-    // If this file compiles, the constructor requires all three parameters
+    // If this file compiles, the constructor requires all four parameters
 
     type ConstructorType = new (
       editor: QuillBridgeInstance,
       configManager: ConfigManager,
-      cursorManager: CursorManager
+      cursorManager: CursorManager,
+      suggestionManager: SuggestionManager
     ) => unknown;
 
     // This is a compile-time assertion

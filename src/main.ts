@@ -38,7 +38,7 @@ import { atomicTextReplace } from "./editor-utils.ts";
 // ConfigManager now handles available languages
 
 export class GrammarChecker {
-  private state: EditorState;
+  public state: EditorState;
   private checkingContext: CheckingContext | null = null;
   private isHighlighting: boolean = false;
   private previousText: string = ""; // Track previous text for edit detection
@@ -56,7 +56,7 @@ export class GrammarChecker {
   private suggestionManager: SuggestionManager;
 
   // Text analysis
-  private textAnalyzer: TextAnalyzer;
+  public textAnalyzer: TextAnalyzer;
 
   // State machine
   private stateMachine: CheckerStateMachine;
@@ -65,7 +65,7 @@ export class GrammarChecker {
   private eventManager: EventManager;
 
   // Error highlighting
-  private errorHighlighter: ErrorHighlighter;
+  public errorHighlighter: ErrorHighlighter;
 
   // Line checking coordination
   private pendingLineChecks: Map<number, Promise<void>> = new Map();
@@ -82,11 +82,13 @@ export class GrammarChecker {
    * @param editor - Quill editor instance to use for the grammar checker.
    * @param configManager - Configuration manager instance.
    * @param cursorManager - Cursor manager instance.
+   * @param suggestionManager - Suggestion manager instance.
    */
   constructor(
     editor: QuillBridgeInstance,
     configManager: ConfigManager,
-    cursorManager: CursorManager
+    cursorManager: CursorManager,
+    suggestionManager: SuggestionManager
   ) {
     this.state = {
       lastCheckedContent: "",
@@ -99,30 +101,10 @@ export class GrammarChecker {
     this.configManager = configManager;
     this.editor = editor;
     this.cursorManager = cursorManager;
+    this.suggestionManager = suggestionManager;
 
     // Initialize previous text tracking for edit detection
     this.previousText = this.editor.getText();
-
-    // Initialize suggestion manager
-    const suggestionCallbacks: SuggestionCallbacks = {
-      onSuggestionApplied: (error: CheckerError, suggestion: string) => {
-        this.applySuggestion(error, suggestion);
-      },
-      onClearErrors: () => {
-        this.state.lastCheckedContent = "";
-        this.errorHighlighter.clearErrors();
-      },
-      onCheckGrammar: () => {
-        this.textAnalyzer.checkGrammar();
-      },
-      onRecheckLine: (lineNumber: number) => {
-        this.recheckModifiedLine(lineNumber);
-      },
-    };
-    this.suggestionManager = new SuggestionManager(
-      this.editor,
-      suggestionCallbacks
-    );
 
     // Initialize text analyzer
     const textAnalysisCallbacks: TextAnalysisCallbacks = {
@@ -775,7 +757,7 @@ export class GrammarChecker {
     alert(`Error: ${message}`);
   }
 
-  private applySuggestion(error: CheckerError, suggestion: string): void {
+  public applySuggestion(error: CheckerError, suggestion: string): void {
     try {
       // Mark that we're applying a suggestion to prevent undo detection interference
       this.eventManager.setSuggestionApplicationState(true);
@@ -921,7 +903,7 @@ export class GrammarChecker {
     this.errorHighlighter.highlightErrors(this.state.errors);
   }
 
-  private async recheckModifiedLine(lineNumber: number): Promise<void> {
+  public async recheckModifiedLine(lineNumber: number): Promise<void> {
     try {
       const fullText = this.editor.getText();
       const lines = fullText.split("\n");
@@ -1121,13 +1103,40 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create the cursor manager
     const cursorManager = new CursorManager(editor);
 
+    // Create the suggestion manager with callbacks
+    // Note: These callbacks will be bound to grammarChecker methods after it's created
+    let grammarCheckerRef: GrammarChecker | null = null;
+    const suggestionCallbacks: SuggestionCallbacks = {
+      onSuggestionApplied: (error: CheckerError, suggestion: string) => {
+        grammarCheckerRef?.applySuggestion(error, suggestion);
+      },
+      onClearErrors: () => {
+        if (grammarCheckerRef) {
+          grammarCheckerRef.state.lastCheckedContent = "";
+          grammarCheckerRef.errorHighlighter.clearErrors();
+        }
+      },
+      onCheckGrammar: () => {
+        grammarCheckerRef?.textAnalyzer.checkGrammar();
+      },
+      onRecheckLine: (lineNumber: number) => {
+        grammarCheckerRef?.recheckModifiedLine(lineNumber);
+      },
+    };
+    const suggestionManager = new SuggestionManager(
+      editor,
+      suggestionCallbacks
+    );
+
     // Create the grammar checker with all dependencies
     const grammarChecker = new GrammarChecker(
       editor,
       configManager,
-      cursorManager
+      cursorManager,
+      suggestionManager
     );
     grammarCheckerInstance = grammarChecker;
+    grammarCheckerRef = grammarChecker;
 
     // Initialize languages asynchronously
     grammarChecker
