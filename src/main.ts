@@ -81,8 +81,13 @@ export class GrammarChecker {
    *
    * @param editor - Quill editor instance to use for the grammar checker.
    * @param configManager - Configuration manager instance.
+   * @param cursorManager - Cursor manager instance.
    */
-  constructor(editor: QuillBridgeInstance, configManager: ConfigManager) {
+  constructor(
+    editor: QuillBridgeInstance,
+    configManager: ConfigManager,
+    cursorManager: CursorManager
+  ) {
     this.state = {
       lastCheckedContent: "",
       errors: [],
@@ -93,12 +98,10 @@ export class GrammarChecker {
     // Use the provided dependencies
     this.configManager = configManager;
     this.editor = editor;
+    this.cursorManager = cursorManager;
 
     // Initialize previous text tracking for edit detection
     this.previousText = this.editor.getText();
-
-    // Initialize cursor manager
-    this.cursorManager = new CursorManager(this.editor);
 
     // Initialize suggestion manager
     const suggestionCallbacks: SuggestionCallbacks = {
@@ -986,10 +989,7 @@ export class GrammarChecker {
     this.configManager.setLanguage(language);
   }
 
-  handleLanguageChange(
-    language: SupportedLanguage,
-    api: CheckerApi
-  ): void {
+  handleLanguageChange(language: SupportedLanguage, api: CheckerApi): void {
     console.debug("🔄 Handling language change to", language);
 
     // Update text analyzer with new API and language
@@ -1118,8 +1118,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const configManager = new ConfigManager(configCallbacks);
 
-    // Create the grammar checker with the editor and config manager
-    const grammarChecker = new GrammarChecker(editor, configManager);
+    // Create the cursor manager
+    const cursorManager = new CursorManager(editor);
+
+    // Create the grammar checker with all dependencies
+    const grammarChecker = new GrammarChecker(
+      editor,
+      configManager,
+      cursorManager
+    );
     grammarCheckerInstance = grammarChecker;
 
     // Initialize languages asynchronously
