@@ -180,33 +180,4 @@ export class CursorManager {
       this.restoreCursorPosition(selection);
     }
   }
-
-  /**
-   * Get the current cursor position safely
-   * @returns Current cursor position or null if unable to determine
-   */
-  getCurrentCursorPosition(): CursorPosition | null {
-    return this.saveCursorPosition();
-  }
-
-  /**
-   * Check if the cursor position is valid for the current document
-   * @param position The position to validate
-   * @returns True if the position is valid
-   */
-  isValidPosition(position: CursorPosition | null): boolean {
-    if (!position) return false;
-
-    try {
-      const docLength = this.editor.getLength();
-      return (
-        position.index >= 0 &&
-        position.index <= docLength &&
-        position.length >= 0 &&
-        position.index + position.length <= docLength
-      );
-    } catch (_err) {
-      return false;
-    }
-  }
 }

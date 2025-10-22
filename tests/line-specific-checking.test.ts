@@ -113,8 +113,8 @@ Deno.test("Line-specific checking - Single line API call", async () => {
     createError("error", 16, 21), // positions within the line
   ]);
 
-  // Check specific line
-  const errors = await analyzer.checkSpecificLine(0);
+  // Check specific line using production method
+  const errors = await analyzer.checkLineForStateManagement(0);
 
   // Verify API was called with only the first line (with newline)
   assertEquals(mockAPI.callLog.length, 1);
@@ -148,7 +148,7 @@ Deno.test(
       createError("problems", 11, 19), // Line-relative position
     ]);
 
-    const errors = await analyzer.checkSpecificLine(2);
+    const errors = await analyzer.checkLineForStateManagement(2);
 
     // Calculate expected absolute position:
     // Line 0: 23 chars, Line 1: 16 chars, Line 2 starts at: 23 + 16 = 39
@@ -169,12 +169,12 @@ Deno.test("Line-specific checking - Empty and invalid lines", async () => {
   mockEditor.setText("Line 0\n\nLine 2");
 
   // Check empty line
-  const emptyLineErrors = await analyzer.checkSpecificLine(1);
+  const emptyLineErrors = await analyzer.checkLineForStateManagement(1);
   assertEquals(emptyLineErrors.length, 0);
   assertEquals(mockAPI.callLog.length, 0); // No API call for empty line
 
   // Check invalid line number
-  const invalidLineErrors = await analyzer.checkSpecificLine(999);
+  const invalidLineErrors = await analyzer.checkLineForStateManagement(999);
   assertEquals(invalidLineErrors.length, 0);
 });
 
@@ -190,13 +190,13 @@ Deno.test("Line-specific checking - API calls with caching", async () => {
   mockAPI.setMockResponse("Same line content\n", [createError("line", 5, 9)]);
 
   // First check - should call API
-  await analyzer.checkSpecificLine(0);
+  await analyzer.checkLineForStateManagement(0);
   assertEquals(mockAPI.callLog.length, 1);
 
   mockAPI.clearCallLog();
 
   // Second check - should use cache (NOT call API again)
-  await analyzer.checkSpecificLine(0);
+  await analyzer.checkLineForStateManagement(0);
   assertEquals(mockAPI.callLog.length, 0); // Cache hit - no API call
 });
 
@@ -217,7 +217,7 @@ Deno.test(
     ]);
 
     // Check line 0 - should find error
-    const line0Errors = await analyzer.checkSpecificLine(0);
+    const line0Errors = await analyzer.checkLineForStateManagement(0);
     assertEquals(line0Errors.length, 1);
 
     // Now edit line 1 only
@@ -229,10 +229,10 @@ Deno.test(
     mockAPI.setMockResponse("Line 1 is modified\n", []); // No errors in modified line
 
     // Check line 1
-    await analyzer.checkSpecificLine(1);
+    await analyzer.checkLineForStateManagement(1);
 
     // Check line 0 again - with caching, will use cache (no API call)
-    const line0ErrorsAfterEdit = await analyzer.checkSpecificLine(0);
+    const line0ErrorsAfterEdit = await analyzer.checkLineForStateManagement(0);
 
     // Should still have the error from cache
     assertEquals(line0ErrorsAfterEdit.length, 1);
@@ -242,10 +242,10 @@ Deno.test(
   },
 );
 
-Deno.test("Line-specific checking - Callback integration", async () => {
+Deno.test("Line-specific checking - Error detection and return", async () => {
   const mockEditor = new MockEditor();
   const mockAPI = new MockAPI();
-  const { callbacks, calls } = createMockCallbacks();
+  const { callbacks } = createMockCallbacks();
 
   const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
 
@@ -253,17 +253,14 @@ Deno.test("Line-specific checking - Callback integration", async () => {
 
   mockAPI.setMockResponse("Line with errors", [createError("errors", 10, 16)]);
 
-  await analyzer.checkSpecificLine(0);
+  // Call the production method directly
+  const errors = await analyzer.checkLineForStateManagement(0);
 
-  // Check that appropriate callbacks were triggered
-  const errorFoundCalls = calls.filter(
-    (call) => call.method === "onErrorsFound",
-  );
-  assertEquals(errorFoundCalls.length, 1);
-
-  const [errors, lineNumber] = errorFoundCalls[0].args;
-  assertEquals((errors as CheckerError[]).length, 1);
-  assertEquals(lineNumber, 0);
+  // Verify the errors are returned correctly
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0].error_text, "errors");
+  assertEquals(errors[0].start_index, 10);
+  assertEquals(errors[0].end_index, 16);
 });
 
 Deno.test("Line-specific checking - Performance comparison", async () => {
@@ -281,7 +278,7 @@ Deno.test("Line-specific checking - Performance comparison", async () => {
   mockAPI.setMockResponse("Line 25 content here\n", [createError("25", 5, 7)]);
 
   const start = performance.now();
-  const _errors = await analyzer.checkSpecificLine(25);
+  const _errors = await analyzer.checkLineForStateManagement(25);
   const duration = performance.now() - start;
 
   // Should only have made one API call for the specific line
@@ -312,7 +309,7 @@ Deno.test(
 
     // Check specific line
     const start = performance.now();
-    const errors = await analyzer.checkSpecificLine(0);
+    const errors = await analyzer.checkLineForStateManagement(0);
     const duration = performance.now() - start;
 
     // Verify line-specific check worked
@@ -352,19 +349,19 @@ Deno.test("Line-specific checking - State machine integration", async () => {
   // First line edit: "" -> "D"
   mockEditor.setText("D");
   mockAPI.setMockResponse("D", []);
-  const errors1 = await analyzer.checkSpecificLine(0);
+  const errors1 = await analyzer.checkLineForStateManagement(0);
   assertEquals(errors1.length, 0);
 
   // Second line edit: "D" -> "Dá"
   mockEditor.setText("Dá");
   mockAPI.setMockResponse("Dá", []);
-  const errors2 = await analyzer.checkSpecificLine(0);
+  const errors2 = await analyzer.checkLineForStateManagement(0);
   assertEquals(errors2.length, 0);
 
   // Third line edit: "Dá" -> "Dál"
   mockEditor.setText("Dál");
   mockAPI.setMockResponse("Dál", []);
-  const errors3 = await analyzer.checkSpecificLine(0);
+  const errors3 = await analyzer.checkLineForStateManagement(0);
   assertEquals(errors3.length, 0);
 
   // Should only have made 3 line-specific API calls, no full document checks

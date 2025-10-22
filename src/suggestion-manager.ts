@@ -268,13 +268,4 @@ export class SuggestionManager {
     const contextMenu = document.getElementById("grammar-context-menu");
     if (contextMenu) contextMenu.remove();
   }
-
-  /**
-   * Check if any suggestion UI is currently visible
-   */
-  isSuggestionUIVisible(): boolean {
-    const tooltip = document.querySelector(".error-tooltip");
-    const contextMenu = document.getElementById("grammar-context-menu");
-    return !!(tooltip || contextMenu);
-  }
 }

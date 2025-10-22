@@ -118,11 +118,9 @@ Deno.test(
       assertExists(cursorManager);
       assertExists(stateMachine);
 
-      // These are usable in integration tests
-      assertEquals(
-        cursorManager.isValidPosition({ index: 0, length: 0 }),
-        true,
-      );
+      // Test that dependencies are usable
+      const savedPos = cursorManager.saveCursorPosition();
+      assertExists(savedPos); // Should be able to save position
       assertEquals(stateMachine.getCurrentState(), "idle");
     } finally {
       stateMachine.cleanup();
@@ -159,61 +157,66 @@ Deno.test("CursorManager - save and restore cursor position", () => {
   assertEquals(restored?.length, 0);
 });
 
-Deno.test("CursorManager - validate cursor positions", () => {
+Deno.test("CursorManager - handles valid and invalid positions", () => {
   const editor = createMockEditor();
   const cursorManager = new CursorManager(editor);
 
   editor.setText("Hello World");
 
-  // Valid positions
-  assertEquals(cursorManager.isValidPosition({ index: 0, length: 0 }), true);
-  assertEquals(cursorManager.isValidPosition({ index: 5, length: 3 }), true);
-  assertEquals(
-    cursorManager.isValidPosition({ index: 11, length: 0 }),
-    true,
-  ); // At end
+  // Test that valid positions can be saved and restored
+  editor.setSelection(0, 0);
+  const pos1 = cursorManager.saveCursorPosition();
+  assertExists(pos1);
+  assertEquals(pos1.index, 0);
 
-  // Invalid positions
-  assertEquals(
-    cursorManager.isValidPosition({ index: -1, length: 0 }),
-    false,
-  );
-  assertEquals(
-    cursorManager.isValidPosition({ index: 12, length: 0 }),
-    false,
-  ); // Beyond end
-  assertEquals(
-    cursorManager.isValidPosition({ index: 5, length: 20 }),
-    false,
-  ); // Length exceeds document
-  assertEquals(cursorManager.isValidPosition(null), false);
+  editor.setSelection(5, 3);
+  const pos2 = cursorManager.saveCursorPosition();
+  assertExists(pos2);
+  assertEquals(pos2.index, 5);
+  assertEquals(pos2.length, 3);
+
+  // Test that restoring works with valid positions
+  cursorManager.restoreCursorPositionImmediate(pos1);
+  const restored = editor.getSelection();
+  assertEquals(restored?.index, 0);
+  assertEquals(restored?.length, 0);
 });
 
 Deno.test("CursorManager - handle edge cases", () => {
   const editor = createMockEditor();
   const cursorManager = new CursorManager(editor);
 
-  // Empty document
+  // Empty document - test that operations work without errors
   editor.setText("");
-  assertEquals(cursorManager.isValidPosition({ index: 0, length: 0 }), true);
-  assertEquals(cursorManager.isValidPosition({ index: 1, length: 0 }), false);
+  editor.setSelection(0, 0);
+  const emptyPos = cursorManager.saveCursorPosition();
+  assertExists(emptyPos);
+  assertEquals(emptyPos.index, 0);
 
-  // Null selection
-  cursorManager.restoreCursorPosition(null); // Should not throw
-  cursorManager.restoreCursorPositionImmediate(null); // Should not throw
+  // Null selection - should not throw
+  cursorManager.restoreCursorPosition(null);
+  cursorManager.restoreCursorPositionImmediate(null);
 });
 
-Deno.test("CursorManager - getCurrentCursorPosition", () => {
+Deno.test("CursorManager - save and restore cursor position", () => {
   const editor = createMockEditor();
   const cursorManager = new CursorManager(editor);
 
   editor.setText("Test text");
   editor.setSelection(4, 0);
 
-  const position = cursorManager.getCurrentCursorPosition();
+  // Use the production saveCursorPosition method
+  const position = cursorManager.saveCursorPosition();
   assertExists(position);
   assertEquals(position.index, 4);
   assertEquals(position.length, 0);
+
+  // Change position and restore
+  editor.setSelection(0, 0);
+  cursorManager.restoreCursorPositionImmediate(position);
+  const restored = editor.getSelection();
+  assertEquals(restored?.index, 4);
+  assertEquals(restored?.length, 0);
 });
 
 Deno.test("CursorManager - selection with length", () => {

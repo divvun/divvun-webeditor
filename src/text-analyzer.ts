@@ -81,23 +81,6 @@ export class TextAnalyzer {
   }
 
   /**
-   * Check a specific line only - for line-specific text checking
-   * Uses cache-aware checking for optimal performance
-   */
-  async checkSpecificLine(lineNumber: number): Promise<CheckerError[]> {
-    // Use the cache-aware method for checking
-    const errors = await this.checkLineForStateManagement(lineNumber);
-
-    // Notify callbacks with line-specific information
-    if (errors.length > 0) {
-      this.callbacks.onErrorsFound(errors, lineNumber);
-      this.callbacks.onUpdateErrorCount(errors.length);
-    }
-
-    return errors;
-  }
-
-  /**
    * Main text checking method - checks entire document using cache-aware approach
    */
   async checkText(): Promise<void> {
@@ -195,58 +178,6 @@ export class TextAnalyzer {
    */
   getCheckingContext(): CheckingContext | null {
     return this.checkingContext;
-  }
-
-  /**
-   * Check and highlight a specific line atomically
-   * This is the main entry point for line-by-line checking + highlighting
-   * Uses cache-aware checking for optimal performance
-   */
-  async checkAndHighlightLine(
-    lineNumber: number,
-    highlighter: {
-      highlightSpecificLine: (
-        lineNumber: number,
-        errors: CheckerError[],
-      ) => void;
-      clearSpecificLine: (lineNumber: number, lineLength: number) => void;
-    },
-  ): Promise<CheckerError[]> {
-    console.log(`🧪 checkAndHighlightLine ENTERED for line ${lineNumber}`);
-
-    try {
-      // Use cache-aware checking
-      console.log(
-        `🔍 About to call checkLineForStateManagement for line ${lineNumber}`,
-      );
-      const errors = await this.checkLineForStateManagement(lineNumber);
-      console.log(
-        `✅ checkLineForStateManagement completed for line ${lineNumber}, found ${errors.length} errors`,
-      );
-
-      // Then apply highlighting
-      console.log(`🎨 About to apply highlighting for line ${lineNumber}`);
-      const lines = this.getTextLines();
-      if (lineNumber >= 0 && lineNumber < lines.length) {
-        const lineContent = lines[lineNumber];
-        // Clear old highlights for this line
-        highlighter.clearSpecificLine(lineNumber, lineContent.length);
-        // Apply new highlights if there are errors
-        if (errors.length > 0) {
-          highlighter.highlightSpecificLine(lineNumber, errors);
-        }
-      }
-      console.log(`✅ Highlighting completed for line ${lineNumber}`);
-
-      console.log(`🏁 checkAndHighlightLine COMPLETED for line ${lineNumber}`);
-      return errors;
-    } catch (error) {
-      console.error(
-        `❌ Error in checkAndHighlightLine for line ${lineNumber}:`,
-        error,
-      );
-      throw error;
-    }
   }
 
   /**

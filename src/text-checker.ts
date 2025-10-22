@@ -478,11 +478,6 @@ export class TextChecker {
       });
   }
 
-  async checkText(): Promise<void> {
-    // Delegate to TextAnalyzer
-    await this.textAnalyzer.checkText();
-  }
-
   public updateStatus(
     status: string,
     isChecking: boolean,
