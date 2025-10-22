@@ -247,34 +247,19 @@ export class TextChecker {
     startLine: number,
     endLine: number,
   ): Promise<void> {
-    const lines = this.getTextLines();
-    const currentText = this.editor.getText();
-
-    // Calculate the character range being checked
-    const startIndex = this.getLineStartIndex(startLine, lines);
-    const endIndex = endLine < lines.length - 1
-      ? this.getLineStartIndex(endLine + 1, lines)
-      : currentText.length;
-
-    // Remove all errors in the range being rechecked
-    this.removeErrorsInRange(startIndex, endIndex);
-
-    // Check the range using TextAnalyzer (cache-aware)
-    const newErrors = await this.textAnalyzer
-      .checkMultipleLinesForStateManagement(
-        startLine,
-        endLine,
-        (message) => this.updateStatus(message, true),
-      );
-
-    // Add the new errors
-    this.state.errors.push(...newErrors);
+    // Delegate to TextAnalyzer for error state management
+    this.state.errors = await this.textAnalyzer.checkLinesAndUpdateErrors(
+      this.state.errors,
+      startLine,
+      endLine,
+      (message) => this.updateStatus(message, true),
+    );
 
     // Re-highlight all errors
     this.errorHighlighter.highlightErrors(this.state.errors);
 
     console.debug(
-      `✅ Checked lines ${startLine}-${endLine}, found ${newErrors.length} errors. Total: ${this.state.errors.length}`,
+      `✅ Checked lines ${startLine}-${endLine}. Total: ${this.state.errors.length}`,
     );
   }
 
@@ -389,33 +374,29 @@ export class TextChecker {
 
     try {
       const lines = fullText.split("\n");
-      const newErrors: CheckerError[] = [];
 
       // Step 1: Remove errors from affected lines (they'll be rechecked)
-      const affectedStartIndex = this.getLineStartIndex(
+      const affectedStartIndex = this.textAnalyzer.getLineStartIndex(
         linesToCheck.startLine,
         lines,
       );
-      const affectedEndIndex = this.getLineStartIndex(
+      const affectedEndIndex = this.textAnalyzer.getLineStartIndex(
         linesToCheck.endLine + 1,
         lines,
       );
 
-      this.removeErrorsInRange(affectedStartIndex, affectedEndIndex);
+      this.state.errors = this.textAnalyzer.removeErrorsInRange(
+        this.state.errors,
+        affectedStartIndex,
+        affectedEndIndex,
+      );
 
       // Step 2: Adjust indices of errors that come after the paste
-      if (lengthDifference !== 0) {
-        this.state.errors = this.state.errors.map((error) => {
-          if (error.start_index > pasteStartIndex) {
-            return {
-              ...error,
-              start_index: error.start_index + lengthDifference,
-              end_index: error.end_index + lengthDifference,
-            };
-          }
-          return error;
-        });
-      }
+      this.state.errors = this.textAnalyzer.adjustErrorIndices(
+        this.state.errors,
+        pasteStartIndex,
+        lengthDifference,
+      );
 
       // Step 3: Check only the affected lines using TextAnalyzer
       const newErrorsFromLines = await this.textAnalyzer
@@ -425,15 +406,13 @@ export class TextChecker {
           (message) => this.updateStatus(message, true),
         );
 
-      newErrors.push(...newErrorsFromLines);
-
       // Highlight errors immediately
       if (newErrorsFromLines.length > 0) {
         this.errorHighlighter.highlightLineErrors(newErrorsFromLines);
       }
 
       // Step 4: Add new errors and update state
-      this.state.errors.push(...newErrors);
+      this.state.errors = [...this.state.errors, ...newErrorsFromLines];
       this.state.lastCheckedContent = fullText;
 
       // Re-highlight all errors to ensure proper display
@@ -499,46 +478,6 @@ export class TextChecker {
         console.warn("Text check failed:", error);
         this.stateMachine.onCheckFailed();
       });
-  }
-
-  /**
-   * Get current text lines from editor
-   */
-  private getTextLines(): string[] {
-    return this.editor.getText().split("\n");
-  }
-
-  /**
-   * Get line text with newline character if not the last line
-   */
-  private getLineWithNewline(lines: string[], lineIndex: number): string {
-    const line = lines[lineIndex];
-    return lineIndex < lines.length - 1 ? line + "\n" : line;
-  }
-
-  /**
-   * Calculate character offset of a line in the full document
-   */
-  private getLineStartIndex(lineNumber: number, lines: string[]): number {
-    if (lineNumber === 0) {
-      return 0;
-    }
-
-    let index = 0;
-    // Sum up all previous lines plus their newline characters
-    for (let i = 0; i < lineNumber; i++) {
-      index += this.getLineWithNewline(lines, i).length;
-    }
-    return index;
-  }
-
-  /**
-   * Remove errors that fall within a specific character range
-   */
-  private removeErrorsInRange(startIndex: number, endIndex: number): void {
-    this.state.errors = this.state.errors.filter((error) => {
-      return error.start_index < startIndex || error.start_index >= endIndex;
-    });
   }
 
   async checkText(): Promise<void> {
@@ -721,16 +660,12 @@ export class TextChecker {
       `Adjusting error indices after position ${correctionPosition} by ${lengthDifference}`,
     );
 
-    this.state.errors = this.state.errors.map((error) => {
-      if (error.start_index > correctionPosition) {
-        return {
-          ...error,
-          start_index: error.start_index + lengthDifference,
-          end_index: error.end_index + lengthDifference,
-        };
-      }
-      return error;
-    });
+    // Delegate to TextAnalyzer for error index adjustment
+    this.state.errors = this.textAnalyzer.adjustErrorIndices(
+      this.state.errors,
+      correctionPosition,
+      lengthDifference,
+    );
 
     // Re-highlight all errors with adjusted positions
     this.errorHighlighter.highlightErrors(this.state.errors);
@@ -738,7 +673,7 @@ export class TextChecker {
 
   public async recheckModifiedLine(lineNumber: number): Promise<void> {
     try {
-      const lines = this.getTextLines();
+      const lines = this.getText().split("\n");
 
       // Use 0-based indexing for consistency with state machine and TextAnalyzer
       if (lineNumber < 0 || lineNumber >= lines.length) {
@@ -746,29 +681,20 @@ export class TextChecker {
         return;
       }
 
-      const line = lines[lineNumber];
-      const lineWithNewline = this.getLineWithNewline(lines, lineNumber);
-      const lineStartPosition = this.getLineStartIndex(lineNumber, lines);
+      console.log(`Rechecking line ${lineNumber}: "${lines[lineNumber]}"`);
 
-      console.log(`Rechecking line ${lineNumber}: "${line}"`);
-
-      // Use TextAnalyzer to check the line (centralizes all checkText API calls)
-      const adjustedErrors = await this.textAnalyzer
-        .checkLineForStateManagement(lineNumber);
-
-      // Remove any existing errors from this line first
-      const lineEnd = lineStartPosition + lineWithNewline.length;
-      this.removeErrorsInRange(lineStartPosition, lineEnd);
-
-      // Add new errors from the rechecked line
-      this.state.errors.push(...adjustedErrors);
+      // Delegate to TextAnalyzer to recheck and update error array
+      this.state.errors = await this.textAnalyzer.recheckLineAndUpdateErrors(
+        this.state.errors,
+        lineNumber,
+      );
 
       // Always re-highlight the entire error set to ensure removed errors are cleared
       // This is important when a line goes from having errors to having none
       this.errorHighlighter.highlightErrors(this.state.errors);
 
       console.log(
-        `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`,
+        `Line ${lineNumber} recheck complete. Errors in state: ${this.state.errors.length}`,
       );
     } catch (error) {
       console.error(`Error rechecking line ${lineNumber}:`, error);
@@ -801,32 +727,14 @@ export class TextChecker {
     lineContent: string;
     positionInLine: number;
   } {
-    const lines = this.getTextLines();
-    let currentIndex = 0;
+    // Delegate to TextAnalyzer - note it returns 0-based lineNumber
+    const result = this.textAnalyzer.getLineFromError(error);
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineWithNewline = this.getLineWithNewline(lines, i);
-      const lineStart = currentIndex;
-      const lineEnd = currentIndex + lineWithNewline.length;
-
-      // Check if the error falls within this line
-      if (error.start_index >= lineStart && error.start_index < lineEnd) {
-        return {
-          lineNumber: i + 1, // 1-based line numbering
-          lineContent: line,
-          positionInLine: error.start_index - lineStart,
-        };
-      }
-
-      currentIndex += lineWithNewline.length;
-    }
-
-    // Fallback if line not found
+    // Convert to 1-based line numbering for this method's return
     return {
-      lineNumber: 1,
-      lineContent: lines[0] || "",
-      positionInLine: error.start_index,
+      lineNumber: result.lineNumber + 1,
+      lineContent: result.lineContent,
+      positionInLine: result.positionInLine,
     };
   }
 

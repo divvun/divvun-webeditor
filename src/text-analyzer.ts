@@ -420,4 +420,190 @@ export class TextAnalyzer {
 
     return allErrors;
   }
+
+  /**
+   * Get the character offset where a line starts in the document
+   * @param lineNumber - 0-based line number
+   * @param lines - Array of text lines
+   * @returns Character offset from start of document
+   */
+  getLineStartIndex(lineNumber: number, lines: string[]): number {
+    if (lineNumber === 0) {
+      return 0;
+    }
+
+    let index = 0;
+    for (let i = 0; i < lineNumber; i++) {
+      index += this.getLineWithNewline(lines, i).length;
+    }
+    return index;
+  }
+
+  /**
+   * Find which line contains a specific error
+   * @param error - The error to locate
+   * @returns Line information including line number, content, and position within line
+   */
+  getLineFromError(error: CheckerError): {
+    lineNumber: number;
+    lineContent: string;
+    positionInLine: number;
+  } {
+    const lines = this.getTextLines();
+    let currentIndex = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineWithNewline = this.getLineWithNewline(lines, i);
+      const lineStart = currentIndex;
+      const lineEnd = currentIndex + lineWithNewline.length;
+
+      // Check if the error falls within this line
+      if (error.start_index >= lineStart && error.start_index < lineEnd) {
+        return {
+          lineNumber: i, // 0-based line numbering for internal consistency
+          lineContent: line,
+          positionInLine: error.start_index - lineStart,
+        };
+      }
+
+      currentIndex += lineWithNewline.length;
+    }
+
+    // Fallback if line not found
+    return {
+      lineNumber: 0,
+      lineContent: lines[0] || "",
+      positionInLine: error.start_index,
+    };
+  }
+
+  /**
+   * Remove errors that fall within a specific character range
+   * @param errors - Current error array
+   * @param startIndex - Start of range (inclusive)
+   * @param endIndex - End of range (exclusive)
+   * @returns Filtered error array
+   */
+  removeErrorsInRange(
+    errors: CheckerError[],
+    startIndex: number,
+    endIndex: number,
+  ): CheckerError[] {
+    return errors.filter((error) => {
+      return error.start_index < startIndex || error.start_index >= endIndex;
+    });
+  }
+
+  /**
+   * Adjust error indices after a text edit
+   * @param errors - Current error array
+   * @param position - Position where edit occurred
+   * @param lengthDifference - Net change in length (positive = insertion, negative = deletion)
+   * @returns Error array with adjusted indices
+   */
+  adjustErrorIndices(
+    errors: CheckerError[],
+    position: number,
+    lengthDifference: number,
+  ): CheckerError[] {
+    if (lengthDifference === 0) {
+      return errors;
+    }
+
+    return errors.map((error) => {
+      if (error.start_index > position) {
+        return {
+          ...error,
+          start_index: error.start_index + lengthDifference,
+          end_index: error.end_index + lengthDifference,
+        };
+      }
+      return error;
+    });
+  }
+
+  /**
+   * Check a range of lines and return updated error array
+   * This combines checking with error state management
+   *
+   * @param errors - Current error array
+   * @param startLine - Start line (inclusive)
+   * @param endLine - End line (inclusive)
+   * @param onProgress - Optional progress callback
+   * @returns Updated error array with old errors removed and new errors added
+   */
+  async checkLinesAndUpdateErrors(
+    errors: CheckerError[],
+    startLine: number,
+    endLine: number,
+    onProgress?: (message: string) => void,
+  ): Promise<CheckerError[]> {
+    const lines = this.getTextLines();
+    const currentText = this.editor.getText();
+
+    // Calculate the character range being checked
+    const startIndex = this.getLineStartIndex(startLine, lines);
+    const endIndex = endLine < lines.length - 1
+      ? this.getLineStartIndex(endLine + 1, lines)
+      : currentText.length;
+
+    // Remove all errors in the range being rechecked
+    let updatedErrors = this.removeErrorsInRange(errors, startIndex, endIndex);
+
+    // Check the range using cache-aware checking
+    const newErrors = await this.checkMultipleLinesForStateManagement(
+      startLine,
+      endLine,
+      onProgress,
+    );
+
+    // Add the new errors
+    updatedErrors = [...updatedErrors, ...newErrors];
+
+    return updatedErrors;
+  }
+
+  /**
+   * Recheck a single modified line and return updated error array
+   * @param errors - Current error array
+   * @param lineNumber - 0-based line number to recheck
+   * @returns Updated error array
+   */
+  async recheckLineAndUpdateErrors(
+    errors: CheckerError[],
+    lineNumber: number,
+  ): Promise<CheckerError[]> {
+    const lines = this.getTextLines();
+
+    if (lineNumber < 0 || lineNumber >= lines.length) {
+      console.warn(`Invalid line number: ${lineNumber}`);
+      return errors;
+    }
+
+    const lineWithNewline = this.getLineWithNewline(lines, lineNumber);
+    const lineStartPosition = this.getLineStartIndex(lineNumber, lines);
+
+    console.log(`Rechecking line ${lineNumber}: "${lines[lineNumber]}"`);
+
+    // Check the line
+    const adjustedErrors = await this.checkLineForStateManagement(lineNumber);
+
+    // Remove any existing errors from this line first
+    const lineEnd = lineStartPosition + lineWithNewline.length;
+    let updatedErrors = this.removeErrorsInRange(
+      errors,
+      lineStartPosition,
+      lineEnd,
+    );
+
+    // Add new errors from the rechecked line
+    updatedErrors = [...updatedErrors, ...adjustedErrors];
+
+    console.log(
+      `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`,
+    );
+
+    return updatedErrors;
+  }
 }
