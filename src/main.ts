@@ -511,7 +511,6 @@ export class GrammarChecker {
       const newErrors: CheckerError[] = [];
 
       // Step 1: Remove errors from affected lines (they'll be rechecked)
-      let currentIndex = 0;
       const affectedStartIndex = this.getLineStartIndex(
         linesToCheck.startLine,
         lines,
@@ -543,45 +542,19 @@ export class GrammarChecker {
         });
       }
 
-      // Step 3: Check only the affected lines
-      currentIndex = 0;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const lineWithNewline = i < lines.length - 1 ? line + "\n" : line;
+      // Step 3: Check only the affected lines using TextAnalyzer
+      const newErrorsFromLines = await this.textAnalyzer
+        .checkMultipleLinesForStateManagement(
+          linesToCheck.startLine,
+          linesToCheck.endLine,
+          (message) => this.updateStatus(message, true),
+        );
 
-        if (i >= linesToCheck.startLine && i <= linesToCheck.endLine) {
-          // Check this affected line
-          if (lineWithNewline.trim()) {
-            this.updateStatus(`Checking affected line ${i + 1}...`, true);
+      newErrors.push(...newErrorsFromLines);
 
-            try {
-              const response = await this.configManager
-                .getCurrentApi()
-                .checkText(
-                  lineWithNewline,
-                  this.configManager.getCurrentLanguage(),
-                );
-
-              // Adjust error indices to account for position in full text
-              const adjustedErrors = response.errs.map((error) => ({
-                ...error,
-                start_index: error.start_index + currentIndex,
-                end_index: error.end_index + currentIndex,
-              }));
-
-              newErrors.push(...adjustedErrors);
-
-              // Highlight errors for this line immediately
-              if (adjustedErrors.length > 0) {
-                this.errorHighlighter.highlightLineErrors(adjustedErrors);
-              }
-            } catch (error) {
-              console.warn(`Error checking affected line ${i + 1}:`, error);
-            }
-          }
-        }
-
-        currentIndex += lineWithNewline.length;
+      // Highlight errors immediately
+      if (newErrorsFromLines.length > 0) {
+        this.errorHighlighter.highlightLineErrors(newErrorsFromLines);
       }
 
       // Step 4: Add new errors and update state
@@ -890,49 +863,29 @@ export class GrammarChecker {
 
       console.log(`Rechecking line ${lineNumber}: "${line}"`);
 
-      // Only check if the line has content
-      if (lineWithNewline.trim()) {
-        const response = await this.configManager
-          .getCurrentApi()
-          .checkText(lineWithNewline, this.configManager.getCurrentLanguage());
+      // Use TextAnalyzer to check the line (centralizes all checkText API calls)
+      const adjustedErrors = await this.textAnalyzer
+        .checkLineForStateManagement(lineNumber);
 
-        // Adjust error indices to account for position in full text
-        const adjustedErrors = response.errs.map((error) => ({
-          ...error,
-          start_index: error.start_index + lineStartPosition,
-          end_index: error.end_index + lineStartPosition,
-        }));
-
-        // Remove any existing errors from this line first
-        this.state.errors = this.state.errors.filter((error) => {
-          const lineEnd = lineStartPosition + lineWithNewline.length;
-          return !(
-            error.start_index >= lineStartPosition &&
-            error.start_index < lineEnd
-          );
-        });
-
-        // Add new errors from the rechecked line
-        this.state.errors.push(...adjustedErrors);
-
-        // Always re-highlight the entire error set to ensure removed errors are cleared
-        // This is important when a line goes from having errors to having none
-        this.errorHighlighter.highlightErrors(this.state.errors);
-
-        console.log(
-          `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`,
+      // Remove any existing errors from this line first
+      const lineEnd = lineStartPosition + lineWithNewline.length;
+      this.state.errors = this.state.errors.filter((error) => {
+        return !(
+          error.start_index >= lineStartPosition &&
+          error.start_index < lineEnd
         );
-      } else {
-        // Empty line - still remove any existing errors from this line
-        const lineEnd = lineStartPosition + lineWithNewline.length;
-        this.state.errors = this.state.errors.filter((error) => {
-          return !(
-            error.start_index >= lineStartPosition &&
-            error.start_index < lineEnd
-          );
-        });
-        this.errorHighlighter.highlightErrors(this.state.errors);
-      }
+      });
+
+      // Add new errors from the rechecked line
+      this.state.errors.push(...adjustedErrors);
+
+      // Always re-highlight the entire error set to ensure removed errors are cleared
+      // This is important when a line goes from having errors to having none
+      this.errorHighlighter.highlightErrors(this.state.errors);
+
+      console.log(
+        `Line ${lineNumber} recheck complete. Found ${adjustedErrors.length} errors.`,
+      );
     } catch (error) {
       console.error(`Error rechecking line ${lineNumber}:`, error);
       // Re-throw so the caller can handle it

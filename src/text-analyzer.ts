@@ -295,4 +295,122 @@ export class TextAnalyzer {
       throw error;
     }
   }
+
+  /**
+   * Check a single line and return adjusted errors for state management
+   * This method does NOT trigger callbacks - it's for use by main.ts error state management
+   *
+   * @param lineNumber - 0-based line number to check
+   * @returns Array of errors with indices adjusted to document position
+   */
+  async checkLineForStateManagement(
+    lineNumber: number,
+  ): Promise<CheckerError[]> {
+    const text = this.editor.getText();
+    const lines = text.split("\n");
+
+    if (lineNumber < 0 || lineNumber >= lines.length) {
+      console.warn(`Invalid line number: ${lineNumber}`);
+      return [];
+    }
+
+    const line = lines[lineNumber];
+    const lineWithNewline = lineNumber < lines.length - 1 ? line + "\n" : line;
+
+    // Skip empty lines
+    if (!lineWithNewline.trim()) {
+      return [];
+    }
+
+    // Calculate the start position of this line in the full text
+    let lineStartPosition = 0;
+    for (let i = 0; i < lineNumber; i++) {
+      const prevLine = lines[i];
+      const prevLineWithNewline = i < lines.length - 1
+        ? prevLine + "\n"
+        : prevLine;
+      lineStartPosition += prevLineWithNewline.length;
+    }
+
+    try {
+      const response = await this.api.checkText(
+        lineWithNewline,
+        this.currentLanguage,
+      );
+
+      // Adjust error indices to account for position in full text
+      const adjustedErrors = response.errs.map((error) => ({
+        ...error,
+        start_index: error.start_index + lineStartPosition,
+        end_index: error.end_index + lineStartPosition,
+      }));
+
+      return adjustedErrors;
+    } catch (error) {
+      console.warn(`Error checking line ${lineNumber}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Check multiple lines and return all adjusted errors for state management
+   * This method does NOT trigger callbacks - it's for use by main.ts error state management
+   *
+   * @param startLine - 0-based start line number (inclusive)
+   * @param endLine - 0-based end line number (inclusive)
+   * @param onProgress - Optional callback for progress updates (e.g., "Checking line 5...")
+   * @returns Array of all errors from all lines with indices adjusted to document position
+   */
+  async checkMultipleLinesForStateManagement(
+    startLine: number,
+    endLine: number,
+    onProgress?: (message: string) => void,
+  ): Promise<CheckerError[]> {
+    const text = this.editor.getText();
+    const lines = text.split("\n");
+    const allErrors: CheckerError[] = [];
+
+    // Validate range
+    const validStartLine = Math.max(0, startLine);
+    const validEndLine = Math.min(lines.length - 1, endLine);
+
+    let currentIndex = 0;
+
+    // Check each line in the range
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineWithNewline = i < lines.length - 1 ? line + "\n" : line;
+
+      if (i >= validStartLine && i <= validEndLine) {
+        // Check this line
+        if (lineWithNewline.trim()) {
+          if (onProgress) {
+            onProgress(`Checking affected line ${i + 1}...`);
+          }
+
+          try {
+            const response = await this.api.checkText(
+              lineWithNewline,
+              this.currentLanguage,
+            );
+
+            // Adjust error indices to account for position in full text
+            const adjustedErrors = response.errs.map((error) => ({
+              ...error,
+              start_index: error.start_index + currentIndex,
+              end_index: error.end_index + currentIndex,
+            }));
+
+            allErrors.push(...adjustedErrors);
+          } catch (error) {
+            console.warn(`Error checking line ${i + 1}:`, error);
+          }
+        }
+      }
+
+      currentIndex += lineWithNewline.length;
+    }
+
+    return allErrors;
+  }
 }
