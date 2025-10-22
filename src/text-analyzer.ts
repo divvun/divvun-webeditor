@@ -313,11 +313,16 @@ export class TextAnalyzer {
       }
     }
 
-    // Adjust error indices to account for position in full text
+    // Check if API trimmed leading whitespace from the text
+    const trimOffset = lineWithNewline.length - response.text.length;
+
+    // Adjust error indices to account for:
+    // 1. Position in full text (lineStartPosition)
+    // 2. Any leading whitespace trimmed by API (trimOffset)
     const adjustedErrors = response.errs.map((error) => ({
       ...error,
-      start_index: error.start_index + lineStartPosition,
-      end_index: error.end_index + lineStartPosition,
+      start_index: error.start_index + lineStartPosition + trimOffset,
+      end_index: error.end_index + lineStartPosition + trimOffset,
     }));
 
     return adjustedErrors;
@@ -388,11 +393,16 @@ export class TextAnalyzer {
             }
           }
 
-          // Adjust error indices to account for position in full text
+          // Check if API trimmed leading whitespace from the text
+          const trimOffset = lineWithNewline.length - response.text.length;
+
+          // Adjust error indices to account for:
+          // 1. Position in full text (currentIndex)
+          // 2. Any leading whitespace trimmed by API (trimOffset)
           const adjustedErrors = response.errs.map((error) => ({
             ...error,
-            start_index: error.start_index + currentIndex,
-            end_index: error.end_index + currentIndex,
+            start_index: error.start_index + currentIndex + trimOffset,
+            end_index: error.end_index + currentIndex + trimOffset,
           }));
 
           allErrors.push(...adjustedErrors);
