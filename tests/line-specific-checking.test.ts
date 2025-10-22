@@ -108,17 +108,17 @@ Deno.test("Line-specific checking - Single line API call", async () => {
     "First line with error\nSecond line is correct\nThird line"
   );
 
-  // Mock response for just the first line
-  mockAPI.setMockResponse("First line with error", [
+  // Mock response for just the first line (now includes newline)
+  mockAPI.setMockResponse("First line with error\n", [
     createError("error", 16, 21), // positions within the line
   ]);
 
   // Check specific line
   const errors = await analyzer.checkSpecificLine(0);
 
-  // Verify API was called with only the first line
+  // Verify API was called with only the first line (with newline)
   assertEquals(mockAPI.callLog.length, 1);
-  assertEquals(mockAPI.callLog[0].text, "First line with error");
+  assertEquals(mockAPI.callLog[0].text, "First line with error\n");
 
   // Verify errors are returned with absolute positions
   assertEquals(errors.length, 1);
@@ -178,7 +178,7 @@ Deno.test("Line-specific checking - Empty and invalid lines", async () => {
   assertEquals(invalidLineErrors.length, 0);
 });
 
-Deno.test("Line-specific checking - API calls without caching", async () => {
+Deno.test("Line-specific checking - API calls with caching", async () => {
   const mockEditor = new MockEditor();
   const mockAPI = new MockAPI();
   const { callbacks } = createMockCallbacks();
@@ -187,7 +187,7 @@ Deno.test("Line-specific checking - API calls without caching", async () => {
 
   mockEditor.setText("Same line content\nOther line");
 
-  mockAPI.setMockResponse("Same line content", [createError("line", 5, 9)]);
+  mockAPI.setMockResponse("Same line content\n", [createError("line", 5, 9)]);
 
   // First check - should call API
   await analyzer.checkSpecificLine(0);
@@ -195,9 +195,9 @@ Deno.test("Line-specific checking - API calls without caching", async () => {
 
   mockAPI.clearCallLog();
 
-  // Second check - should also call API (no caching)
+  // Second check - should use cache (NOT call API again)
   await analyzer.checkSpecificLine(0);
-  assertEquals(mockAPI.callLog.length, 1);
+  assertEquals(mockAPI.callLog.length, 0); // Cache hit - no API call
 });
 
 Deno.test(
@@ -212,7 +212,7 @@ Deno.test(
     // Initial multi-line text
     mockEditor.setText("Line 0 has error\nLine 1 is good\nLine 2 also good");
 
-    mockAPI.setMockResponse("Line 0 has error", [createError("error", 11, 16)]);
+    mockAPI.setMockResponse("Line 0 has error\n", [createError("error", 11, 16)]);
 
     // Check line 0 - should find error
     const line0Errors = await analyzer.checkSpecificLine(0);
@@ -224,15 +224,19 @@ Deno.test(
     );
 
     mockAPI.clearCallLog();
-    mockAPI.setMockResponse("Line 1 is modified", []); // No errors in modified line
+    mockAPI.setMockResponse("Line 1 is modified\n", []); // No errors in modified line
 
     // Check line 1
     await analyzer.checkSpecificLine(1);
 
-    // Check line 0 again - without caching, will call API again
+    // Check line 0 again - with caching, will use cache (no API call)
     const line0ErrorsAfterEdit = await analyzer.checkSpecificLine(0);
+    
+    // Should still have the error from cache
     assertEquals(line0ErrorsAfterEdit.length, 1);
-    assertEquals(mockAPI.callLog.length, 2); // Called for both line 1 and line 0
+    
+    // Verify no new API call was made for line 0 (cache hit)
+    assertEquals(mockAPI.callLog.length, 1); // Only the line 1 check
   }
 );
 
@@ -271,8 +275,8 @@ Deno.test("Line-specific checking - Performance comparison", async () => {
   const lines = Array.from({ length: 50 }, (_, i) => `Line ${i} content here`);
   mockEditor.setText(lines.join("\n"));
 
-  // Set up mock response for line 25
-  mockAPI.setMockResponse("Line 25 content here", [createError("25", 5, 7)]);
+  // Set up mock response for line 25 (with newline since it's not the last line)
+  mockAPI.setMockResponse("Line 25 content here\n", [createError("25", 5, 7)]);
 
   const start = performance.now();
   const _errors = await analyzer.checkSpecificLine(25);
@@ -280,7 +284,7 @@ Deno.test("Line-specific checking - Performance comparison", async () => {
 
   // Should only have made one API call for the specific line
   assertEquals(mockAPI.callLog.length, 1);
-  assertEquals(mockAPI.callLog[0].text, "Line 25 content here");
+  assertEquals(mockAPI.callLog[0].text, "Line 25 content here\n");
 
   // Performance should be reasonable (under 100ms for mock)
   assert(

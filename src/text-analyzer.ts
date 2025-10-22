@@ -81,12 +81,29 @@ export class TextAnalyzer {
   }
 
   /**
-   * Main grammar checking method
+   * Check a specific line only - for line-specific grammar checking
+   * Uses cache-aware checking for optimal performance
+   */
+  async checkSpecificLine(lineNumber: number): Promise<CheckerError[]> {
+    // Use the cache-aware method for checking
+    const errors = await this.checkLineForStateManagement(lineNumber);
+
+    // Notify callbacks with line-specific information
+    if (errors.length > 0) {
+      this.callbacks.onErrorsFound(errors, lineNumber);
+      this.callbacks.onUpdateErrorCount(errors.length);
+    }
+
+    return errors;
+  }
+
+  /**
+   * Main grammar checking method - checks entire document using cache-aware approach
    */
   async checkGrammar(): Promise<void> {
     const currentText = this.editor.getText();
 
-    // Don't check if content hasn't changed or is empty
+    // Don't check if content is empty
     if (!currentText || currentText.trim() === "") {
       return;
     }
@@ -97,28 +114,20 @@ export class TextAnalyzer {
     }
 
     try {
-      // Check line-by-line
       const lines = currentText.split("\n");
-      const allErrors: CheckerError[] = [];
 
-      // Check each line
-      for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
-        // Check if we should abort (user might have interrupted)
-        if (this.checkingContext?.abortController.signal.aborted) {
-          console.debug("Grammar check aborted by user");
-          return;
-        }
-
-        const lineErrors = await this.checkSingleLine(lineNumber);
-        allErrors.push(...lineErrors);
-
-        // Highlight this line's errors immediately if any found
-        if (lineErrors.length > 0) {
-          this.callbacks.onErrorsFound(lineErrors, lineNumber);
-          // Update error count progressively
-          this.callbacks.onUpdateErrorCount(allErrors.length);
-        }
+      // Check if we should abort (user might have interrupted)
+      if (this.checkingContext?.abortController.signal.aborted) {
+        console.debug("Grammar check aborted by user");
+        return;
       }
+
+      // Use cache-aware multi-line checking for all lines
+      const allErrors = await this.checkMultipleLinesForStateManagement(
+        0,
+        lines.length - 1,
+        (message) => this.callbacks.onUpdateStatus(message, true),
+      );
 
       // Store the checked content
       this.lastCheckedContent = currentText;
@@ -133,80 +142,6 @@ export class TextAnalyzer {
         error instanceof Error ? error.message : String(error),
       );
     }
-  }
-
-  /**
-   * Check a specific line only - for line-specific grammar checking
-   * This is the public API for checking individual lines
-   */
-  async checkSpecificLine(lineNumber: number): Promise<CheckerError[]> {
-    // Use the existing private method but notify callbacks about line-specific results
-    const errors = await this.checkSingleLine(lineNumber);
-
-    // Notify callbacks with line-specific information
-    if (errors.length > 0) {
-      this.callbacks.onErrorsFound(errors, lineNumber);
-      this.callbacks.onUpdateErrorCount(errors.length);
-    }
-
-    return errors;
-  }
-
-  /**
-   * Check a single line
-   */
-  private async checkSingleLine(lineNumber: number): Promise<CheckerError[]> {
-    const text = this.editor.getText();
-    const lines = text.split("\n");
-
-    if (lineNumber < 0 || lineNumber >= lines.length) {
-      return [];
-    }
-
-    const lineContent = lines[lineNumber];
-
-    // Skip empty or whitespace-only lines
-    if (!lineContent || lineContent.trim().length === 0) {
-      return [];
-    }
-
-    // Check with API
-    try {
-      const response = await this.api.checkText(
-        lineContent,
-        this.currentLanguage,
-      );
-      const errors = response.errs || [];
-
-      // Adjust error indices to match document position
-      const lineStartIndex = this.getLineStartIndex(lineNumber, lines);
-      const adjustedErrors = errors.map((error: CheckerError) => ({
-        ...error,
-        start_index: error.start_index + lineStartIndex,
-        end_index: error.end_index + lineStartIndex,
-      }));
-
-      return adjustedErrors;
-    } catch (error) {
-      console.warn(`Failed to check line ${lineNumber}:`, error);
-      return [];
-    }
-  }
-
-  /**
-   * Get the starting index of a line in the document
-   */
-  private getLineStartIndex(lineNumber: number, lines: string[]): number {
-    if (lineNumber === 0) {
-      return 0;
-    }
-
-    let index = 0;
-    // Sum up all previous lines plus their newline characters
-    for (let i = 0; i < lineNumber; i++) {
-      index += lines[i].length + 1; // +1 for the \n character
-    }
-    return index;
   }
 
   /**
@@ -265,6 +200,7 @@ export class TextAnalyzer {
   /**
    * Check and highlight a specific line atomically
    * This is the main entry point for line-by-line checking + highlighting
+   * Uses cache-aware checking for optimal performance
    */
   async checkAndHighlightLine(
     lineNumber: number,
@@ -279,11 +215,11 @@ export class TextAnalyzer {
     console.log(`🧪 checkAndHighlightLine ENTERED for line ${lineNumber}`);
 
     try {
-      // First, check the line
-      console.log(`🔍 About to call checkSpecificLine for line ${lineNumber}`);
-      const errors = await this.checkSpecificLine(lineNumber);
+      // Use cache-aware checking
+      console.log(`🔍 About to call checkLineForStateManagement for line ${lineNumber}`);
+      const errors = await this.checkLineForStateManagement(lineNumber);
       console.log(
-        `✅ checkSpecificLine completed for line ${lineNumber}, found ${errors.length} errors`,
+        `✅ checkLineForStateManagement completed for line ${lineNumber}, found ${errors.length} errors`,
       );
 
       // Then apply highlighting
@@ -356,7 +292,9 @@ export class TextAnalyzer {
     let response: CheckerResponse;
 
     if (cached) {
-      console.debug(`📦 Cache hit for line ${lineNumber} (${lineWithNewline.length} chars)`);
+      console.debug(
+        `📦 Cache hit for line ${lineNumber} (${lineWithNewline.length} chars)`,
+      );
       response = cached;
     } else {
       console.debug(`🌐 Cache miss for line ${lineNumber}, calling API`);
@@ -427,7 +365,9 @@ export class TextAnalyzer {
           let response: CheckerResponse;
 
           if (cached) {
-            console.debug(`📦 Cache hit for line ${i} (${lineWithNewline.length} chars)`);
+            console.debug(
+              `📦 Cache hit for line ${i} (${lineWithNewline.length} chars)`,
+            );
             response = cached;
           } else {
             console.debug(`🌐 Cache miss for line ${i}, calling API`);
