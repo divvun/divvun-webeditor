@@ -284,3 +284,251 @@ Deno.test("TextAnalyzer - API consolidation: no direct checkText calls from main
   // - Better separation of concerns
   // - Simpler testing
 });
+
+Deno.test("TextAnalyzer - Cache: first call to checkLineForStateManagement calls API", async () => {
+  const mockEditor = new MockEditor();
+  const mockAPI = new MockAPI();
+  const callbacks = {
+    onUpdateStatus: () => {},
+    onUpdateErrorCount: () => {},
+    onErrorsFound: () => {},
+    onShowErrorMessage: () => {},
+  };
+  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+  // Set up text
+  mockEditor.setText("Test line");
+
+  // Mock response
+  mockAPI.setMockResponse("Test line", [createError("Test", 0, 4)]);
+
+  // First call should hit the API
+  const errors1 = await analyzer.checkLineForStateManagement(0);
+
+  // Verify API was called
+  assertEquals(mockAPI.callLog.length, 1);
+  assertEquals(mockAPI.callLog[0].text, "Test line");
+
+  // Verify errors returned
+  assertEquals(errors1.length, 1);
+  assertEquals(errors1[0].error_text, "Test");
+});
+
+Deno.test("TextAnalyzer - Cache: second call to same line uses cache", async () => {
+  const mockEditor = new MockEditor();
+  const mockAPI = new MockAPI();
+  const callbacks = {
+    onUpdateStatus: () => {},
+    onUpdateErrorCount: () => {},
+    onErrorsFound: () => {},
+    onShowErrorMessage: () => {},
+  };
+  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+  // Set up text
+  mockEditor.setText("Test line");
+
+  // Mock response
+  mockAPI.setMockResponse("Test line", [createError("Test", 0, 4)]);
+
+  // First call should hit the API
+  await analyzer.checkLineForStateManagement(0);
+  assertEquals(mockAPI.callLog.length, 1);
+
+  // Clear call log
+  mockAPI.clearCallLog();
+
+  // Second call to the same line should use cache, not call API
+  const errors2 = await analyzer.checkLineForStateManagement(0);
+
+  // Verify API was NOT called again
+  assertEquals(mockAPI.callLog.length, 0);
+
+  // Verify errors still returned from cache
+  assertEquals(errors2.length, 1);
+  assertEquals(errors2[0].error_text, "Test");
+  assertEquals(errors2[0].start_index, 0);
+  assertEquals(errors2[0].end_index, 4);
+});
+
+Deno.test("TextAnalyzer - Cache: cached errors have correct adjusted indices", async () => {
+  const mockEditor = new MockEditor();
+  const mockAPI = new MockAPI();
+  const callbacks = {
+    onUpdateStatus: () => {},
+    onUpdateErrorCount: () => {},
+    onErrorsFound: () => {},
+    onShowErrorMessage: () => {},
+  };
+  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+  // Set up multi-line text
+  mockEditor.setText("Line 0\nLine 1\nLine 2");
+
+  // Mock response for line 1
+  mockAPI.setMockResponse("Line 1\n", [createError("Line", 0, 4)]);
+
+  // First call to line 1
+  const errors1 = await analyzer.checkLineForStateManagement(1);
+  assertEquals(mockAPI.callLog.length, 1);
+  assertEquals(errors1[0].start_index, 7); // Adjusted for line position
+
+  // Clear call log
+  mockAPI.clearCallLog();
+
+  // Second call to line 1 should use cache
+  const errors2 = await analyzer.checkLineForStateManagement(1);
+
+  // Verify API was NOT called
+  assertEquals(mockAPI.callLog.length, 0);
+
+  // Verify cached errors still have correct adjusted indices
+  assertEquals(errors2.length, 1);
+  assertEquals(errors2[0].start_index, 7); // Still adjusted correctly
+  assertEquals(errors2[0].end_index, 11);
+});
+
+Deno.test("TextAnalyzer - Cache: checkMultipleLinesForStateManagement uses cache", async () => {
+  const mockEditor = new MockEditor();
+  const mockAPI = new MockAPI();
+  const callbacks = {
+    onUpdateStatus: () => {},
+    onUpdateErrorCount: () => {},
+    onErrorsFound: () => {},
+    onShowErrorMessage: () => {},
+  };
+  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+  // Set up text
+  mockEditor.setText("Line 0\nLine 1\nLine 2");
+
+  // Mock responses
+  mockAPI.setMockResponse("Line 0\n", [createError("Line", 0, 4)]);
+  mockAPI.setMockResponse("Line 1\n", [createError("Line", 0, 4)]);
+
+  // First call to check lines 0-1
+  await analyzer.checkMultipleLinesForStateManagement(0, 1);
+  assertEquals(mockAPI.callLog.length, 2);
+
+  // Clear call log
+  mockAPI.clearCallLog();
+
+  // Second call to same lines should use cache
+  const errors = await analyzer.checkMultipleLinesForStateManagement(0, 1);
+
+  // Verify API was NOT called
+  assertEquals(mockAPI.callLog.length, 0);
+
+  // Verify errors still returned from cache with correct positions
+  assertEquals(errors.length, 2);
+  assertEquals(errors[0].start_index, 0); // Line 0
+  assertEquals(errors[1].start_index, 7); // Line 1
+});
+
+Deno.test("TextAnalyzer - Cache: different languages have separate cache entries", async () => {
+  const mockEditor = new MockEditor();
+  const mockAPI = new MockAPI();
+  const callbacks = {
+    onUpdateStatus: () => {},
+    onUpdateErrorCount: () => {},
+    onErrorsFound: () => {},
+    onShowErrorMessage: () => {},
+  };
+  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+  // Set up text
+  mockEditor.setText("Test line");
+
+  // Mock response for 'se' language
+  mockAPI.setMockResponse("Test line", [createError("Test", 0, 4)]);
+
+  // Check with 'se' language
+  await analyzer.checkLineForStateManagement(0);
+  assertEquals(mockAPI.callLog.length, 1);
+  assertEquals(mockAPI.callLog[0].language, "se");
+
+  // Clear call log
+  mockAPI.clearCallLog();
+
+  // Change language to 'nb'
+  analyzer.updateLanguage("nb");
+
+  // Mock response for 'nb' language
+  mockAPI.setMockResponse("Test line", [createError("Test", 0, 4)]);
+
+  // Check same line with different language
+  await analyzer.checkLineForStateManagement(0);
+
+  // Should call API again because language changed (different cache key)
+  assertEquals(mockAPI.callLog.length, 1);
+  assertEquals(mockAPI.callLog[0].language, "nb");
+});
+
+Deno.test("TextAnalyzer - Cache: clearCache clears cached responses", async () => {
+  const mockEditor = new MockEditor();
+  const mockAPI = new MockAPI();
+  const callbacks = {
+    onUpdateStatus: () => {},
+    onUpdateErrorCount: () => {},
+    onErrorsFound: () => {},
+    onShowErrorMessage: () => {},
+  };
+  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+  // Set up text
+  mockEditor.setText("Test line");
+
+  // Mock response
+  mockAPI.setMockResponse("Test line", [createError("Test", 0, 4)]);
+
+  // First call
+  await analyzer.checkLineForStateManagement(0);
+  assertEquals(mockAPI.callLog.length, 1);
+
+  // Clear call log
+  mockAPI.clearCallLog();
+
+  // Clear cache
+  analyzer.clearCache();
+
+  // Second call after clearing cache should hit API again
+  await analyzer.checkLineForStateManagement(0);
+
+  // Verify API was called again
+  assertEquals(mockAPI.callLog.length, 1);
+});
+
+Deno.test("TextAnalyzer - Cache: language change clears cache", async () => {
+  const mockEditor = new MockEditor();
+  const mockAPI = new MockAPI();
+  const callbacks = {
+    onUpdateStatus: () => {},
+    onUpdateErrorCount: () => {},
+    onErrorsFound: () => {},
+    onShowErrorMessage: () => {},
+  };
+  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+
+  // Set up text
+  mockEditor.setText("Test line");
+
+  // Mock response
+  mockAPI.setMockResponse("Test line", [createError("Test", 0, 4)]);
+
+  // First call with 'se'
+  await analyzer.checkLineForStateManagement(0);
+  assertEquals(mockAPI.callLog.length, 1);
+
+  // Clear call log
+  mockAPI.clearCallLog();
+
+  // Change language (this should clear cache)
+  analyzer.updateLanguage("nb");
+
+  // Call with new language
+  await analyzer.checkLineForStateManagement(0);
+
+  // Verify API was called again (cache was cleared)
+  assertEquals(mockAPI.callLog.length, 1);
+  assertEquals(mockAPI.callLog[0].language, "nb");
+});

@@ -5,7 +5,13 @@
  * and coordinating with the checking API.
  */
 
-import type { CheckerApi, CheckerError, SupportedLanguage } from "./types.ts";
+import type {
+  CheckerApi,
+  CheckerError,
+  CheckerResponse,
+  SupportedLanguage,
+} from "./types.ts";
+import { LRUCache } from "./lru-cache.ts";
 
 // Minimal editor interface for text analysis
 interface EditorTextInterface {
@@ -25,6 +31,11 @@ export interface CheckingContext {
   startTime: Date;
 }
 
+/**
+ * Maximum number of items to store in the text analysis cache
+ */
+const TEXT_ANALYZER_CACHE_SIZE = 1000;
+
 export class TextAnalyzer {
   private api: CheckerApi;
   private editor: EditorTextInterface;
@@ -32,6 +43,7 @@ export class TextAnalyzer {
   private lastCheckedContent: string = "";
   private currentLanguage: SupportedLanguage;
   private checkingContext: CheckingContext | null = null;
+  private cache: LRUCache<string, CheckerResponse>;
 
   constructor(
     api: CheckerApi,
@@ -43,6 +55,7 @@ export class TextAnalyzer {
     this.editor = editor;
     this.callbacks = callbacks;
     this.currentLanguage = initialLanguage;
+    this.cache = new LRUCache(TEXT_ANALYZER_CACHE_SIZE);
   }
 
   /**
@@ -62,6 +75,8 @@ export class TextAnalyzer {
       this.currentLanguage = language;
       // Clear last checked content when language changes
       this.lastCheckedContent = "";
+      // Clear cache when language changes
+      this.cache.clear();
     }
   }
 
@@ -204,10 +219,11 @@ export class TextAnalyzer {
   }
 
   /**
-   * Clear all cached data (no longer used, kept for compatibility)
+   * Clear all cached data
    */
   clearCache(): void {
     this.lastCheckedContent = "";
+    this.cache.clear();
   }
 
   /**
@@ -332,24 +348,39 @@ export class TextAnalyzer {
       lineStartPosition += prevLineWithNewline.length;
     }
 
-    try {
-      const response = await this.api.checkText(
-        lineWithNewline,
-        this.currentLanguage,
-      );
+    // Create cache key
+    const cacheKey = `${this.currentLanguage}:${lineWithNewline}`;
 
-      // Adjust error indices to account for position in full text
-      const adjustedErrors = response.errs.map((error) => ({
-        ...error,
-        start_index: error.start_index + lineStartPosition,
-        end_index: error.end_index + lineStartPosition,
-      }));
+    // Check cache first
+    const cached = this.cache.get(cacheKey);
+    let response: CheckerResponse;
 
-      return adjustedErrors;
-    } catch (error) {
-      console.warn(`Error checking line ${lineNumber}:`, error);
-      return [];
+    if (cached) {
+      console.debug(`📦 Cache hit for line ${lineNumber} (${lineWithNewline.length} chars)`);
+      response = cached;
+    } else {
+      console.debug(`🌐 Cache miss for line ${lineNumber}, calling API`);
+      try {
+        response = await this.api.checkText(
+          lineWithNewline,
+          this.currentLanguage,
+        );
+        // Store in cache
+        this.cache.set(cacheKey, response);
+      } catch (error) {
+        console.warn(`Error checking line ${lineNumber}:`, error);
+        return [];
+      }
     }
+
+    // Adjust error indices to account for position in full text
+    const adjustedErrors = response.errs.map((error) => ({
+      ...error,
+      start_index: error.start_index + lineStartPosition,
+      end_index: error.end_index + lineStartPosition,
+    }));
+
+    return adjustedErrors;
   }
 
   /**
@@ -388,23 +419,41 @@ export class TextAnalyzer {
             onProgress(`Checking affected line ${i + 1}...`);
           }
 
-          try {
-            const response = await this.api.checkText(
-              lineWithNewline,
-              this.currentLanguage,
-            );
+          // Create cache key
+          const cacheKey = `${this.currentLanguage}:${lineWithNewline}`;
 
-            // Adjust error indices to account for position in full text
-            const adjustedErrors = response.errs.map((error) => ({
-              ...error,
-              start_index: error.start_index + currentIndex,
-              end_index: error.end_index + currentIndex,
-            }));
+          // Check cache first
+          const cached = this.cache.get(cacheKey);
+          let response: CheckerResponse;
 
-            allErrors.push(...adjustedErrors);
-          } catch (error) {
-            console.warn(`Error checking line ${i + 1}:`, error);
+          if (cached) {
+            console.debug(`📦 Cache hit for line ${i} (${lineWithNewline.length} chars)`);
+            response = cached;
+          } else {
+            console.debug(`🌐 Cache miss for line ${i}, calling API`);
+            try {
+              response = await this.api.checkText(
+                lineWithNewline,
+                this.currentLanguage,
+              );
+              // Store in cache
+              this.cache.set(cacheKey, response);
+            } catch (error) {
+              console.warn(`Error checking line ${i + 1}:`, error);
+              // Continue to next line on error
+              currentIndex += lineWithNewline.length;
+              continue;
+            }
           }
+
+          // Adjust error indices to account for position in full text
+          const adjustedErrors = response.errs.map((error) => ({
+            ...error,
+            start_index: error.start_index + currentIndex,
+            end_index: error.end_index + currentIndex,
+          }));
+
+          allErrors.push(...adjustedErrors);
         }
       }
 
