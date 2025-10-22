@@ -251,6 +251,67 @@ export class TextAnalyzer {
   }
 
   /**
+   * Check a single line of text with cache-aware API call
+   * This is the core method that handles cache checking, API calls, and index adjustment
+   *
+   * @param lineText - The line text to check (with or without newline)
+   * @param documentOffset - The character position of this line in the full document
+   * @param lineNumber - The 0-based line number (for logging purposes)
+   * @returns Array of errors with indices adjusted to document position
+   */
+  private async checkLineWithCache(
+    lineText: string,
+    documentOffset: number,
+    lineNumber: number,
+  ): Promise<CheckerError[]> {
+    // Skip empty lines
+    if (!lineText.trim()) {
+      return [];
+    }
+
+    // Create cache key
+    const cacheKey = `${this.currentLanguage}:${lineText}`;
+
+    // Check cache first
+    const cached = this.cache.get(cacheKey);
+    let response: CheckerResponse;
+
+    if (cached) {
+      console.debug(
+        `📦 Cache hit for line ${lineNumber} (${lineText.length} chars)`,
+      );
+      response = cached;
+    } else {
+      console.debug(`🌐 Cache miss for line ${lineNumber}, calling API`);
+      try {
+        response = await this.api.checkText(
+          lineText,
+          this.currentLanguage,
+        );
+        // Store in cache
+        this.cache.set(cacheKey, response);
+      } catch (error) {
+        console.warn(`Error checking line ${lineNumber}:`, error);
+        return [];
+      }
+    }
+
+    // Check if API trimmed leading whitespace from the text
+    const trimOffset = lineText.length - response.text.length;
+
+    // Adjust error indices to account for:
+    // 1. Position in full text (documentOffset)
+    // 2. Any leading whitespace trimmed by API (trimOffset)
+    const adjustedErrors = response.errs.map((error) => ({
+      ...error,
+      start_index: error.start_index + documentOffset + trimOffset,
+      end_index: error.end_index + documentOffset + trimOffset,
+    }));
+
+    return adjustedErrors;
+  }
+
+  /**
    * Check a single line and return adjusted errors for state management
    * This method does NOT trigger callbacks - it's for use by main.ts error state management
    *
@@ -271,11 +332,6 @@ export class TextAnalyzer {
     const line = lines[lineNumber];
     const lineWithNewline = lineNumber < lines.length - 1 ? line + "\n" : line;
 
-    // Skip empty lines
-    if (!lineWithNewline.trim()) {
-      return [];
-    }
-
     // Calculate the start position of this line in the full text
     let lineStartPosition = 0;
     for (let i = 0; i < lineNumber; i++) {
@@ -286,46 +342,12 @@ export class TextAnalyzer {
       lineStartPosition += prevLineWithNewline.length;
     }
 
-    // Create cache key
-    const cacheKey = `${this.currentLanguage}:${lineWithNewline}`;
-
-    // Check cache first
-    const cached = this.cache.get(cacheKey);
-    let response: CheckerResponse;
-
-    if (cached) {
-      console.debug(
-        `📦 Cache hit for line ${lineNumber} (${lineWithNewline.length} chars)`,
-      );
-      response = cached;
-    } else {
-      console.debug(`🌐 Cache miss for line ${lineNumber}, calling API`);
-      try {
-        response = await this.api.checkText(
-          lineWithNewline,
-          this.currentLanguage,
-        );
-        // Store in cache
-        this.cache.set(cacheKey, response);
-      } catch (error) {
-        console.warn(`Error checking line ${lineNumber}:`, error);
-        return [];
-      }
-    }
-
-    // Check if API trimmed leading whitespace from the text
-    const trimOffset = lineWithNewline.length - response.text.length;
-
-    // Adjust error indices to account for:
-    // 1. Position in full text (lineStartPosition)
-    // 2. Any leading whitespace trimmed by API (trimOffset)
-    const adjustedErrors = response.errs.map((error) => ({
-      ...error,
-      start_index: error.start_index + lineStartPosition + trimOffset,
-      end_index: error.end_index + lineStartPosition + trimOffset,
-    }));
-
-    return adjustedErrors;
+    // Use the unified cache-aware checking method
+    return await this.checkLineWithCache(
+      lineWithNewline,
+      lineStartPosition,
+      lineNumber,
+    );
   }
 
   /**
@@ -364,48 +386,13 @@ export class TextAnalyzer {
             onProgress(`Checking affected line ${i + 1}...`);
           }
 
-          // Create cache key
-          const cacheKey = `${this.currentLanguage}:${lineWithNewline}`;
-
-          // Check cache first
-          const cached = this.cache.get(cacheKey);
-          let response: CheckerResponse;
-
-          if (cached) {
-            console.debug(
-              `📦 Cache hit for line ${i} (${lineWithNewline.length} chars)`,
-            );
-            response = cached;
-          } else {
-            console.debug(`🌐 Cache miss for line ${i}, calling API`);
-            try {
-              response = await this.api.checkText(
-                lineWithNewline,
-                this.currentLanguage,
-              );
-              // Store in cache
-              this.cache.set(cacheKey, response);
-            } catch (error) {
-              console.warn(`Error checking line ${i + 1}:`, error);
-              // Continue to next line on error
-              currentIndex += lineWithNewline.length;
-              continue;
-            }
-          }
-
-          // Check if API trimmed leading whitespace from the text
-          const trimOffset = lineWithNewline.length - response.text.length;
-
-          // Adjust error indices to account for:
-          // 1. Position in full text (currentIndex)
-          // 2. Any leading whitespace trimmed by API (trimOffset)
-          const adjustedErrors = response.errs.map((error) => ({
-            ...error,
-            start_index: error.start_index + currentIndex + trimOffset,
-            end_index: error.end_index + currentIndex + trimOffset,
-          }));
-
-          allErrors.push(...adjustedErrors);
+          // Use the unified cache-aware checking method
+          const errors = await this.checkLineWithCache(
+            lineWithNewline,
+            currentIndex,
+            i,
+          );
+          allErrors.push(...errors);
         }
       }
 
