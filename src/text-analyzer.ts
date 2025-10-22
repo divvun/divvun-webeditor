@@ -260,7 +260,11 @@ export class TextAnalyzer {
     }
 
     // Check if API trimmed leading whitespace from the text
-    const trimOffset = lineText.length - response.text.length;
+    // Note: We only care about leading whitespace, not trailing (like newlines)
+    const leadingWhitespace = lineText.length - lineText.trimStart().length;
+    const apiLeadingWhitespace = response.text.length -
+      response.text.trimStart().length;
+    const trimOffset = leadingWhitespace - apiLeadingWhitespace;
 
     // Adjust error indices to account for:
     // 1. Position in full text (documentOffset)
