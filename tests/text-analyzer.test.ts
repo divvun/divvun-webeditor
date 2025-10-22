@@ -1,16 +1,6 @@
-/**
- * Integration test for paste highlighting position bug
- *
- * Bug: When pasting text with errors, the highlighting position is off by one character.
- * The error "dahkku" at position 24-30 is highlighted as " dahkk" at position 23-29.
- *
- * This test verifies that error highlighting uses the correct start and end indices.
- */
-
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import type {
   CheckerApi,
-  CheckerError,
   CheckerResponse,
   SupportedLanguage,
 } from "../src/types.ts";
@@ -76,11 +66,8 @@ Deno.test("Adjust for leading space in text line - error position should be exac
   const mockEditor = new MockEditor(text);
 
   // Create TextAnalyzer with callbacks
-  let foundErrors: CheckerError[] = [];
   const callbacks = {
-    onErrorsFound: (errors: CheckerError[]) => {
-      foundErrors = errors;
-    },
+    onErrorsFound: () => {},
     onUpdateErrorCount: (_count: number) => {},
     onUpdateStatus: (_status: string, _isChecking: boolean) => {},
     onShowErrorMessage: (_message: string) => {},
@@ -97,7 +84,8 @@ Deno.test("Adjust for leading space in text line - error position should be exac
   );
   // Check the line (line 0 since it's the first line)
   const errors = await textAnalyzer.checkLineForStateManagement(
-    0);
+    0,
+  );
 
   // The API returns error at 23-29 (relative to trimmed text "UNOHAS DAHKU: - Unohas dahkku...")
   // TextAnalyzer should adjust to 24-30 (accounting for leading space in original text)
