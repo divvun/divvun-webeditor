@@ -27,7 +27,7 @@ import {
   type ConfigurationCallbacks,
 } from "./config-manager.ts";
 import { QuillBridge, registerQuillBlots } from "./quill-bridge-instance.ts";
-import { TextChecker } from "./TextChecker.ts";
+import { TextChecker } from "./text-checker.ts";
 
 // Initialize the text checker when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {

@@ -295,14 +295,95 @@ export class EventManager {
     ) as HTMLElement;
 
     if (errorElement) {
-      // Get the text content and find matching error
+      // FIXED: Use Quill's blot system to get the exact position of the clicked element
+      // This ensures we match the correct error when multiple identical errors exist
+      try {
+        const blot = this.editor.findBlot?.(errorElement);
+        if (blot && this.editor.getIndex) {
+          const elementIndex = this.editor.getIndex(blot);
+          const elementLength =
+            blot && typeof (blot as { length?: unknown }).length === "function"
+              ? (blot as { length: () => number }).length()
+              : 0;
+
+          // Find error by matching BOTH position AND text for accuracy
+          matchingError = this.errors.find(
+            (error) =>
+              error.start_index === elementIndex &&
+              error.end_index - error.start_index === elementLength,
+          );
+
+          if (matchingError) {
+            console.debug(
+              `✅ Found error at position ${elementIndex} by element position`,
+            );
+            return matchingError;
+          }
+        }
+      } catch (err) {
+        console.debug("Could not get element position from blot:", err);
+      }
+
+      // Fallback: If we couldn't get position from blot, try matching by text
+      // but prefer the error closest to the click position
       const errorText = errorElement.textContent || "";
-      matchingError = this.errors.find(
+      const candidateErrors = this.errors.filter(
         (error) =>
           error.error_text === errorText ||
           (error.suggestions &&
             error.suggestions.some((s) => s.includes(errorText))),
       );
+
+      if (candidateErrors.length === 1) {
+        matchingError = candidateErrors[0];
+      } else if (candidateErrors.length > 1) {
+        // Multiple errors with same text - try to find which one is closest
+        console.warn(
+          `⚠️ Found ${candidateErrors.length} errors with text "${errorText}", attempting position-based matching`,
+        );
+
+        // Try to get click position to find the closest error
+        let clickIndex: number | null = null;
+
+        const caretPos = (
+          document as unknown as {
+            caretPositionFromPoint?: (
+              x: number,
+              y: number,
+            ) => { offsetNode: Node; offset: number } | null;
+          }
+        ).caretPositionFromPoint?.(e.clientX, e.clientY);
+
+        if (caretPos) {
+          clickIndex = this.getCaretPosition(caretPos);
+        } else {
+          const range = (
+            document as unknown as {
+              caretRangeFromPoint?: (x: number, y: number) => Range | null;
+            }
+          ).caretRangeFromPoint?.(e.clientX, e.clientY);
+
+          if (range) {
+            clickIndex = this.getRangePosition(range);
+          }
+        }
+
+        if (clickIndex !== null) {
+          // Find the error that contains this position
+          matchingError = candidateErrors.find(
+            (err) =>
+              err.start_index <= clickIndex && clickIndex < err.end_index,
+          );
+        }
+
+        // Final fallback: use first match (original behavior)
+        if (!matchingError) {
+          console.warn(
+            "⚠️ Could not determine position, using first matching error",
+          );
+          matchingError = candidateErrors[0];
+        }
+      }
     }
 
     // Method 2: Try browser-specific caret position methods
