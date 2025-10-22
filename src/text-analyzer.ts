@@ -31,11 +31,6 @@ export interface CheckingContext {
   startTime: Date;
 }
 
-/**
- * Maximum number of items to store in the text analysis cache
- */
-const TEXT_ANALYZER_CACHE_SIZE = 1000;
-
 export class TextAnalyzer {
   private api: CheckerApi;
   private editor: EditorTextInterface;
@@ -50,12 +45,13 @@ export class TextAnalyzer {
     editor: EditorTextInterface,
     callbacks: TextAnalysisCallbacks,
     initialLanguage: SupportedLanguage,
+    cache: LRUCache<string, CheckerResponse>,
   ) {
     this.api = api;
     this.editor = editor;
     this.callbacks = callbacks;
     this.currentLanguage = initialLanguage;
-    this.cache = new LRUCache(TEXT_ANALYZER_CACHE_SIZE);
+    this.cache = cache;
   }
 
   /**
@@ -222,7 +218,7 @@ export class TextAnalyzer {
    * @param lineNumber - The 0-based line number (for logging purposes)
    * @returns Array of errors with indices adjusted to document position
    */
-  private async checkLineWithCache(
+  async checkLineWithCache(
     lineText: string,
     documentOffset: number,
     lineNumber: number,
@@ -232,7 +228,7 @@ export class TextAnalyzer {
       return [];
     }
     const response = await this.maybeCachedResponse(lineText, lineNumber);
-    const trimOffset = this.getTrimOffset(lineText, response);
+    const trimOffset = this.getTrimOffset(lineText, response.text);
 
     return this.adjustErrors(response, documentOffset, trimOffset);
   }
@@ -281,13 +277,13 @@ export class TextAnalyzer {
    * The API may trim leading/trailing whitespace from the text before checking it.
    *
    * @param lineText - Original line text
-   * @param response - API response for the line
+   * @param responseText - The API response's text for the line
    * @returns Calculated trim offset
    */
-  private getTrimOffset(lineText: string, response: CheckerResponse) {
+  private getTrimOffset(lineText: string, responseText: string) {
     const leadingWhitespace = lineText.length - lineText.trimStart().length;
-    const apiLeadingWhitespace = response.text.length -
-      response.text.trimStart().length;
+    const apiLeadingWhitespace = responseText.length -
+      responseText.trimStart().length;
     const trimOffset = leadingWhitespace - apiLeadingWhitespace;
     return trimOffset;
   }

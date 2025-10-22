@@ -28,6 +28,12 @@ import {
 } from "./config-manager.ts";
 import { QuillBridge, registerQuillBlots } from "./quill-bridge-instance.ts";
 import { TextChecker } from "./text-checker.ts";
+import { LRUCache } from "./lru-cache.ts";
+
+/**
+ * Maximum number of items to store in the text analysis cache
+ */
+const TEXT_ANALYZER_CACHE_SIZE = 1000;
 
 // Initialize the text checker when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
@@ -146,6 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
       editor,
       textAnalysisCallbacks,
       configManager.getCurrentLanguage(),
+      new LRUCache(TEXT_ANALYZER_CACHE_SIZE),
     );
 
     // Create the state machine with callbacks
