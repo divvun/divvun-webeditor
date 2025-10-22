@@ -53,24 +53,7 @@ export class GrammarCheckerAPI implements CheckerApi {
 
       const data: CheckerResponse = await response.json();
 
-      // FIX: The API trims whitespace from the input text, which shifts error indices.
-      // We need to adjust error indices to match the original text.
-      // Compare the API's returned text with our original text to find the offset.
-      const leadingWhitespace = text.length - text.trimStart().length;
-
-      if (leadingWhitespace > 0 && data.text !== text) {
-        console.debug(
-          `📍 Adjusting error indices by +${leadingWhitespace} (API trimmed leading whitespace)`,
-        );
-
-        // Adjust all error indices by the amount of leading whitespace that was trimmed
-        data.errs = data.errs.map((error) => ({
-          ...error,
-          start_index: error.start_index + leadingWhitespace,
-          end_index: error.end_index + leadingWhitespace,
-        }));
-      }
-
+      // Return raw API response - text-analyzer will handle index adjustments
       return data;
     } catch (error: unknown) {
       clearTimeout(timeoutId);
