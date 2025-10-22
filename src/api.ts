@@ -8,63 +8,9 @@ import type {
   SupportedLanguage,
 } from "./types.ts";
 
-/**
- * Simple LRU (Least Recently Used) cache implementation
- */
-export class LRUCache<K, V> {
-  private cache: Map<K, V>;
-  private maxSize: number;
-
-  constructor(maxSize: number = 100) {
-    this.cache = new Map();
-    this.maxSize = maxSize;
-  }
-
-  get(key: K): V | undefined {
-    const value = this.cache.get(key);
-    if (value !== undefined) {
-      // Move to end (most recently used)
-      this.cache.delete(key);
-      this.cache.set(key, value);
-    }
-    return value;
-  }
-
-  set(key: K, value: V): void {
-    // Delete if exists (to re-insert at end)
-    if (this.cache.has(key)) {
-      this.cache.delete(key);
-    }
-
-    // Add to end
-    this.cache.set(key, value);
-
-    // Remove oldest if over capacity
-    if (this.cache.size > this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== undefined) {
-        this.cache.delete(firstKey);
-      }
-    }
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-
-  get size(): number {
-    return this.cache.size;
-  }
-}
-
 export class GrammarCheckerAPI implements CheckerApi {
-  private cache: LRUCache<string, CheckerResponse>;
   private readonly baseUrl = "https://api-giellalt.uit.no/grammar";
   private readonly timeout = 10000; // 10 seconds
-
-  constructor(cache: LRUCache<string, CheckerResponse>) {
-    this.cache = cache;
-  }
 
   async checkText(
     text: string,
