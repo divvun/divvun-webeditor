@@ -81,7 +81,7 @@ export class TextAnalyzer {
   }
 
   /**
-   * Check a specific line only - for line-specific grammar checking
+   * Check a specific line only - for line-specific text checking
    * Uses cache-aware checking for optimal performance
    */
   async checkSpecificLine(lineNumber: number): Promise<CheckerError[]> {
@@ -98,9 +98,9 @@ export class TextAnalyzer {
   }
 
   /**
-   * Main grammar checking method - checks entire document using cache-aware approach
+   * Main text checking method - checks entire document using cache-aware approach
    */
-  async checkGrammar(): Promise<void> {
+  async checkText(): Promise<void> {
     const currentText = this.editor.getText();
 
     // Don't check if content is empty
@@ -118,7 +118,7 @@ export class TextAnalyzer {
 
       // Check if we should abort (user might have interrupted)
       if (this.checkingContext?.abortController.signal.aborted) {
-        console.debug("Grammar check aborted by user");
+        console.debug("Text check aborted by user");
         return;
       }
 
@@ -136,8 +136,8 @@ export class TextAnalyzer {
       this.callbacks.onUpdateErrorCount(allErrors.length);
       this.callbacks.onErrorsFound(allErrors);
     } catch (error) {
-      console.error("Grammar check failed:", error);
-      this.callbacks.onUpdateStatus("Error checking grammar", false);
+      console.error("Text check failed:", error);
+      this.callbacks.onUpdateStatus("Error checking text", false);
       this.callbacks.onShowErrorMessage(
         error instanceof Error ? error.message : String(error),
       );

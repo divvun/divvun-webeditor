@@ -11,7 +11,7 @@ export const description =
   "Advanced grammar and spell checking for Sámi and other languages";
 export const layout = "layout.tsx";
 
-export default function GrammarEditor() {
+export default function TextCheckerEditor() {
   return (
     <>
       <Controls>

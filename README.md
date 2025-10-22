@@ -1,4 +1,4 @@
-# Divvun Grammar webeditor
+# Divvun TextChecker Webeditor
 
 A static site with a Quill editor integrated with the Divvun Grammar API for real-time grammar checking in Sami languages and Faroese.
 

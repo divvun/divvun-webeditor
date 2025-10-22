@@ -26,7 +26,7 @@ interface EditorInterface {
 export interface SuggestionCallbacks {
   onSuggestionApplied: (error: CheckerError, suggestion: string) => void;
   onClearErrors: () => void;
-  onCheckGrammar: () => void;
+  onCheckText: () => void;
   onRecheckLine: (lineNumber: number) => void;
 }
 

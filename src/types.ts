@@ -1,4 +1,4 @@
-// Type definitions for the Divvun Grammar Checker
+// Type definitions for the Divvun Text Checker
 
 export type SupportedLanguage =
   | "se"
@@ -50,7 +50,7 @@ export interface CheckerApi {
   getSupportedLanguages(): Array<{ code: SupportedLanguage; name: string }>;
 }
 
-export interface GrammarCheckerConfig {
+export interface TextCheckerConfig {
   language: SupportedLanguage;
   apiUrl: string;
   autoCheckDelay: number;
@@ -75,9 +75,9 @@ export interface EditorState {
 export type CheckerState =
   | "idle" // Ready for user input
   | "editing" // User is making changes (debouncing)
-  | "checking" // Performing grammar check
+  | "checking" // Performing text check
   | "highlighting" // Updating visual highlights
-  | "failed"; // Grammar check failed, awaiting retry
+  | "failed"; // Text check failed, awaiting retry
 
 export interface CheckingContext {
   abortController: AbortController;

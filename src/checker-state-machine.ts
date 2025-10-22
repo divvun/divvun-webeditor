@@ -1,5 +1,5 @@
 /**
- * Manages the state machine for grammar checking lifecycle.
+ * Manages the state machine for text checking lifecycle.
  * Handles transitions between idle, editing, timeout, checking, and highlighting states.
  */
 
@@ -349,8 +349,8 @@ export class CheckerStateMachine {
         // Editing state entered - debouncing will be handled by startEditDebounce
         break;
       case "checking":
-        // Request grammar check to be performed
-        console.log(`🔍 Requesting grammar check...`);
+        // Request text check to be performed
+        console.log(`🔍 Requesting text check...`);
         this.callbacks.onCheckRequested();
         break;
       case "highlighting":

@@ -37,7 +37,7 @@ import { atomicTextReplace } from "./editor-utils.ts";
 
 // ConfigManager now handles available languages
 
-export class GrammarChecker {
+export class TextChecker {
   public state: EditorState;
   private checkingContext: CheckingContext | null = null;
   public isHighlighting: boolean = false;
@@ -75,9 +75,9 @@ export class GrammarChecker {
   // ConfigManager now handles API creation
 
   /**
-   * Create a new GrammarChecker instance.
+   * Create a new TextChecker instance.
    *
-   * @param editor - Quill editor instance to use for the grammar checker.
+   * @param editor - Quill editor instance to use for the text checker.
    * @param configManager - Configuration manager instance.
    * @param cursorManager - Cursor manager instance.
    * @param suggestionManager - Suggestion manager instance.
@@ -115,7 +115,7 @@ export class GrammarChecker {
     this.previousText = this.editor.getText();
 
     // Ensure editor root is focusable
-    this.editor.root.setAttribute("aria-label", "Grammar editor");
+    this.editor.root.setAttribute("aria-label", "TextChecker editor");
     // Disable native browser spellcheck inside Quill editor
     try {
       this.editor.root.setAttribute("spellcheck", "false");
@@ -190,12 +190,12 @@ export class GrammarChecker {
         this.checkFromLineToEnd(startLine);
       } else {
         console.warn(`No line number for ${editType}, doing full check`);
-        this.textAnalyzer.checkGrammar();
+        this.textAnalyzer.checkText();
       }
     } catch (error) {
       console.error(`❌ Error in handleEditDetected:`, error);
       // Fallback to full check if something goes wrong
-      this.textAnalyzer.checkGrammar();
+      this.textAnalyzer.checkText();
     }
   }
   /**
@@ -244,7 +244,7 @@ export class GrammarChecker {
           this.stateMachine.onCheckFailed();
           // Show error to user with retry button
           this.updateStatus(
-            "Grammar check failed",
+            "Text check failed",
             false,
             true, // Show retry button
           );
@@ -337,7 +337,7 @@ export class GrammarChecker {
       );
       // Fallback to full check
       this.state.lastCheckedContent = "";
-      this.textAnalyzer.checkGrammar();
+      this.textAnalyzer.checkText();
     }
   }
 
@@ -474,7 +474,7 @@ export class GrammarChecker {
       );
     } catch (error) {
       console.error("Affected lines check failed:", error);
-      this.updateStatus("Error checking grammar", false);
+      this.updateStatus("Error checking text", false);
       throw error;
     } finally {
       this.state.isChecking = false;
@@ -510,18 +510,18 @@ export class GrammarChecker {
 
   // Line-level caching methods
 
-  public performGrammarCheck(): void {
+  public performTextCheck(): void {
     // Set up checking context in text analyzer
     this.checkingContext = this.textAnalyzer.startCheckingContext();
 
-    // Perform the actual grammar check
+    // Perform the actual text check
     this.textAnalyzer
-      .checkGrammar()
+      .checkText()
       .then(() => {
         this.stateMachine.onCheckComplete();
       })
       .catch((error) => {
-        console.warn("Grammar check failed:", error);
+        console.warn("Text check failed:", error);
         this.stateMachine.onCheckFailed();
       });
   }
@@ -539,9 +539,9 @@ export class GrammarChecker {
     return index;
   }
 
-  async checkGrammar(): Promise<void> {
+  async checkText(): Promise<void> {
     // Delegate to TextAnalyzer
-    await this.textAnalyzer.checkGrammar();
+    await this.textAnalyzer.checkText();
   }
 
   public updateStatus(
@@ -654,7 +654,7 @@ export class GrammarChecker {
       // Fallback to full recheck
       this.state.lastCheckedContent = "";
       this.errorHighlighter.clearErrors();
-      this.textAnalyzer.checkGrammar();
+      this.textAnalyzer.checkText();
     }
   }
 
@@ -704,10 +704,10 @@ export class GrammarChecker {
         "Intelligent correction failed, falling back to full check:",
         error,
       );
-      // Fallback to full grammar check
+      // Fallback to full text check
       this.state.lastCheckedContent = "";
       this.errorHighlighter.clearErrors();
-      this.textAnalyzer.checkGrammar();
+      this.textAnalyzer.checkText();
     }
   }
 
@@ -807,7 +807,7 @@ export class GrammarChecker {
     // Re-check with new language if there's content
     const text = this.getText();
     if (text && text.trim()) {
-      this.textAnalyzer.checkGrammar();
+      this.textAnalyzer.checkText();
     }
   }
 
@@ -849,7 +849,7 @@ export class GrammarChecker {
   setText(text: string): void {
     this.editor.setText(text);
     this.state.lastCheckedContent = ""; // Force re-check
-    this.textAnalyzer.checkGrammar();
+    this.textAnalyzer.checkText();
   }
 
   getText(): string {
@@ -863,7 +863,7 @@ export class GrammarChecker {
   }
 }
 
-// Initialize the grammar checker when DOM is loaded
+// Initialize the text checker when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
   // Check if required elements exist
   const editorElement = document.getElementById("editor");
@@ -908,12 +908,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Create the configuration manager with callbacks
-    // Note: Callbacks reference grammarChecker methods, which we'll set up after instantiation
-    let grammarCheckerInstance: GrammarChecker | null = null;
+    // Note: Callbacks reference textChecker methods, which we'll set up after instantiation
+    let textCheckerInstance: TextChecker | null = null;
 
     const configCallbacks: ConfigurationCallbacks = {
       onLanguageChanged: (language: SupportedLanguage, api: CheckerApi) => {
-        grammarCheckerInstance?.handleLanguageChange(language, api);
+        textCheckerInstance?.handleLanguageChange(language, api);
       },
       onConfigurationInitialized: () => {
         console.log("🔧 Configuration initialized successfully");
@@ -929,23 +929,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const cursorManager = new CursorManager(editor);
 
     // Create the suggestion manager with callbacks
-    // Note: These callbacks will be bound to grammarChecker methods after it's created
-    let grammarCheckerRef: GrammarChecker | null = null;
+    // Note: These callbacks will be bound to textChecker methods after it's created
+    let textCheckerRef: TextChecker | null = null;
     const suggestionCallbacks: SuggestionCallbacks = {
       onSuggestionApplied: (error: CheckerError, suggestion: string) => {
-        grammarCheckerRef?.applySuggestion(error, suggestion);
+        textCheckerRef?.applySuggestion(error, suggestion);
       },
       onClearErrors: () => {
-        if (grammarCheckerRef) {
-          grammarCheckerRef.state.lastCheckedContent = "";
-          grammarCheckerRef.errorHighlighter.clearErrors();
+        if (textCheckerRef) {
+          textCheckerRef.state.lastCheckedContent = "";
+          textCheckerRef.errorHighlighter.clearErrors();
         }
       },
-      onCheckGrammar: () => {
-        grammarCheckerRef?.textAnalyzer.checkGrammar();
+      onCheckText: () => {
+        textCheckerRef?.textAnalyzer.checkText();
       },
       onRecheckLine: (lineNumber: number) => {
-        grammarCheckerRef?.recheckModifiedLine(lineNumber);
+        textCheckerRef?.recheckModifiedLine(lineNumber);
       },
     };
     const suggestionManager = new SuggestionManager(
@@ -957,22 +957,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const textAnalysisCallbacks: TextAnalysisCallbacks = {
       onErrorsFound: (errors: CheckerError[], lineNumber?: number) => {
         if (lineNumber !== undefined) {
-          grammarCheckerRef?.errorHighlighter.highlightLineErrors(errors);
+          textCheckerRef?.errorHighlighter.highlightLineErrors(errors);
         } else {
-          if (grammarCheckerRef) {
-            grammarCheckerRef.state.errors = errors;
-            grammarCheckerRef.eventManager.updateErrors(errors);
+          if (textCheckerRef) {
+            textCheckerRef.state.errors = errors;
+            textCheckerRef.eventManager.updateErrors(errors);
           }
         }
       },
       onUpdateErrorCount: (count: number) => {
-        grammarCheckerRef?.updateErrorCount(count);
+        textCheckerRef?.updateErrorCount(count);
       },
       onUpdateStatus: (status: string, isChecking: boolean) => {
-        grammarCheckerRef?.updateStatus(status, isChecking);
+        textCheckerRef?.updateStatus(status, isChecking);
       },
       onShowErrorMessage: (message: string) => {
-        grammarCheckerRef?.showErrorMessage(message);
+        textCheckerRef?.showErrorMessage(message);
       },
     };
     const textAnalyzer = new TextAnalyzer(
@@ -985,20 +985,20 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create the state machine with callbacks
     const stateTransitionCallbacks: StateTransitionCallbacks = {
       onStateEntry: (state: CheckerState) => {
-        grammarCheckerRef?.onStateEntry(state);
+        textCheckerRef?.onStateEntry(state);
       },
       onStateExit: (state: CheckerState) => {
-        grammarCheckerRef?.onStateExit(state);
+        textCheckerRef?.onStateExit(state);
       },
       onCheckRequested: () => {
-        grammarCheckerRef?.performGrammarCheck();
+        textCheckerRef?.performTextCheck();
       },
       onEditDetected: (editType: EditType, editInfo: EditInfo) => {
         console.log(
           `🚨 CALLBACK onEditDetected called with ${editType}`,
           editInfo,
         );
-        grammarCheckerRef?.handleEditDetected(editType, editInfo);
+        textCheckerRef?.handleEditDetected(editType, editInfo);
       },
     };
     const stateMachine = new CheckerStateMachine(
@@ -1009,19 +1009,19 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create the event manager with callbacks
     const eventCallbacks: EventCallbacks = {
       onTextChange: (source: string, currentText: string) => {
-        grammarCheckerRef?.handleTextChange(source, currentText);
+        textCheckerRef?.handleTextChange(source, currentText);
       },
       onLanguageChange: (language: SupportedLanguage) => {
-        grammarCheckerRef?.setLanguage(language);
+        textCheckerRef?.setLanguage(language);
       },
       onClearEditor: () => {
-        grammarCheckerRef?.clearEditor();
+        textCheckerRef?.clearEditor();
       },
       onRetryCheck: () => {
-        // Retry the last failed grammar check
-        if (grammarCheckerRef) {
-          grammarCheckerRef.stateMachine.retryCheck();
-          grammarCheckerRef.performGrammarCheck();
+        // Retry the last failed text check
+        if (textCheckerRef) {
+          textCheckerRef.stateMachine.retryCheck();
+          textCheckerRef.performTextCheck();
         }
       },
       onErrorClick: (
@@ -1031,7 +1031,7 @@ document.addEventListener("DOMContentLoaded", () => {
         length: number,
         event: MouseEvent,
       ) => {
-        grammarCheckerRef?.suggestionManager.showSuggestionTooltip(
+        textCheckerRef?.suggestionManager.showSuggestionTooltip(
           errorNode,
           matching,
           index,
@@ -1044,7 +1044,7 @@ document.addEventListener("DOMContentLoaded", () => {
         y: number,
         matchingError: CheckerError,
       ) => {
-        grammarCheckerRef?.suggestionManager.showContextMenu(
+        textCheckerRef?.suggestionManager.showContextMenu(
           x,
           y,
           matchingError,
@@ -1055,7 +1055,7 @@ document.addEventListener("DOMContentLoaded", () => {
         prePasteText: string,
         pastedContent: string,
       ) => {
-        grammarCheckerRef?.handleIntelligentPasteCheck(
+        textCheckerRef?.handleIntelligentPasteCheck(
           prePasteSelection,
           prePasteText,
           pastedContent,
@@ -1073,24 +1073,24 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create the error highlighter with callbacks
     const highlightingCallbacks: HighlightingCallbacks = {
       onHighlightingStart: () => {
-        if (grammarCheckerRef) {
-          grammarCheckerRef.isHighlighting = true;
-          grammarCheckerRef.eventManager.setHighlightingState(true);
+        if (textCheckerRef) {
+          textCheckerRef.isHighlighting = true;
+          textCheckerRef.eventManager.setHighlightingState(true);
         }
       },
       onHighlightingComplete: () => {
-        if (grammarCheckerRef) {
-          grammarCheckerRef.isHighlighting = false;
-          grammarCheckerRef.eventManager.setHighlightingState(false);
-          grammarCheckerRef.stateMachine.onHighlightingComplete();
+        if (textCheckerRef) {
+          textCheckerRef.isHighlighting = false;
+          textCheckerRef.eventManager.setHighlightingState(false);
+          textCheckerRef.stateMachine.onHighlightingComplete();
         }
       },
       onErrorsCleared: () => {
-        if (grammarCheckerRef) {
-          grammarCheckerRef.state.errors = [];
-          grammarCheckerRef.eventManager.updateErrors([]);
-          grammarCheckerRef.state.errorSpans = [];
-          grammarCheckerRef.updateErrorCount(0);
+        if (textCheckerRef) {
+          textCheckerRef.state.errors = [];
+          textCheckerRef.eventManager.updateErrors([]);
+          textCheckerRef.state.errorSpans = [];
+          textCheckerRef.updateErrorCount(0);
         }
       },
     };
@@ -1100,8 +1100,8 @@ document.addEventListener("DOMContentLoaded", () => {
       highlightingCallbacks,
     );
 
-    // Create the grammar checker with all dependencies
-    const grammarChecker = new GrammarChecker(
+    // Create the text checker with all dependencies
+    const textChecker = new TextChecker(
       editor,
       configManager,
       cursorManager,
@@ -1111,11 +1111,11 @@ document.addEventListener("DOMContentLoaded", () => {
       eventManager,
       errorHighlighter,
     );
-    grammarCheckerInstance = grammarChecker;
-    grammarCheckerRef = grammarChecker;
+    textCheckerInstance = textChecker;
+    textCheckerRef = textChecker;
 
     // Initialize languages asynchronously
-    grammarChecker
+    textChecker
       .initializeLanguages()
       .then(() => {
         console.log("Languages initialized successfully");
@@ -1126,11 +1126,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Make it available globally for debugging
     (
-      globalThis as unknown as { grammarChecker?: GrammarChecker }
-    ).grammarChecker = grammarChecker;
+      globalThis as unknown as { textChecker?: TextChecker }
+    ).textChecker = textChecker;
   } catch (error) {
-    console.error("Error initializing grammar checker:", error);
+    console.error("Error initializing text checker:", error);
   }
 });
 
-// The GrammarChecker class is already exported above
+// The TextChecker class is already exported above

@@ -68,7 +68,7 @@ export class ErrorHighlighter {
    * Highlight errors for a specific line without clearing existing highlights
    */
   highlightLineErrors(errors: CheckerError[]): void {
-    // Set highlighting flag to prevent triggering grammar checks during line highlighting
+    // Set highlighting flag to prevent triggering text checks during line highlighting
     this.isHighlighting = true;
     this.callbacks.onHighlightingStart();
 
@@ -140,7 +140,7 @@ export class ErrorHighlighter {
       return;
     }
 
-    // Set highlighting flag to prevent triggering grammar checks during highlighting
+    // Set highlighting flag to prevent triggering text checks during highlighting
     this.isHighlighting = true;
     this.callbacks.onHighlightingStart();
 

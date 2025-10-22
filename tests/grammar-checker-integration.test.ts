@@ -1,5 +1,5 @@
 /**
- * Integration tests for GrammarChecker using real dependencies where possible
+ * Integration tests for TextChecker using real dependencies where possible
  */
 
 import { assertEquals, assertExists } from "jsr:@std/assert@1";
@@ -70,17 +70,17 @@ function createMockEditor(): QuillBridgeInstance {
 }
 
 // ============================================================================
-// GrammarChecker Constructor Tests
+// TextChecker Constructor Tests
 // ============================================================================
 
 Deno.test(
-  "GrammarChecker - constructor signature enforced through type system",
+  "TextChecker - constructor signature enforced through type system",
   () => {
-    // This test verifies through TypeScript's type system that GrammarChecker
+    // This test verifies through TypeScript's type system that TextChecker
     // requires exactly 8 dependencies. The test compiles successfully because
     // we've successfully refactored the constructor to use dependency injection.
 
-    // Type-level verification: These types must match what GrammarChecker expects
+    // Type-level verification: These types must match what TextChecker expects
     type RequiredDependencies = [
       QuillBridgeInstance,
       ConfigManager,
@@ -99,7 +99,7 @@ Deno.test(
 );
 
 Deno.test(
-  "GrammarChecker - dependency injection enables testing with real components",
+  "TextChecker - dependency injection enables testing with real components",
   () => {
     // This test demonstrates that we can create real instances of injectable dependencies
     const editor = createMockEditor();

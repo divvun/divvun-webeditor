@@ -6,8 +6,8 @@ import {
 import {
   AvailableLanguage,
   CheckerApi,
-  GrammarCheckerConfig,
   SupportedLanguage,
+  TextCheckerConfig,
 } from "./types.ts";
 
 /**
@@ -31,7 +31,7 @@ export interface ConfigurationCallbacks {
  * - Application initialization coordination
  */
 export class ConfigManager {
-  private config: GrammarCheckerConfig;
+  private config: TextCheckerConfig;
   private api: CheckerApi;
   private availableLanguages: AvailableLanguage[] = [];
   private callbacks: ConfigurationCallbacks;
@@ -85,7 +85,7 @@ export class ConfigManager {
   /**
    * Get the current configuration
    */
-  getConfig(): GrammarCheckerConfig {
+  getConfig(): TextCheckerConfig {
     return { ...this.config };
   }
 
@@ -177,7 +177,7 @@ export class ConfigManager {
   /**
    * Update configuration settings
    */
-  updateConfig(newConfig: Partial<GrammarCheckerConfig>): void {
+  updateConfig(newConfig: Partial<TextCheckerConfig>): void {
     console.debug("🔧 ConfigManager: Updating configuration", newConfig);
 
     this.config = { ...this.config, ...newConfig };
