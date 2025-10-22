@@ -469,15 +469,17 @@ export class EventManager {
     return { menuX, menuY };
   }
 
-  private getCaretPosition(caret: {
-    offsetNode: Node;
-    offset: number;
-  }): number {
-    // Use Quill's built-in method to find position from DOM node
+  /**
+   * Calculate Quill editor index from a DOM node and offset
+   * @param node DOM node to find position for
+   * @param offset Character offset within the node
+   * @returns Quill editor index, or 0 if not found
+   */
+  private getPositionFromNode(node: Node, offset: number): number {
     try {
-      const blot = this.editor.findBlot?.(caret.offsetNode);
+      const blot = this.editor.findBlot?.(node);
       if (blot && this.editor.getIndex) {
-        return this.editor.getIndex(blot) + caret.offset;
+        return this.editor.getIndex(blot) + offset;
       }
     } catch (_err) {
       // ignore
@@ -485,16 +487,14 @@ export class EventManager {
     return 0;
   }
 
+  private getCaretPosition(caret: {
+    offsetNode: Node;
+    offset: number;
+  }): number {
+    return this.getPositionFromNode(caret.offsetNode, caret.offset);
+  }
+
   private getRangePosition(range: Range): number {
-    // Convert DOM range to Quill index (for Safari/Firefox)
-    try {
-      const blot = this.editor.findBlot?.(range.startContainer);
-      if (blot && this.editor.getIndex) {
-        return this.editor.getIndex(blot) + range.startOffset;
-      }
-    } catch (_err) {
-      // ignore
-    }
-    return 0;
+    return this.getPositionFromNode(range.startContainer, range.startOffset);
   }
 }
