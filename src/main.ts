@@ -154,77 +154,44 @@ export class GrammarChecker {
 
   /**
    * Handle detected edit operations
+   * With caching, we can simply check from the edited line to the end - cache hits make this fast
    */
   public handleEditDetected(editType: EditType, editInfo: EditInfo): void {
-    console.log(
-      `🚨 MAIN.TS handleEditDetected called with ${editType}`,
-      editInfo,
-    );
     console.debug(`📝 Handling ${editType}:`, editInfo);
 
     try {
-      console.log(`🔍 Switch statement executing for ${editType}`);
+      // Determine which line was edited
+      let startLine: number | undefined;
+
       switch (editType) {
         case "single-line-edit":
-          console.log(`🎯 Entering single-line-edit case`);
-          console.log(
-            `🔍 editInfo.lineNumber:`,
-            editInfo.lineNumber,
-            `(type: ${typeof editInfo.lineNumber})`,
-          );
-          if (editInfo.lineNumber !== undefined) {
-            console.log(
-              `🎯 Line-specific check for line ${editInfo.lineNumber}`,
-            );
-            console.log(`🚀 About to call handleSingleLineEdit`);
-            this.handleSingleLineEdit(editInfo.lineNumber);
-            console.log(`✅ handleSingleLineEdit call completed`);
-          } else {
-            console.warn(
-              "Single line edit detected but line number not provided",
-            );
-            this.textAnalyzer.checkGrammar(); // Fallback to full check
-          }
+          startLine = editInfo.lineNumber;
           break;
         case "newline-creation":
-          console.debug(
-            `Newline created at line ${editInfo.lineNumber}, split at position ${editInfo.splitPosition}`,
-          );
-          // For newlines, we need to check both the split line and the new line
-          // Special case: if pasting into empty buffer, check all lines progressively
-          if (editInfo.lineNumber !== undefined) {
-            this.handleNewlineEdit(
-              editInfo.lineNumber,
-              editInfo.previousText,
-              editInfo.currentText,
-            ).catch((err) => {
-              console.error(`❌ Error in newline edit handler:`, err);
-            });
-          }
+          // Check from the line where newline was created
+          startLine = editInfo.lineNumber;
           break;
         case "line-deletion":
-          console.debug(`Line deleted/merged at line ${editInfo.lineNumber}`);
-          // When lines are deleted, invalidate cache and check surrounding context
-          if (editInfo.lineNumber !== undefined) {
-            this.handleLineDeletion(editInfo.lineNumber).catch((err) => {
-              console.error(`❌ Error in line deletion handler:`, err);
-            });
-          }
+          // Check from the line before deletion (if it exists), otherwise from deletion point
+          startLine = editInfo.lineNumber !== undefined && editInfo.lineNumber > 0
+            ? editInfo.lineNumber - 1
+            : editInfo.lineNumber;
           break;
         case "multi-line-edit":
-          console.debug(
-            `Multi-line edit from line ${editInfo.startLine} to ${editInfo.endLine}`,
-          );
-          // For multi-line edits, we fall back to full checking for now
-          // Could be optimized to check only affected line range
-          this.textAnalyzer.checkGrammar();
+          startLine = editInfo.startLine;
           break;
         case "paste":
         case "cut":
-          console.debug(`${editType} operation detected`);
-          // Paste/cut operations affect potentially multiple lines, use full check
-          this.textAnalyzer.checkGrammar();
+          // For paste/cut, check everything
+          startLine = 0;
           break;
+      }
+
+      if (startLine !== undefined) {
+        this.checkFromLineToEnd(startLine);
+      } else {
+        console.warn(`No line number for ${editType}, doing full check`);
+        this.textAnalyzer.checkGrammar();
       }
     } catch (error) {
       console.error(`❌ Error in handleEditDetected:`, error);
@@ -233,35 +200,34 @@ export class GrammarChecker {
     }
   }
   /**
-   * Handle single line edit with line-specific checking (debounced)
+   * Check from a specific line to the end of the document
+   * With caching, unchanged lines will be cache hits (fast), only changed lines call the API
    */
-  private handleSingleLineEdit(lineNumber: number): void {
-    console.log(`🎯 handleSingleLineEdit ENTERED for line ${lineNumber}`);
+  private checkFromLineToEnd(startLine: number): void {
+    console.debug(`📋 Checking from line ${startLine} to end`);
 
-    // Clear any existing debounce timer for this line
-    const existingTimer = this.lineDebounceTimers.get(lineNumber);
+    // Clear any existing debounce timer
+    const existingTimer = this.lineDebounceTimers.get(startLine);
     if (existingTimer !== undefined) {
-      console.log(`⏱️ Clearing existing debounce timer for line ${lineNumber}`);
       clearTimeout(existingTimer);
     }
 
     // Set a new debounce timer
     const timerId = setTimeout(() => {
-      console.log(`⏰ Debounce timer fired for line ${lineNumber}`);
-      this.lineDebounceTimers.delete(lineNumber);
+      this.lineDebounceTimers.delete(startLine);
 
-      // Check if there's already a pending check for this line
-      if (this.pendingLineChecks.has(lineNumber)) {
-        console.debug(
-          `⏸️ Line ${lineNumber} check already in progress, skipping`,
-        );
+      // Check if there's already a pending check
+      if (this.pendingLineChecks.has(startLine)) {
+        console.debug(`⏸️ Check already in progress from line ${startLine}, skipping`);
         return;
       }
 
-      console.log(`🔄 Starting line check for line ${lineNumber}`);
-      // recheckModifiedLine now uses 0-based line numbers (same as state machine)
-      const checkPromise = this.recheckModifiedLine(lineNumber);
-      this.pendingLineChecks.set(lineNumber, checkPromise);
+      const currentText = this.editor.getText();
+      const lines = currentText.split("\n");
+      const endLine = lines.length - 1;
+
+      const checkPromise = this.checkLinesAndUpdateState(startLine, endLine);
+      this.pendingLineChecks.set(startLine, checkPromise);
 
       checkPromise
         .then(() => {
@@ -272,7 +238,7 @@ export class GrammarChecker {
           this.stateMachine.onCheckComplete();
         })
         .catch((error) => {
-          console.error(`Line ${lineNumber} check failed:`, error);
+          console.error(`Check from line ${startLine} failed:`, error);
           // Notify state machine that check failed
           this.stateMachine.onCheckFailed();
           // Show error to user with retry button
@@ -283,118 +249,51 @@ export class GrammarChecker {
           );
         })
         .finally(() => {
-          this.pendingLineChecks.delete(lineNumber);
+          this.pendingLineChecks.delete(startLine);
         });
     }, this.LINE_CHECK_DEBOUNCE_MS);
 
-    this.lineDebounceTimers.set(lineNumber, timerId);
-    console.log(
-      `⏱️ Set debounce timer for line ${lineNumber} (${this.LINE_CHECK_DEBOUNCE_MS}ms)`,
-    );
+    this.lineDebounceTimers.set(startLine, timerId);
   }
 
   /**
-   * Handle newline creation by checking affected lines
+   * Check a range of lines and update the error state
+   * Removes errors from the range, checks the lines (using cache), and adds new errors
    */
-  private async handleNewlineEdit(
-    lineNumber: number,
-    previousText?: string,
-    currentText?: string,
+  private async checkLinesAndUpdateState(
+    startLine: number,
+    endLine: number,
   ): Promise<void> {
-    try {
-      console.debug(`📄 Handling newline at line ${lineNumber}`);
+    const currentText = this.editor.getText();
+    const lines = currentText.split("\n");
 
-      // Special case: if pasting into empty/near-empty buffer, check all lines progressively
-      // This provides a nice progressive highlighting experience
-      // Consider buffer empty if previousText is empty, just whitespace, or a single newline
-      const isEmptyBuffer = !previousText || previousText.trim() === "" ||
-        previousText === "\n";
+    // Calculate the character range being checked
+    const startIndex = this.getLineStartIndex(startLine, lines);
+    const endIndex = endLine < lines.length - 1
+      ? this.getLineStartIndex(endLine + 1, lines)
+      : currentText.length;
 
-      if (isEmptyBuffer && currentText) {
-        const lines = currentText.split("\n");
-        console.debug(
-          `🎨 Paste into empty buffer detected (previousText: ${
-            JSON.stringify(previousText)
-          }) - checking all ${lines.length} lines progressively`,
-        );
+    // Remove all errors in the range being rechecked
+    this.state.errors = this.state.errors.filter((error) => {
+      return error.start_index < startIndex || error.start_index >= endIndex;
+    });
 
-        // Check each line sequentially for progressive highlighting
-        for (let i = 0; i < lines.length; i++) {
-          await this.recheckModifiedLine(i);
-        }
+    // Check the range using TextAnalyzer (cache-aware)
+    const newErrors = await this.textAnalyzer.checkMultipleLinesForStateManagement(
+      startLine,
+      endLine,
+      (message) => this.updateStatus(message, true),
+    );
 
-        // Update EventManager with current errors for click handling
-        this.eventManager.updateErrors(this.state.errors);
-        this.updateErrorCount(this.state.errors.length);
+    // Add the new errors
+    this.state.errors.push(...newErrors);
 
-        console.debug(
-          `✅ Progressive check complete for ${lines.length} lines`,
-        );
-      } else {
-        // Normal newline handling - just check the two affected lines
-        // recheckModifiedLine now uses 0-based line numbers (same as state machine)
-        // Check both lines affected by the split
-        await Promise.all([
-          this.recheckModifiedLine(lineNumber), // The line where split occurred
-          this.recheckModifiedLine(lineNumber + 1), // The new line created
-        ]);
+    // Re-highlight all errors
+    this.errorHighlighter.highlightErrors(this.state.errors);
 
-        // Update EventManager with current errors for click handling
-        this.eventManager.updateErrors(this.state.errors);
-        this.updateErrorCount(this.state.errors.length);
-
-        console.debug(
-          `✅ Newline handling complete for lines ${lineNumber}-${
-            lineNumber + 1
-          }`,
-        );
-      }
-
-      // Cancel any pending debounce since line-specific check completed successfully
-      this.stateMachine.cancelPendingCheck();
-    } catch (error) {
-      console.error(`❌ Newline handling failed:`, error);
-      this.textAnalyzer.checkGrammar();
-    }
-  }
-
-  /**
-   * Handle line deletion by invalidating cache and checking context
-   */
-  private async handleLineDeletion(lineNumber: number): Promise<void> {
-    try {
-      console.debug(`🗑️ Handling line deletion at ${lineNumber}`);
-
-      // recheckModifiedLine now uses 0-based line numbers (same as state machine)
-      // Check lines around the deletion point
-      const currentText = this.editor.getText();
-      const lines = currentText.split("\n");
-
-      const checkPromises = [];
-      // Check the line at the deletion point (if it exists)
-      if (lineNumber < lines.length) {
-        checkPromises.push(this.recheckModifiedLine(lineNumber));
-      }
-
-      // Check the line before (if it exists)
-      if (lineNumber > 0) {
-        checkPromises.push(this.recheckModifiedLine(lineNumber - 1));
-      }
-
-      await Promise.all(checkPromises);
-
-      // Update EventManager with current errors for click handling
-      this.eventManager.updateErrors(this.state.errors);
-      this.updateErrorCount(this.state.errors.length);
-
-      console.debug(`✅ Line deletion handling complete`);
-
-      // Cancel any pending debounce since line-specific check completed successfully
-      this.stateMachine.cancelPendingCheck();
-    } catch (error) {
-      console.error(`❌ Line deletion handling failed:`, error);
-      this.textAnalyzer.checkGrammar();
-    }
+    console.debug(
+      `✅ Checked lines ${startLine}-${endLine}, found ${newErrors.length} errors. Total: ${this.state.errors.length}`,
+    );
   }
 
   public async handleIntelligentPasteCheck(
