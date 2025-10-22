@@ -52,6 +52,11 @@ export class ErrorHighlighter {
   private callbacks: HighlightingCallbacks;
   private isHighlighting: boolean = false;
   private isSafari: boolean;
+  private static readonly FORMAT_TYPES = [
+    "grammar-error",
+    "grammar-typo",
+    "grammar-other",
+  ] as const;
 
   constructor(
     editor: EditorHighlightInterface,
@@ -61,7 +66,83 @@ export class ErrorHighlighter {
     this.editor = editor;
     this.cursorManager = cursorManager;
     this.callbacks = callbacks;
-    this.isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    this.isSafari = ErrorHighlighter.detectSafari();
+  }
+
+  /**
+   * Detect if browser is Safari
+   */
+  private static detectSafari(): boolean {
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  }
+
+  /**
+   * Get the appropriate CSS class for an error
+   */
+  private static getErrorFormatType(error: CheckerError): string {
+    const isTypo = error.error_code === "typo" ||
+      (error.title && String(error.title).toLowerCase().includes("typo"));
+    return isTypo ? "grammar-typo" : "grammar-other";
+  }
+
+  /**
+   * Apply formatting to a text range
+   */
+  private formatTextSilent(
+    index: number,
+    length: number,
+    format: string,
+    value: boolean,
+  ): void {
+    try {
+      if (
+        this.editor._quill &&
+        typeof this.editor._quill.formatText === "function"
+      ) {
+        this.editor._quill.formatText(index, length, format, value, "silent");
+      } else {
+        this.editor.formatText(index, length, format, value, "silent");
+      }
+    } catch (_err) {
+      // ignore formatting errors
+    }
+  }
+
+  /**
+   * Clear all format types from a specific range
+   */
+  private clearAllFormats(startIndex: number, length: number): void {
+    for (const formatType of ErrorHighlighter.FORMAT_TYPES) {
+      this.formatTextSilent(startIndex, length, formatType, false);
+    }
+  }
+
+  /**
+   * Disable Quill history recording and return a function to restore it
+   */
+  private disableHistory(): (() => void) | null {
+    const quillInstance = this.editor._quill;
+    if (!quillInstance?.history) {
+      return null;
+    }
+
+    const history = quillInstance.history as unknown as {
+      record?: () => void;
+    };
+
+    if (!history.record) {
+      return null;
+    }
+
+    const originalHistoryRecord = history.record;
+    history.record = () => {}; // Disable recording temporarily
+
+    // Return a function to restore the original
+    return () => {
+      if (history) {
+        history.record = originalHistoryRecord;
+      }
+    };
   }
 
   /**
@@ -107,24 +188,9 @@ export class ErrorHighlighter {
    * Clear formatting only for the specific error ranges
    */
   private clearFormattingForErrors(errors: CheckerError[]): void {
-    const formatTypes = ["grammar-error", "grammar-typo", "grammar-other"];
-
     for (const error of errors) {
       const length = error.end_index - error.start_index;
-
-      for (const formatType of formatTypes) {
-        try {
-          this.editor.formatText(
-            error.start_index,
-            length,
-            formatType,
-            false,
-            "silent",
-          );
-        } catch (_err) {
-          // ignore individual format failures
-        }
-      }
+      this.clearAllFormats(error.start_index, length);
     }
   }
 
@@ -174,9 +240,7 @@ export class ErrorHighlighter {
     // Remove any grammar-related formatting
     try {
       const docLength = this.editor.getLength();
-      this.editor.formatText(0, docLength, "grammar-error", false);
-      this.editor.formatText(0, docLength, "grammar-typo", false);
-      this.editor.formatText(0, docLength, "grammar-other", false);
+      this.clearAllFormats(0, docLength);
     } catch (_err) {
       // ignore
     }
@@ -193,64 +257,28 @@ export class ErrorHighlighter {
     savedSelection: { index: number; length: number } | null,
   ): void {
     // Disable Quill history during line highlighting
-    const quillInstance = this.editor._quill;
-    let originalHistoryRecord: (() => void) | null = null;
-
-    if (quillInstance?.history) {
-      const history = quillInstance.history as unknown as {
-        record?: () => void;
-      };
-      if (history.record) {
-        originalHistoryRecord = history.record;
-        history.record = () => {}; // Disable recording temporarily
-      }
-    }
+    const restoreHistory = this.disableHistory();
 
     try {
       // Apply highlighting for new errors without clearing existing ones
       errors.forEach((error) => {
         const start = error.start_index;
         const len = error.end_index - error.start_index;
-        const isTypo = error.error_code === "typo" ||
-          (error.title && String(error.title).toLowerCase().includes("typo"));
-        const formatName = isTypo ? "grammar-typo" : "grammar-other";
+        const formatName = ErrorHighlighter.getErrorFormatType(error);
 
         console.debug(
           `🎨 Highlighting error: "${error.error_text}" at ${start}-${error.end_index} with format ${formatName}`,
         );
 
-        try {
-          // Use silent mode to prevent triggering selection changes during formatting
-          if (
-            this.editor._quill &&
-            typeof this.editor._quill.formatText === "function"
-          ) {
-            this.editor._quill.formatText(
-              start,
-              len,
-              formatName,
-              true,
-              "silent",
-            );
-          } else {
-            this.editor.formatText(start, len, formatName, true, "silent");
-          }
-        } catch (_err) {
-          // Ignore formatting errors
-        }
+        this.formatTextSilent(start, len, formatName, true);
       });
 
       // Restore cursor position
       this.cursorManager.restoreCursorPositionImmediate(savedSelection);
     } finally {
       // Restore original history recording if it was intercepted
-      if (originalHistoryRecord && quillInstance?.history) {
-        const history = quillInstance.history as unknown as {
-          record?: () => void;
-        };
-        if (history) {
-          history.record = originalHistoryRecord;
-        }
+      if (restoreHistory) {
+        restoreHistory();
       }
     }
   }
@@ -330,31 +358,14 @@ export class ErrorHighlighter {
     errors: CheckerError[],
     savedSelection: { index: number; length: number } | null,
   ): void {
-    // Batch all operations together to minimize DOM thrashing
-    const quillInstance = this.editor._quill;
-
     // Temporarily disable history recording during highlighting
-    let originalHistoryRecord: (() => void) | null = null;
-
-    // Try to intercept the history recording
-    if (quillInstance?.history) {
-      const history = quillInstance.history as unknown as {
-        record?: () => void;
-      };
-      if (history.record) {
-        originalHistoryRecord = history.record;
-        history.record = () => {}; // Disable recording temporarily
-      }
-    }
+    const restoreHistory = this.disableHistory();
 
     try {
       // Clear existing error formatting across entire document
-      // For now, we clear all formatting (can be optimized later for specific lines)
       console.debug("🎨 Clearing existing formatting across entire document");
       const docLength = this.editor.getLength();
-      this.editor.formatText(0, docLength, "grammar-error", false, "silent");
-      this.editor.formatText(0, docLength, "grammar-typo", false, "silent");
-      this.editor.formatText(0, docLength, "grammar-other", false, "silent");
+      this.clearAllFormats(0, docLength);
 
       // Apply highlighting for each error
       console.debug(`🎨 Highlighting ${errors.length} errors`);
@@ -367,36 +378,13 @@ export class ErrorHighlighter {
           return;
         }
 
-        const isTypo = error.error_code === "typo" ||
-          (error.title && String(error.title).toLowerCase().includes("typo"));
-        const formatName = isTypo ? "grammar-typo" : "grammar-other";
+        const formatName = ErrorHighlighter.getErrorFormatType(error);
 
         console.debug(
           `🎨 [${index}] Highlighting "${error.error_text}" at ${start}-${error.end_index} with ${formatName}`,
         );
 
-        try {
-          // Use silent mode to prevent triggering selection changes during formatting
-          if (
-            this.editor._quill &&
-            typeof this.editor._quill.formatText === "function"
-          ) {
-            this.editor._quill.formatText(
-              start,
-              len,
-              formatName,
-              true,
-              "silent",
-            );
-          } else {
-            this.editor.formatText(start, len, formatName, true, "silent");
-          }
-        } catch (err) {
-          console.warn(
-            `Failed to highlight error at ${start}-${error.end_index}:`,
-            err,
-          );
-        }
+        this.formatTextSilent(start, len, formatName, true);
       });
 
       // Restore cursor position with a slight delay to ensure all formatting is complete
@@ -409,13 +397,8 @@ export class ErrorHighlighter {
       }
     } finally {
       // Restore original history recording if it was intercepted
-      if (originalHistoryRecord && quillInstance?.history) {
-        const history = quillInstance.history as unknown as {
-          record?: () => void;
-        };
-        if (history) {
-          history.record = originalHistoryRecord;
-        }
+      if (restoreHistory) {
+        restoreHistory();
       }
     }
   }
@@ -448,23 +431,10 @@ export class ErrorHighlighter {
     try {
       // Apply highlighting only for this line's errors
       for (const error of errors) {
-        try {
-          const errorClass = this.getErrorClass(error.error_code);
-          const length = error.end_index - error.start_index;
+        const formatName = ErrorHighlighter.getErrorFormatType(error);
+        const length = error.end_index - error.start_index;
 
-          this.editor.formatText(
-            error.start_index,
-            length,
-            errorClass,
-            true,
-            "silent",
-          );
-        } catch (err) {
-          console.warn(
-            `Failed to highlight error at ${error.start_index}-${error.end_index}:`,
-            err,
-          );
-        }
+        this.formatTextSilent(error.start_index, length, formatName, true);
       }
 
       // Restore cursor if it was affected
@@ -486,24 +456,7 @@ export class ErrorHighlighter {
 
     try {
       // Clear all grammar-related formatting for this line
-      const formatTypes = ["grammar-error", "grammar-typo", "grammar-other"];
-
-      for (const formatType of formatTypes) {
-        try {
-          this.editor.formatText(
-            lineNumber,
-            lineLength,
-            formatType,
-            false,
-            "silent",
-          );
-        } catch (err) {
-          console.warn(
-            `Failed to clear ${formatType} for line ${lineNumber}:`,
-            err,
-          );
-        }
-      }
+      this.clearAllFormats(lineNumber, lineLength);
 
       // Restore cursor
       if (savedSelection) {
