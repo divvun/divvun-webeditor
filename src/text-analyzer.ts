@@ -218,7 +218,7 @@ export class TextAnalyzer {
    * @param lineNumber - The 0-based line number (for logging purposes)
    * @returns Array of errors with indices adjusted to document position
    */
-  async checkLineWithCache(
+  private async checkLineWithCache(
     lineText: string,
     documentOffset: number,
     lineNumber: number,

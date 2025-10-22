@@ -54,10 +54,9 @@ class MockEditor {
 
 Deno.test("Adjust for leading space in text line - error position should be exact", async () => {
   const text =
-    " UNOHAS DAHKU: - Unohas dahkku go Magnhild Mathisena eai dohkkehan, lohket Magnhilda bellodatolbmot.";
+    " UNOHAS DAHKU: - Unohas dahkku go Magnhild Mathisena eai dohkkehan, lohket Magnhilda bellodatolbmot.\n";
   const response = {
-    text:
-      "UNOHAS DAHKU: - Unohas dahkku go Magnhild Mathisena eai dohkkehan, lohket Magnhilda bellodatolbmo",
+    text: text.trim(),
     errs: [
       {
         error_text: "dahkku",
@@ -97,7 +96,8 @@ Deno.test("Adjust for leading space in text line - error position should be exac
     cache,
   );
   // Check the line (line 0 since it's the first line)
-  const errors = await textAnalyzer.checkLineWithCache(text, 0, 0);
+  const errors = await textAnalyzer.checkLineForStateManagement(
+    0);
 
   // The API returns error at 23-29 (relative to trimmed text "UNOHAS DAHKU: - Unohas dahkku...")
   // TextAnalyzer should adjust to 24-30 (accounting for leading space in original text)
