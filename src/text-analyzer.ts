@@ -114,7 +114,7 @@ export class TextAnalyzer {
     }
 
     try {
-      const lines = currentText.split("\n");
+      const lines = this.getTextLines();
 
       // Check if we should abort (user might have interrupted)
       if (this.checkingContext?.abortController.signal.aborted) {
@@ -226,8 +226,7 @@ export class TextAnalyzer {
 
       // Then apply highlighting
       console.log(`🎨 About to apply highlighting for line ${lineNumber}`);
-      const text = this.editor.getText();
-      const lines = text.split("\n");
+      const lines = this.getTextLines();
       if (lineNumber >= 0 && lineNumber < lines.length) {
         const lineContent = lines[lineNumber];
         // Clear old highlights for this line
@@ -248,6 +247,39 @@ export class TextAnalyzer {
       );
       throw error;
     }
+  }
+
+  /**
+   * Get text lines from editor
+   * @returns Array of text lines
+   */
+  private getTextLines(): string[] {
+    return this.editor.getText().split("\n");
+  }
+
+  /**
+   * Get line text with newline character if not the last line
+   * @param lines - Array of text lines
+   * @param lineIndex - 0-based line index
+   * @returns Line text with newline if appropriate
+   */
+  private getLineWithNewline(lines: string[], lineIndex: number): string {
+    const line = lines[lineIndex];
+    return lineIndex < lines.length - 1 ? line + "\n" : line;
+  }
+
+  /**
+   * Calculate the character position of a line in the full document
+   * @param lines - Array of text lines
+   * @param lineNumber - 0-based line number
+   * @returns Character offset from start of document
+   */
+  private calculateLineOffset(lines: string[], lineNumber: number): number {
+    let offset = 0;
+    for (let i = 0; i < lineNumber; i++) {
+      offset += this.getLineWithNewline(lines, i).length;
+    }
+    return offset;
   }
 
   /**
@@ -321,26 +353,15 @@ export class TextAnalyzer {
   async checkLineForStateManagement(
     lineNumber: number,
   ): Promise<CheckerError[]> {
-    const text = this.editor.getText();
-    const lines = text.split("\n");
+    const lines = this.getTextLines();
 
     if (lineNumber < 0 || lineNumber >= lines.length) {
       console.warn(`Invalid line number: ${lineNumber}`);
       return [];
     }
 
-    const line = lines[lineNumber];
-    const lineWithNewline = lineNumber < lines.length - 1 ? line + "\n" : line;
-
-    // Calculate the start position of this line in the full text
-    let lineStartPosition = 0;
-    for (let i = 0; i < lineNumber; i++) {
-      const prevLine = lines[i];
-      const prevLineWithNewline = i < lines.length - 1
-        ? prevLine + "\n"
-        : prevLine;
-      lineStartPosition += prevLineWithNewline.length;
-    }
+    const lineWithNewline = this.getLineWithNewline(lines, lineNumber);
+    const lineStartPosition = this.calculateLineOffset(lines, lineNumber);
 
     // Use the unified cache-aware checking method
     return await this.checkLineWithCache(
@@ -364,8 +385,7 @@ export class TextAnalyzer {
     endLine: number,
     onProgress?: (message: string) => void,
   ): Promise<CheckerError[]> {
-    const text = this.editor.getText();
-    const lines = text.split("\n");
+    const lines = this.getTextLines();
     const allErrors: CheckerError[] = [];
 
     // Validate range
@@ -376,8 +396,7 @@ export class TextAnalyzer {
 
     // Check each line in the range
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineWithNewline = i < lines.length - 1 ? line + "\n" : line;
+      const lineWithNewline = this.getLineWithNewline(lines, i);
 
       if (i >= validStartLine && i <= validEndLine) {
         // Check this line
