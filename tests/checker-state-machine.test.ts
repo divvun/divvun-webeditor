@@ -5,8 +5,8 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   CheckerStateMachine,
-  type StateTransitionCallbacks,
   type EditInfo,
+  type StateTransitionCallbacks,
 } from "../src/checker-state-machine.ts";
 
 // Helper function to create mock callbacks
@@ -44,7 +44,7 @@ Deno.test("CheckerStateMachine - Single Line Edit Detection", () => {
 
   // Should detect single-line-edit
   const editDetectedCall = calls.find(
-    (call) => call.method === "onEditDetected"
+    (call) => call.method === "onEditDetected",
   );
   assertEquals(editDetectedCall?.args[0], "single-line-edit");
 
@@ -68,7 +68,7 @@ Deno.test("CheckerStateMachine - Newline Creation Detection", () => {
 
   // Should detect newline-creation
   const editDetectedCall = calls.find(
-    (call) => call.method === "onEditDetected"
+    (call) => call.method === "onEditDetected",
   );
   assertEquals(editDetectedCall?.args[0], "newline-creation");
 
@@ -92,7 +92,7 @@ Deno.test("CheckerStateMachine - Line Deletion Detection", () => {
 
   // Should detect line-deletion
   const editDetectedCall = calls.find(
-    (call) => call.method === "onEditDetected"
+    (call) => call.method === "onEditDetected",
   );
   assertEquals(editDetectedCall?.args[0], "line-deletion");
 
@@ -115,7 +115,7 @@ Deno.test("CheckerStateMachine - Multi-line Edit Detection", () => {
 
   // Should detect multi-line-edit
   const editDetectedCall = calls.find(
-    (call) => call.method === "onEditDetected"
+    (call) => call.method === "onEditDetected",
   );
   assertEquals(editDetectedCall?.args[0], "multi-line-edit");
 
@@ -150,7 +150,7 @@ Deno.test("CheckerStateMachine - Debouncing Behavior", async () => {
 
   // Now should have triggered a check
   const finalCheckCalls = calls.filter(
-    (call) => call.method === "onCheckRequested"
+    (call) => call.method === "onCheckRequested",
   );
   assertEquals(finalCheckCalls.length, 1);
 
@@ -194,7 +194,7 @@ Deno.test("CheckerStateMachine - Complex Text Changes", () => {
 
   // Should detect single-line-edit (insertion on line 0)
   const editDetectedCall = calls.find(
-    (call) => call.method === "onEditDetected"
+    (call) => call.method === "onEditDetected",
   );
   assertEquals(editDetectedCall?.args[0], "single-line-edit");
 
@@ -225,7 +225,7 @@ Deno.test("CheckerStateMachine - Multi-line Text Error Isolation", () => {
 
   // Should detect single-line-edit on line 1 (0-indexed = 1)
   const editDetectedCall = calls.find(
-    (call) => call.method === "onEditDetected"
+    (call) => call.method === "onEditDetected",
   );
   assertEquals(editDetectedCall?.args[0], "single-line-edit");
 
@@ -263,7 +263,7 @@ Deno.test(
 
     // Should only transition to editing state once (not reset between line edits)
     const stateEntryCalls = calls.filter(
-      (call) => call.method === "onStateEntry" && call.args[0] === "editing"
+      (call) => call.method === "onStateEntry" && call.args[0] === "editing",
     );
     assertEquals(stateEntryCalls.length, 1); // Only one transition to editing
 
@@ -272,13 +272,13 @@ Deno.test(
 
     // Should eventually trigger one check after all rapid edits
     const checkCalls = calls.filter(
-      (call) => call.method === "onCheckRequested"
+      (call) => call.method === "onCheckRequested",
     );
     assertEquals(checkCalls.length, 1);
 
     // Cleanup
     stateMachine.cleanup();
-  }
+  },
 );
 
 Deno.test(
@@ -318,7 +318,7 @@ Deno.test(
 
     // This edit should be detected
     const finalEditCalls = calls.filter(
-      (call) => call.method === "onEditDetected"
+      (call) => call.method === "onEditDetected",
     );
     assertEquals(finalEditCalls.length, 1); // Edit detected after highlighting complete
 
@@ -328,7 +328,7 @@ Deno.test(
 
     // Cleanup
     stateMachine.cleanup();
-  }
+  },
 );
 
 Deno.test("CheckerStateMachine - Highlighting State Isolation", async () => {
@@ -350,7 +350,7 @@ Deno.test("CheckerStateMachine - Highlighting State Isolation", async () => {
 
   // At this point state should be "highlighting"
   const stateAfterCheck = calls.filter(
-    (call) => call.method === "onStateEntry" && call.args[0] === "highlighting"
+    (call) => call.method === "onStateEntry" && call.args[0] === "highlighting",
   );
   assertEquals(stateAfterCheck.length, 1);
 
@@ -439,13 +439,13 @@ Deno.test(
     // 7. Verify the state machine processed the edit correctly
     // (no stale previousText causing wrong edit detection)
     const newEditCalls = calls.filter(
-      (call) => call.method === "onEditDetected"
+      (call) => call.method === "onEditDetected",
     );
     assertEquals(newEditCalls.length >= 1, true); // At least one edit should be detected
 
     // Cleanup
     mockStateMachine.cleanup();
-  }
+  },
 );
 
 Deno.test(
@@ -475,7 +475,7 @@ Deno.test(
     // 3. User adds newline and moves to line 2
     stateMachine.handleEdit(
       "Dqll mun leat stuoris.",
-      "Dqll mun leat stuoris.\n"
+      "Dqll mun leat stuoris.\n",
     );
     assertEquals(stateMachine.getCurrentState(), "editing");
 
@@ -487,12 +487,12 @@ Deno.test(
     calls.length = 0; // Clear to focus on line 2 edits
     stateMachine.handleEdit(
       "Dqll mun leat stuoris.\n",
-      "Dqll mun leat stuoris.\nH"
+      "Dqll mun leat stuoris.\nH",
     );
 
     // This should be detected as single-line-edit on line 1 (the new line)
     const line2EditCall = calls.find(
-      (call) => call.method === "onEditDetected"
+      (call) => call.method === "onEditDetected",
     );
     assertEquals(line2EditCall?.args[0], "single-line-edit");
 
@@ -512,7 +512,7 @@ Deno.test(
     // 4. If the grammar service doesn't return line 1 errors in this response, line 1 highlights disappear
 
     const checkRequestedCalls = calls.filter(
-      (call) => call.method === "onCheckRequested"
+      (call) => call.method === "onCheckRequested",
     );
     assertEquals(checkRequestedCalls.length >= 1, true); // Grammar check should be requested
 
@@ -521,7 +521,7 @@ Deno.test(
     // 2. Making error highlighting preserve errors for unchanged lines
 
     stateMachine.cleanup();
-  }
+  },
 );
 
 Deno.test(
@@ -550,10 +550,10 @@ Deno.test(
 
     // Should not have triggered onCheckRequested
     const checkRequestedCalls = calls.filter(
-      (call) => call.method === "onCheckRequested"
+      (call) => call.method === "onCheckRequested",
     );
     assertEquals(checkRequestedCalls.length, 0);
 
     stateMachine.cleanup();
-  }
+  },
 );

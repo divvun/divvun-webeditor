@@ -1,8 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   CheckerStateMachine,
-  type EditType,
   type EditInfo,
+  type EditType,
   type StateTransitionCallbacks,
 } from "../src/checker-state-machine.ts";
 
@@ -64,7 +64,7 @@ Deno.test("Line-specific edit detection integration test", async () => {
   assertEquals(
     detectedEdits.length >= 4,
     true,
-    "Should detect at least 4 edits before state protection kicks in"
+    "Should detect at least 4 edits before state protection kicks in",
   );
 
   // All detected edits should be single-line-edit type
@@ -72,23 +72,23 @@ Deno.test("Line-specific edit detection integration test", async () => {
     assertEquals(
       detectedEdits[i].type,
       "single-line-edit",
-      `Edit ${i + 1} should be single-line-edit`
+      `Edit ${i + 1} should be single-line-edit`,
     );
     assertEquals(
       detectedEdits[i].info.lineNumber,
       0,
-      `Edit ${i + 1} should be on line 0`
+      `Edit ${i + 1} should be on line 0`,
     );
     assertEquals(
       detectedEdits[i].info.lengthChange,
       1,
-      `Edit ${i + 1} should have length change of 1`
+      `Edit ${i + 1} should have length change of 1`,
     );
   }
 
   // Verify state transitions include proper edit→idle cycles
   const editIdleCycles = stateTransitions.filter(
-    (t) => t === "enter:editing" || t === "enter:idle"
+    (t) => t === "enter:editing" || t === "enter:idle",
   ).length;
 
   // Should have multiple editing cycles (exact count may vary due to debouncing)
@@ -197,14 +197,14 @@ Deno.test("Hanging prevention test", async () => {
   assertEquals(
     maxConcurrentChecks <= 2,
     true,
-    "Should not have more than 2 concurrent checks due to debouncing"
+    "Should not have more than 2 concurrent checks due to debouncing",
   );
 
   // Should have significantly fewer check requests than edit events due to debouncing
   assertEquals(
     checkRequestCount < rapidTyping.length,
     true,
-    "Debouncing should reduce number of check requests"
+    "Debouncing should reduce number of check requests",
   );
 
   console.log("✅ Hanging prevention test passed!");
@@ -229,7 +229,7 @@ Deno.test("Text corruption prevention test", async () => {
       // Verify that the edit detection doesn't corrupt the text values
       if (editInfo.currentText && editInfo.previousText) {
         textEvolution.push(
-          `${editInfo.previousText} → ${editInfo.currentText}`
+          `${editInfo.previousText} → ${editInfo.currentText}`,
         );
 
         // Check for corruption patterns that were happening before the fix
@@ -247,7 +247,7 @@ Deno.test("Text corruption prevention test", async () => {
           if (!current.startsWith(previous)) {
             corruptionDetected = true;
             console.error(
-              `Text corruption: "${previous}" not prefix of "${current}"`
+              `Text corruption: "${previous}" not prefix of "${current}"`,
             );
           }
         }
@@ -286,7 +286,7 @@ Deno.test("Text corruption prevention test", async () => {
   assertEquals(
     corruptionDetected,
     false,
-    "No text corruption should be detected"
+    "No text corruption should be detected",
   );
 
   // Verify expected text evolution (adjust for state machine protection)
@@ -294,7 +294,7 @@ Deno.test("Text corruption prevention test", async () => {
   assertEquals(
     textEvolution.length >= 4,
     true,
-    "Should have at least 4 text transitions before state protection"
+    "Should have at least 4 text transitions before state protection",
   );
 
   // Verify that the detected transitions follow the expected pattern
@@ -313,7 +313,7 @@ Deno.test("Text corruption prevention test", async () => {
     assertEquals(
       expectedPatterns[i].test(textEvolution[i]),
       true,
-      `Transition ${i + 1} should match expected pattern: ${textEvolution[i]}`
+      `Transition ${i + 1} should match expected pattern: ${textEvolution[i]}`,
     );
   }
 

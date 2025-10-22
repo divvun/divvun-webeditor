@@ -99,7 +99,7 @@ Deno.test(
 
     // Count how many times onCheckRequested was called
     const checkRequestedCalls = calls.filter(
-      (call) => call.method === "onCheckRequested"
+      (call) => call.method === "onCheckRequested",
     );
 
     // With the fix, onCheckRequested should be called 0 times because
@@ -109,14 +109,14 @@ Deno.test(
     console.log(
       `✅ Typed "${
         progressiveTexts[progressiveTexts.length - 1]
-      }" successfully without hanging`
+      }" successfully without hanging`,
     );
     console.log(
-      `📊 onCheckRequested calls: ${checkRequestedCalls.length} (should be 0 with fix)`
+      `📊 onCheckRequested calls: ${checkRequestedCalls.length} (should be 0 with fix)`,
     );
 
     stateMachine.cleanup();
-  }
+  },
 );
 
 Deno.test(
@@ -140,12 +140,12 @@ Deno.test(
     // This would normally trigger onCheckRequested which in the real app
     // could cause hanging if not handled properly
     const checkRequestedCalls = calls.filter(
-      (call) => call.method === "onCheckRequested"
+      (call) => call.method === "onCheckRequested",
     );
     assertEquals(checkRequestedCalls.length, 1);
 
     console.log("📈 Without fix: debounce timer triggered full document check");
 
     stateMachine.cleanup();
-  }
+  },
 );

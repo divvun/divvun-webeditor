@@ -48,7 +48,7 @@ site.use(
   jsx({
     extensions: [".tsx"],
     pageSubExtension: ".page",
-  })
+  }),
 );
 
 // Use ESBuild plugin to transpile TypeScript and TSX to JavaScript
@@ -64,7 +64,7 @@ site.use(
       jsx: "automatic", // Use React 17+ JSX transform
       jsxImportSource: "npm:react@18", // React from npm
     },
-  })
+  }),
 );
 
 // Use Tailwind CSS for styling with external config

@@ -8,32 +8,114 @@
  */
 
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import type { CheckerError } from "../src/types.ts";
+import type {
+  CheckerApi,
+  CheckerError,
+  CheckerResponse,
+  SupportedLanguage,
+} from "../src/types.ts";
+import { TextAnalyzer } from "../src/text-analyzer.ts";
 
 /**
- * Helper function to create a mock CheckerError
+ * Mock CheckerApi for testing
  */
-function createError(
-  errorText: string,
-  startIndex: number,
-  endIndex: number,
-): CheckerError {
-  return {
-    error_text: errorText,
-    start_index: startIndex,
-    end_index: endIndex,
-    error_code: "typo",
-    description: "Spelling error",
-    suggestions: ["dahku"],
-    title: "Typo",
-  };
+class MockCheckerApi implements CheckerApi {
+  checkText(
+    text: string,
+    _language: SupportedLanguage,
+  ): Promise<CheckerResponse> {
+    // Mock response for the specific test text
+    if (
+      text ===
+        " UNOHAS DAHKU: - Unohas dahkku go Magnhild Mathisena eai dohkkehan, lohket Magnhilda bellodatolbmot."
+    ) {
+      return Promise.resolve({
+        text:
+          "UNOHAS DAHKU: - Unohas dahkku go Magnhild Mathisena eai dohkkehan, lohket Magnhilda bellodatolbmo",
+        errs: [
+          {
+            error_text: "dahkku",
+            start_index: 23,
+            end_index: 29,
+            error_code: "real-ImprtDu1-NSgNom",
+            description:
+              "Sátni šaddá eará go oaivvilduvvo. Don leat čállán vearba duála imperatiivvas (⁨dahkku⁩). Galgá go substantiiva?",
+            suggestions: ["dahku"],
+            title: "Konsonántameattáhus",
+          },
+        ],
+      });
+    }
+    // Default empty response
+    return Promise.resolve({ text: text.trim(), errs: [] });
+  }
+
+  getSupportedLanguages() {
+    return [{ code: "se" as SupportedLanguage, name: "Northern Sámi" }];
+  }
 }
 
-Deno.test("Paste highlighting - error position should be exact", () => {
+/**
+ * Mock editor interface
+ */
+class MockEditor {
+  private text: string;
+
+  constructor(text: string) {
+    this.text = text;
+  }
+
+  getText(): string {
+    return this.text;
+  }
+
+  getLength(): number {
+    return this.text.length;
+  }
+}
+
+Deno.test("Paste highlighting - error position should be exact", async () => {
   const text =
     " UNOHAS DAHKU: - Unohas dahkku go Magnhild Mathisena eai dohkkehan, lohket Magnhilda bellodatolbmot.";
 
-  // The error word "dahkku" appears at index 24
+  // Create mock API and editor
+  const mockApi = new MockCheckerApi();
+  const mockEditor = new MockEditor(text);
+
+  // Create TextAnalyzer with callbacks
+  let foundErrors: CheckerError[] = [];
+  const callbacks = {
+    onErrorsFound: (errors: CheckerError[]) => {
+      foundErrors = errors;
+    },
+    onUpdateErrorCount: (_count: number) => {},
+    onUpdateStatus: (_status: string, _isChecking: boolean) => {},
+    onShowErrorMessage: (_message: string) => {},
+  };
+
+  const textAnalyzer = new TextAnalyzer(mockApi, mockEditor, callbacks, "se");
+
+  // Check the line (line 0 since it's the first line)
+  const errors = await textAnalyzer.checkLineForStateManagement(0);
+
+  // The API returns error at 23-29 (relative to trimmed text "UNOHAS DAHKU: - Unohas dahkku...")
+  // TextAnalyzer should adjust to 24-30 (accounting for leading space in original text)
+  assertEquals(errors.length, 1, "Should find 1 error");
+  assertEquals(errors[0].error_text, "dahkku", "Error text should be 'dahkku'");
+
+  // Verify TextAnalyzer properly adjusted the indices
+  assertEquals(
+    errors[0].start_index,
+    24,
+    "Error should start at index 24 (adjusted)",
+  );
+  assertEquals(
+    errors[0].end_index,
+    30,
+    "Error should end at index 30 (adjusted)",
+  );
+
+  // The error word "dahkku" appears at index 24 in the original text
   const errorWord = "dahkku";
   const errorStartIndex = text.indexOf(errorWord);
   const errorEndIndex = errorStartIndex + errorWord.length;
@@ -44,50 +126,54 @@ Deno.test("Paste highlighting - error position should be exact", () => {
   console.log(
     `   Text at position: "${text.substring(errorStartIndex, errorEndIndex)}"`,
   );
-
-  // Verify the word is at the expected position
-  assertEquals(errorStartIndex, 24, "Error should start at index 24");
-  assertEquals(errorEndIndex, 30, "Error should end at index 30");
-  assertEquals(
-    text.substring(errorStartIndex, errorEndIndex),
-    "dahkku",
-    "Text at error position should be 'dahkku'",
+  console.log(
+    `   API returned: ${errors[0].start_index}-${errors[0].end_index}`,
   );
 
-  // Create an error object with the correct positions
-  const error = createError(errorWord, errorStartIndex, errorEndIndex);
-
-  // Verify error object has correct positions
-  assertEquals(error.start_index, 24);
-  assertEquals(error.end_index, 30);
+  // Verify the adjusted indices match the actual word position
+  assertEquals(
+    errors[0].start_index,
+    errorStartIndex,
+    "Adjusted start should match actual position",
+  );
+  assertEquals(
+    errors[0].end_index,
+    errorEndIndex,
+    "Adjusted end should match actual position",
+  );
 
   // Verify the text at the error's indices is correct
-  const highlightedText = text.substring(error.start_index, error.end_index);
+  const highlightedText = text.substring(
+    errors[0].start_index,
+    errors[0].end_index,
+  );
   assertEquals(
     highlightedText,
     "dahkku",
     "Highlighted text should be exactly 'dahkku', not ' dahkk'",
   );
 
-  // Verify we're NOT highlighting the wrong range (the bug)
-  const bugStart = errorStartIndex - 1;
-  const bugEnd = errorEndIndex - 1;
+  // Verify we're NOT highlighting the wrong range (the bug would be at 23-29)
+  const bugStart = 23;
+  const bugEnd = 29;
   const wrongHighlight = text.substring(bugStart, bugEnd);
   assertEquals(
     wrongHighlight,
     " dahkk",
-    "This is what the bug incorrectly highlights",
+    "This is what the bug would incorrectly highlight",
   );
 
   // Assert that our error does NOT match the buggy behavior
   assertEquals(
-    error.start_index !== bugStart || error.end_index !== bugEnd,
+    errors[0].start_index !== bugStart,
     true,
     "Error indices should NOT match the buggy off-by-one positions",
   );
 
   console.log(
-    `✅ Error positions are correct: ${error.start_index}-${error.end_index}`,
+    `✅ Error positions are correct: ${errors[0].start_index}-${
+      errors[0].end_index
+    }`,
   );
 });
 
@@ -154,17 +240,18 @@ Deno.test("Paste highlighting - error indices match actual word boundaries", () 
   const startIndex = text.indexOf(errorWord);
   const endIndex = startIndex + errorWord.length;
 
-  // Create error
-  const error = createError(errorWord, startIndex, endIndex);
+  // Verify indices
+  assertEquals(startIndex, 24, "Error word starts at index 24");
+  assertEquals(endIndex, 30, "Error word ends at index 30");
 
-  // Extract text using error indices
-  const extractedText = text.substring(error.start_index, error.end_index);
+  // Extract text using these indices
+  const extractedText = text.substring(startIndex, endIndex);
 
   // Verify it matches the error word exactly
   assertEquals(
     extractedText,
-    error.error_text,
-    "Text extracted using error indices should match error_text exactly",
+    errorWord,
+    "Text extracted using indices should match error word exactly",
   );
 
   // Verify no leading/trailing whitespace
@@ -175,7 +262,7 @@ Deno.test("Paste highlighting - error indices match actual word boundaries", () 
   );
 
   console.log(
-    `✅ Error indices [${error.start_index}, ${error.end_index}) correctly bound the word`,
+    `✅ Error indices [${startIndex}, ${endIndex}) correctly bound the word`,
   );
 });
 
@@ -223,5 +310,120 @@ Deno.test("Paste highlighting - API trims leading space and returns adjusted ind
 
   console.log(
     `✅ API trimmed ${trimOffset} chars, adjusted indices from ${apiErrorStartIndex}-${apiErrorEndIndex} to ${adjustedStartIndex}-${adjustedEndIndex}`,
+  );
+});
+
+Deno.test("Multi-line paste - first line with no leading space", () => {
+  // Multi-line text: "Dqll.\n Dqll. In die'e wat.\n..."
+  // Line 0: "Dqll.\n" - no leading space
+  const fullText = "Dqll.\n Dqll. In die'e wat.\nSeammás le";
+
+  // Line 0 starts at position 0
+  const line0Start = 0;
+
+  // API returns error at 0-4 for "Dqll"
+  const apiStartIndex = 0;
+  const apiEndIndex = 4;
+
+  // No trim offset for line 0 (no leading space)
+  const trimOffset = 0;
+
+  // Adjusted indices = API indices + documentOffset + trimOffset
+  const adjustedStartIndex = apiStartIndex + line0Start + trimOffset;
+  const adjustedEndIndex = apiEndIndex + line0Start + trimOffset;
+
+  assertEquals(adjustedStartIndex, 0, "Line 0 error should start at 0");
+  assertEquals(adjustedEndIndex, 4, "Line 0 error should end at 4");
+
+  // Verify highlighted text
+  const highlightedText = fullText.substring(
+    adjustedStartIndex,
+    adjustedEndIndex,
+  );
+  assertEquals(highlightedText, "Dqll", "Should highlight 'Dqll' on line 0");
+
+  console.log(
+    `✅ Line 0 (no leading space): error at ${adjustedStartIndex}-${adjustedEndIndex}`,
+  );
+});
+
+Deno.test("Multi-line paste - second line with leading space", () => {
+  // Multi-line text: "Dqll.\n Dqll. In die'e wat.\n..."
+  // Line 1: " Dqll. In die'e wat.\n" - has 1 leading space
+  const fullText = "Dqll.\n Dqll. In die'e wat.\nSeammás le";
+  const line1 = " Dqll. In die'e wat.";
+
+  // Line 1 starts at position 6 (after "Dqll.\n")
+  const line1Start = 6;
+
+  // Calculate leading whitespace
+  const leadingWhitespace = line1.length - line1.trimStart().length;
+  assertEquals(leadingWhitespace, 1, "Line 1 has 1 leading space");
+
+  // API trims leading space and returns error at 0-4 (relative to "Dqll. In die'e wat.")
+  const apiStartIndex = 0;
+  const apiEndIndex = 4;
+
+  // API trimmed the leading space, so trimOffset = 1
+  const apiText = line1.trimStart(); // "Dqll. In die'e wat."
+  const apiLeadingWhitespace = apiText.length - apiText.trimStart().length;
+  const trimOffset = leadingWhitespace - apiLeadingWhitespace;
+  assertEquals(trimOffset, 1, "Trim offset should be 1");
+
+  // Adjusted indices = API indices + documentOffset + trimOffset
+  const adjustedStartIndex = apiStartIndex + line1Start + trimOffset;
+  const adjustedEndIndex = apiEndIndex + line1Start + trimOffset;
+
+  // Should be 0 + 6 + 1 = 7 to 4 + 6 + 1 = 11
+  assertEquals(adjustedStartIndex, 7, "Line 1 error should start at 7");
+  assertEquals(adjustedEndIndex, 11, "Line 1 error should end at 11");
+
+  // Verify highlighted text
+  const highlightedText = fullText.substring(
+    adjustedStartIndex,
+    adjustedEndIndex,
+  );
+  assertEquals(highlightedText, "Dqll", "Should highlight 'Dqll' on line 1");
+
+  console.log(
+    `✅ Line 1 (1 leading space): error at ${adjustedStartIndex}-${adjustedEndIndex}`,
+  );
+});
+
+Deno.test("Multi-line paste - third line with no leading space", () => {
+  // Multi-line text: "Dqll.\n Dqll. In die'e wat.\nSeammás le..."
+  // Line 2: "Seammás le..." - no leading space
+  const fullText = "Dqll.\n Dqll. In die'e wat.\nSeammás le";
+
+  // Line 2 starts at position 27 (after "Dqll.\n Dqll. In die'e wat.\n")
+  const line2Start = 27;
+
+  // API returns error at some position (let's say 0-7 for "Seammás")
+  const apiStartIndex = 0;
+  const apiEndIndex = 7;
+
+  // No trim offset
+  const trimOffset = 0;
+
+  // Adjusted indices = API indices + documentOffset + trimOffset
+  const adjustedStartIndex = apiStartIndex + line2Start + trimOffset;
+  const adjustedEndIndex = apiEndIndex + line2Start + trimOffset;
+
+  assertEquals(adjustedStartIndex, 27, "Line 2 error should start at 27");
+  assertEquals(adjustedEndIndex, 34, "Line 2 error should end at 34");
+
+  // Verify highlighted text
+  const highlightedText = fullText.substring(
+    adjustedStartIndex,
+    adjustedEndIndex,
+  );
+  assertEquals(
+    highlightedText,
+    "Seammás",
+    "Should highlight 'Seammás' on line 2",
+  );
+
+  console.log(
+    `✅ Line 2 (no leading space): error at ${adjustedStartIndex}-${adjustedEndIndex}`,
   );
 });

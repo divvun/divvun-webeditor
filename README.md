@@ -1,11 +1,13 @@
 # Divvun TextChecker Webeditor
 
-A static site with a Quill editor integrated with the Divvun Grammar API for real-time grammar checking in Sami languages and Faroese.
+A static site with a Quill editor integrated with the Divvun Grammar API for
+real-time grammar checking in Sami languages and Faroese.
 
 ## Features
 
 - Quill.js rich text editor
-- Real-time grammar checking with wavy underlines (red for typos, blue for other errors)
+- Real-time grammar checking with wavy underlines (red for typos, blue for other
+  errors)
 - Custom context menu with correction suggestions
 - Support for Northern Sami, Southern Sami, Lule Sami, and Faroese
 - Check-as-you-type with 800ms debounce
@@ -29,7 +31,8 @@ This builds the static site into the `_site` directory.
 deno task serve
 ```
 
-This starts a local development server. The site will be available at `http://localhost:3000` (or similar).
+This starts a local development server. The site will be available at
+`http://localhost:3000` (or similar).
 
 ### Run Lume directly
 
