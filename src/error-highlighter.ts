@@ -466,14 +466,4 @@ export class ErrorHighlighter {
       console.warn(`Line clearing failed for line ${lineNumber}:`, err);
     }
   }
-
-  /**
-   * Get the appropriate CSS class for an error code
-   */
-  private getErrorClass(errorCode: string): string {
-    const isTypo = errorCode === "typo" ||
-      errorCode === "unknown-word" ||
-      errorCode.toLowerCase().includes("spell");
-    return isTypo ? "grammar-typo" : "grammar-other";
-  }
 }

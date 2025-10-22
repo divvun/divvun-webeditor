@@ -15,7 +15,6 @@ import type {
   CheckerApi,
   CheckerError,
   CheckerState,
-  CheckingContext,
   EditorState,
   SupportedLanguage,
 } from "./types.ts";
@@ -24,7 +23,6 @@ import type {
 
 export class TextChecker {
   public state: EditorState;
-  private checkingContext: CheckingContext | null = null;
   public isHighlighting: boolean = false;
   private previousText: string = ""; // Track previous text for edit detection
 
@@ -466,7 +464,7 @@ export class TextChecker {
   // Line-level caching methods
   public performTextCheck(): void {
     // Set up checking context in text analyzer
-    this.checkingContext = this.textAnalyzer.startCheckingContext();
+    this.textAnalyzer.startCheckingContext();
 
     // Perform the actual text check
     this.textAnalyzer
