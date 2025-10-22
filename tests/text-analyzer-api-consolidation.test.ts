@@ -15,6 +15,7 @@ import type {
   SupportedLanguage,
 } from "../src/types.ts";
 import { TextAnalyzer } from "../src/text-analyzer.ts";
+import { LRUCache } from "../src/lru-cache.ts";
 
 // Mock editor interface
 class MockEditor {
@@ -87,7 +88,13 @@ Deno.test("TextAnalyzer - checkLineForStateManagement returns adjusted errors", 
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up text with multiple lines
   mockEditor.setText("Dqll. First line.\nSecond line.\nThird line.");
@@ -120,7 +127,13 @@ Deno.test("TextAnalyzer - checkLineForStateManagement adjusts positions for non-
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up multi-line text
   mockEditor.setText("Line 0 text\nLine 1 text\nLine 2 text");
@@ -155,7 +168,13 @@ Deno.test("TextAnalyzer - checkMultipleLinesForStateManagement checks range", as
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up multi-line text
   mockEditor.setText("Line 0 text\nLine 1 text\nLine 2 text\nLine 3 text");
@@ -185,7 +204,13 @@ Deno.test("TextAnalyzer - checkMultipleLinesForStateManagement adjusts error ind
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up multi-line text
   mockEditor.setText("Line 0\nLine 1\nLine 2");
@@ -223,7 +248,13 @@ Deno.test("TextAnalyzer - checkMultipleLinesForStateManagement calls progress ca
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up multi-line text
   mockEditor.setText("Line 0\nLine 1\nLine 2");
@@ -262,7 +293,13 @@ Deno.test("TextAnalyzer - API consolidation: no direct checkText calls from main
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   mockEditor.setText("Test line");
   mockAPI.setMockResponse("Test line", []);
@@ -294,7 +331,13 @@ Deno.test("TextAnalyzer - Cache: first call to checkLineForStateManagement calls
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up text
   mockEditor.setText("Test line");
@@ -323,7 +366,13 @@ Deno.test("TextAnalyzer - Cache: second call to same line uses cache", async () 
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up text
   mockEditor.setText("Test line");
@@ -360,7 +409,13 @@ Deno.test("TextAnalyzer - Cache: cached errors have correct adjusted indices", a
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up multi-line text
   mockEditor.setText("Line 0\nLine 1\nLine 2");
@@ -397,7 +452,13 @@ Deno.test("TextAnalyzer - Cache: checkMultipleLinesForStateManagement uses cache
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up text
   mockEditor.setText("Line 0\nLine 1\nLine 2");
@@ -434,7 +495,13 @@ Deno.test("TextAnalyzer - Cache: different languages have separate cache entries
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up text
   mockEditor.setText("Test line");
@@ -473,7 +540,13 @@ Deno.test("TextAnalyzer - Cache: clearCache clears cached responses", async () =
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up text
   mockEditor.setText("Test line");
@@ -507,7 +580,13 @@ Deno.test("TextAnalyzer - Cache: language change clears cache", async () => {
     onErrorsFound: () => {},
     onShowErrorMessage: () => {},
   };
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up text
   mockEditor.setText("Test line");

@@ -10,6 +10,7 @@ import {
   CheckerResponse,
   SupportedLanguage,
 } from "../src/types.ts";
+import { LRUCache } from "../src/lru-cache.ts";
 
 // Mock editor interface
 class MockEditor {
@@ -101,7 +102,13 @@ Deno.test("Line-specific checking - Single line API call", async () => {
   const mockAPI = new MockAPI();
   const { callbacks } = createMockCallbacks();
 
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Set up text with multiple lines
   mockEditor.setText(
@@ -133,7 +140,13 @@ Deno.test(
     const mockAPI = new MockAPI();
     const { callbacks } = createMockCallbacks();
 
-    const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+    const analyzer = new TextAnalyzer(
+      mockAPI,
+      mockEditor,
+      callbacks,
+      "se",
+      new LRUCache(100),
+    );
 
     // Set up multi-line text
     const lines = [
@@ -164,7 +177,13 @@ Deno.test("Line-specific checking - Empty and invalid lines", async () => {
   const mockAPI = new MockAPI();
   const { callbacks } = createMockCallbacks();
 
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   mockEditor.setText("Line 0\n\nLine 2");
 
@@ -183,7 +202,13 @@ Deno.test("Line-specific checking - API calls with caching", async () => {
   const mockAPI = new MockAPI();
   const { callbacks } = createMockCallbacks();
 
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   mockEditor.setText("Same line content\nOther line");
 
@@ -207,7 +232,13 @@ Deno.test(
     const mockAPI = new MockAPI();
     const { callbacks } = createMockCallbacks();
 
-    const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+    const analyzer = new TextAnalyzer(
+      mockAPI,
+      mockEditor,
+      callbacks,
+      "se",
+      new LRUCache(100),
+    );
 
     // Initial multi-line text
     mockEditor.setText("Line 0 has error\nLine 1 is good\nLine 2 also good");
@@ -247,7 +278,13 @@ Deno.test("Line-specific checking - Error detection and return", async () => {
   const mockAPI = new MockAPI();
   const { callbacks } = createMockCallbacks();
 
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   mockEditor.setText("Line with errors");
 
@@ -268,7 +305,13 @@ Deno.test("Line-specific checking - Performance comparison", async () => {
   const mockAPI = new MockAPI();
   const { callbacks } = createMockCallbacks();
 
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Create large document
   const lines = Array.from({ length: 50 }, (_, i) => `Line ${i} content here`);
@@ -299,7 +342,13 @@ Deno.test(
     const mockAPI = new MockAPI();
     const { callbacks } = createMockCallbacks();
 
-    const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+    const analyzer = new TextAnalyzer(
+      mockAPI,
+      mockEditor,
+      callbacks,
+      "se",
+      new LRUCache(100),
+    );
 
     // Set up text with a simple line
     mockEditor.setText("Dáll");
@@ -343,7 +392,13 @@ Deno.test("Line-specific checking - State machine integration", async () => {
   const mockAPI = new MockAPI();
   const { callbacks } = createMockCallbacks();
 
-  const analyzer = new TextAnalyzer(mockAPI, mockEditor, callbacks, "se");
+  const analyzer = new TextAnalyzer(
+    mockAPI,
+    mockEditor,
+    callbacks,
+    "se",
+    new LRUCache(100),
+  );
 
   // Simulate the exact scenario from the console logs
   // First line edit: "" -> "D"
