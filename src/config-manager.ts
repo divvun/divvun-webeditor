@@ -1,6 +1,7 @@
 import {
   getAvailableLanguages,
   GrammarCheckerAPI,
+  LRUCache,
   SpellCheckerAPI,
 } from "./api.ts";
 import {
@@ -9,6 +10,11 @@ import {
   GrammarCheckerConfig,
   SupportedLanguage,
 } from "./types.ts";
+
+/**
+ * Maximum number of items to store in the API response cache
+ */
+const API_CACHE_SIZE = 1000;
 
 /**
  * Callbacks for configuration changes and initialization events
@@ -35,6 +41,7 @@ export class ConfigManager {
   private api: CheckerApi;
   private availableLanguages: AvailableLanguage[] = [];
   private callbacks: ConfigurationCallbacks;
+  private apiCache: LRUCache<string, import("./types.ts").CheckerResponse>;
 
   // DOM Elements managed by ConfigManager
   private languageSelect!: HTMLSelectElement;
@@ -54,6 +61,9 @@ export class ConfigManager {
       autoCheckDelay: 600,
       maxRetries: 3,
     };
+
+    // Create shared cache for all API instances
+    this.apiCache = new LRUCache(API_CACHE_SIZE);
 
     // Create initial API for default language
     this.api = this.createApiForLanguage(this.config.language);
@@ -136,18 +146,18 @@ export class ConfigManager {
     if (languageInfo) {
       // Use the API type specified by the server
       if (languageInfo.type === "speller") {
-        return new SpellCheckerAPI();
+        return new SpellCheckerAPI(this.apiCache);
       } else {
-        return new GrammarCheckerAPI();
+        return new GrammarCheckerAPI(this.apiCache);
       }
     }
 
     // Fallback logic if language not found in API data
     // SMS uses spell checker, all others use grammar checker
     if (language === "sms") {
-      return new SpellCheckerAPI();
+      return new SpellCheckerAPI(this.apiCache);
     } else {
-      return new GrammarCheckerAPI();
+      return new GrammarCheckerAPI(this.apiCache);
     }
   }
 
