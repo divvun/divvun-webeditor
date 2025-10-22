@@ -231,7 +231,23 @@ export class TextAnalyzer {
     if (!lineText.trim()) {
       return [];
     }
+    const response = await this.maybeCachedResponse(lineText, lineNumber);
+    const trimOffset = this.getTrimOffset(lineText, response);
 
+    return this.adjustErrors(response, documentOffset, trimOffset);
+  }
+
+  /**
+   * Get a cached response for a line of text, or call the API if not cached
+   *
+   * @param lineText - The line text to check
+   * @param lineNumber - The 0-based line number (for logging purposes)
+   * @returns The API response for the line
+   */
+  private async maybeCachedResponse(
+    lineText: string,
+    lineNumber: number,
+  ): Promise<CheckerResponse> {
     // Create cache key
     const cacheKey = `${this.currentLanguage}:${lineText}`;
 
@@ -255,27 +271,45 @@ export class TextAnalyzer {
         this.cache.set(cacheKey, response);
       } catch (error) {
         console.warn(`Error checking line ${lineNumber}:`, error);
-        return [];
+        return { errs: [], text: lineText };
       }
     }
+    return response;
+  }
 
-    // Check if API trimmed leading whitespace from the text
-    // Note: We only care about leading whitespace, not trailing (like newlines)
+  /**
+   * The API may trim leading/trailing whitespace from the text before checking it.
+   *
+   * @param lineText - Original line text
+   * @param response - API response for the line
+   * @returns Calculated trim offset
+   */
+  private getTrimOffset(lineText: string, response: CheckerResponse) {
     const leadingWhitespace = lineText.length - lineText.trimStart().length;
     const apiLeadingWhitespace = response.text.length -
       response.text.trimStart().length;
     const trimOffset = leadingWhitespace - apiLeadingWhitespace;
+    return trimOffset;
+  }
 
-    // Adjust error indices to account for:
-    // 1. Position in full text (documentOffset)
-    // 2. Any leading whitespace trimmed by API (trimOffset)
-    const adjustedErrors = response.errs.map((error) => ({
+  /**
+   * Adjust error indices based on document offset and trim offset
+   *
+   * @param response - API response containing errors
+   * @param documentOffset - Character position of the line in the full document
+   * @param trimOffset - Offset due to leading whitespace trimming
+   * @returns Array of errors with adjusted indices
+   */
+  private adjustErrors(
+    response: CheckerResponse,
+    documentOffset: number,
+    trimOffset: number,
+  ) {
+    return response.errs.map((error) => ({
       ...error,
       start_index: error.start_index + documentOffset + trimOffset,
       end_index: error.end_index + documentOffset + trimOffset,
     }));
-
-    return adjustedErrors;
   }
 
   /**
