@@ -20,18 +20,8 @@ export class GrammarCheckerAPI implements CheckerApi {
       return { text, errs: [] };
     }
 
-    // Create cache key from text and language
-    const cacheKey = `${language}:${text}`;
-
-    // Check cache first
-    const cached = this.cache.get(cacheKey);
-    if (cached) {
-      console.debug(`📦 Cache hit for ${language} (${text.length} chars)`);
-      return cached;
-    }
-
     console.debug(
-      `🌐 Cache miss, fetching from API for ${language} (${text.length} chars)`,
+      `🌐 Fetching from API for ${language} (${text.length} chars)`,
     );
 
     const controller = new AbortController();
@@ -62,9 +52,6 @@ export class GrammarCheckerAPI implements CheckerApi {
       }
 
       const data: CheckerResponse = await response.json();
-
-      // Store in cache
-      this.cache.set(cacheKey, data);
 
       return data;
     } catch (error: unknown) {
@@ -98,13 +85,8 @@ export class GrammarCheckerAPI implements CheckerApi {
 }
 
 export class SpellCheckerAPI implements CheckerApi {
-  private cache: LRUCache<string, CheckerResponse>;
   private readonly baseUrl = "https://api-giellalt.uit.no/speller";
   private readonly timeout = 10000; // 10 seconds
-
-  constructor(cache: LRUCache<string, CheckerResponse>) {
-    this.cache = cache;
-  }
 
   async checkText(
     text: string,
@@ -114,20 +96,8 @@ export class SpellCheckerAPI implements CheckerApi {
       return { text, errs: [] };
     }
 
-    // Create cache key from text and language
-    const cacheKey = `${language}:${text}`;
-
-    // Check cache first
-    const cached = this.cache.get(cacheKey);
-    if (cached) {
-      console.debug(
-        `📦 Cache hit for ${language} speller (${text.length} chars)`,
-      );
-      return cached;
-    }
-
     console.debug(
-      `🌐 Cache miss, fetching from speller API for ${language} (${text.length} chars)`,
+      `🌐 Fetching from speller API for ${language} (${text.length} chars)`,
     );
 
     const controller = new AbortController();
@@ -188,9 +158,6 @@ export class SpellCheckerAPI implements CheckerApi {
       });
 
       const result = { text, errs: errors };
-
-      // Store in cache
-      this.cache.set(cacheKey, result);
 
       return result;
     } catch (error: unknown) {
