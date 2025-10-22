@@ -40,6 +40,34 @@ export class SuggestionManager {
   }
 
   /**
+   * Adjust coordinates to keep element within viewport bounds
+   * @param x Desired x coordinate
+   * @param y Desired y coordinate
+   * @param elementWidth Expected width of element
+   * @param elementHeight Expected height of element
+   * @returns Adjusted coordinates
+   */
+  private constrainToViewport(
+    x: number,
+    y: number,
+    elementWidth: number,
+    elementHeight: number,
+  ): { x: number; y: number } {
+    const viewportWidth = globalThis.innerWidth ||
+      document.documentElement.clientWidth;
+    const viewportHeight = globalThis.innerHeight ||
+      document.documentElement.clientHeight;
+
+    const adjustedX = Math.max(10, Math.min(x, viewportWidth - elementWidth));
+    const adjustedY = Math.max(
+      10,
+      Math.min(y, viewportHeight - elementHeight),
+    );
+
+    return { x: adjustedX, y: adjustedY };
+  }
+
+  /**
    * Show a tooltip with error suggestions near the mouse position
    */
   showSuggestionTooltip(
@@ -98,14 +126,14 @@ export class SuggestionManager {
     document.body.appendChild(tooltip);
 
     // Position near mouse but ensure within viewport
-    const x = ev.clientX + 8;
-    const y = ev.clientY + 8;
-    const win = globalThis as unknown as {
-      innerWidth: number;
-      innerHeight: number;
-    };
-    tooltip.style.left = `${Math.min(win.innerWidth - 320, x)}px`;
-    tooltip.style.top = `${Math.min(win.innerHeight - 200, y)}px`;
+    const pos = this.constrainToViewport(
+      ev.clientX + 8,
+      ev.clientY + 8,
+      320,
+      200,
+    );
+    tooltip.style.left = `${pos.x}px`;
+    tooltip.style.top = `${pos.y}px`;
   }
 
   /**
@@ -123,18 +151,10 @@ export class SuggestionManager {
     menu.className =
       "absolute bg-white border border-gray-300 rounded-md shadow-lg z-[1000] min-w-[120px] overflow-hidden";
 
-    // Adjust coordinates to prevent menu from appearing off-screen
-    const viewportWidth = globalThis.innerWidth ||
-      document.documentElement.clientWidth;
-    const viewportHeight = globalThis.innerHeight ||
-      document.documentElement.clientHeight;
-
-    const adjustedX = Math.max(10, Math.min(x, viewportWidth - 200));
-    const adjustedY = Math.max(10, Math.min(y, viewportHeight - 150));
-
-    // Position the menu
-    menu.style.left = `${adjustedX}px`;
-    menu.style.top = `${adjustedY}px`;
+    // Position the menu within viewport bounds
+    const pos = this.constrainToViewport(x, y, 200, 150);
+    menu.style.left = `${pos.x}px`;
+    menu.style.top = `${pos.y}px`;
 
     // Add title if available
     if (error.title) {
