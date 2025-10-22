@@ -67,12 +67,10 @@ export class GrammarChecker {
   // Error highlighting
   public errorHighlighter: ErrorHighlighter;
 
-  // Line checking coordination
-  private pendingLineChecks: Map<number, Promise<void>> = new Map();
-
-  // Debounce timers for line checking (per-line debouncing)
-  private lineDebounceTimers: Map<number, number> = new Map();
-  private readonly LINE_CHECK_DEBOUNCE_MS = 500; // Wait 500ms after last keystroke
+  // Debounce timer and pending check tracking (simplified to single values)
+  private debounceTimer: number | undefined = undefined;
+  private pendingCheck: Promise<void> | undefined = undefined;
+  private readonly CHECK_DEBOUNCE_MS = 500; // Wait 500ms after last keystroke
 
   // ConfigManager now handles API creation
 
@@ -131,15 +129,15 @@ export class GrammarChecker {
   }
 
   public handleTextChange(_source: string, currentText: string): void {
-    // Skip processing during highlighting or if any line checks are pending
+    // Skip processing during highlighting or if a check is pending
     const shouldProcessEdit =
       this.stateMachine.getCurrentState() !== "highlighting" &&
-      this.pendingLineChecks.size === 0;
+      this.pendingCheck === undefined;
 
     if (!shouldProcessEdit) {
       // Skip processing but still update previousText to prevent stale state
       console.debug(
-        `🔄 Text change while ${this.stateMachine.getCurrentState()} or ${this.pendingLineChecks.size} line checks pending, ignoring edit processing but updating baseline`,
+        `🔄 Text change while ${this.stateMachine.getCurrentState()} or check pending, ignoring edit processing but updating baseline`,
       );
       this.previousText = currentText;
       return;
@@ -173,9 +171,10 @@ export class GrammarChecker {
           break;
         case "line-deletion":
           // Check from the line before deletion (if it exists), otherwise from deletion point
-          startLine = editInfo.lineNumber !== undefined && editInfo.lineNumber > 0
-            ? editInfo.lineNumber - 1
-            : editInfo.lineNumber;
+          startLine =
+            editInfo.lineNumber !== undefined && editInfo.lineNumber > 0
+              ? editInfo.lineNumber - 1
+              : editInfo.lineNumber;
           break;
         case "multi-line-edit":
           startLine = editInfo.startLine;
@@ -207,18 +206,20 @@ export class GrammarChecker {
     console.debug(`📋 Checking from line ${startLine} to end`);
 
     // Clear any existing debounce timer
-    const existingTimer = this.lineDebounceTimers.get(startLine);
-    if (existingTimer !== undefined) {
-      clearTimeout(existingTimer);
+    if (this.debounceTimer !== undefined) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = undefined;
     }
 
     // Set a new debounce timer
-    const timerId = setTimeout(() => {
-      this.lineDebounceTimers.delete(startLine);
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = undefined;
 
       // Check if there's already a pending check
-      if (this.pendingLineChecks.has(startLine)) {
-        console.debug(`⏸️ Check already in progress from line ${startLine}, skipping`);
+      if (this.pendingCheck !== undefined) {
+        console.debug(
+          `⏸️ Check already in progress, skipping new check from line ${startLine}`,
+        );
         return;
       }
 
@@ -227,7 +228,7 @@ export class GrammarChecker {
       const endLine = lines.length - 1;
 
       const checkPromise = this.checkLinesAndUpdateState(startLine, endLine);
-      this.pendingLineChecks.set(startLine, checkPromise);
+      this.pendingCheck = checkPromise;
 
       checkPromise
         .then(() => {
@@ -249,11 +250,9 @@ export class GrammarChecker {
           );
         })
         .finally(() => {
-          this.pendingLineChecks.delete(startLine);
+          this.pendingCheck = undefined;
         });
-    }, this.LINE_CHECK_DEBOUNCE_MS);
-
-    this.lineDebounceTimers.set(startLine, timerId);
+    }, this.CHECK_DEBOUNCE_MS);
   }
 
   /**
@@ -279,11 +278,12 @@ export class GrammarChecker {
     });
 
     // Check the range using TextAnalyzer (cache-aware)
-    const newErrors = await this.textAnalyzer.checkMultipleLinesForStateManagement(
-      startLine,
-      endLine,
-      (message) => this.updateStatus(message, true),
-    );
+    const newErrors = await this.textAnalyzer
+      .checkMultipleLinesForStateManagement(
+        startLine,
+        endLine,
+        (message) => this.updateStatus(message, true),
+      );
 
     // Add the new errors
     this.state.errors.push(...newErrors);

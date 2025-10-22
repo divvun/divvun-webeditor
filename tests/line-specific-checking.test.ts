@@ -2,11 +2,11 @@
  * Tests for line-specific grammar checking functionality
  */
 
-import { assertEquals, assert } from "jsr:@std/assert@1";
+import { assert, assertEquals } from "jsr:@std/assert@1";
 import { TextAnalyzer } from "../src/text-analyzer.ts";
 import {
-  CheckerError,
   CheckerApi,
+  CheckerError,
   CheckerResponse,
   SupportedLanguage,
 } from "../src/types.ts";
@@ -39,7 +39,7 @@ class MockAPI implements CheckerApi {
 
   async checkText(
     text: string,
-    language: SupportedLanguage
+    language: SupportedLanguage,
   ): Promise<CheckerResponse> {
     this.callLog.push({ text, language });
 
@@ -83,7 +83,7 @@ function createMockCallbacks() {
 function createError(
   text: string,
   startIndex: number,
-  endIndex: number
+  endIndex: number,
 ): CheckerError {
   return {
     error_text: text,
@@ -105,7 +105,7 @@ Deno.test("Line-specific checking - Single line API call", async () => {
 
   // Set up text with multiple lines
   mockEditor.setText(
-    "First line with error\nSecond line is correct\nThird line"
+    "First line with error\nSecond line is correct\nThird line",
   );
 
   // Mock response for just the first line (now includes newline)
@@ -156,7 +156,7 @@ Deno.test(
     assertEquals(errors.length, 1);
     assertEquals(errors[0].start_index, 39 + 11); // 50
     assertEquals(errors[0].end_index, 39 + 19); // 58
-  }
+  },
 );
 
 Deno.test("Line-specific checking - Empty and invalid lines", async () => {
@@ -212,7 +212,9 @@ Deno.test(
     // Initial multi-line text
     mockEditor.setText("Line 0 has error\nLine 1 is good\nLine 2 also good");
 
-    mockAPI.setMockResponse("Line 0 has error\n", [createError("error", 11, 16)]);
+    mockAPI.setMockResponse("Line 0 has error\n", [
+      createError("error", 11, 16),
+    ]);
 
     // Check line 0 - should find error
     const line0Errors = await analyzer.checkSpecificLine(0);
@@ -220,7 +222,7 @@ Deno.test(
 
     // Now edit line 1 only
     mockEditor.setText(
-      "Line 0 has error\nLine 1 is modified\nLine 2 also good"
+      "Line 0 has error\nLine 1 is modified\nLine 2 also good",
     );
 
     mockAPI.clearCallLog();
@@ -231,13 +233,13 @@ Deno.test(
 
     // Check line 0 again - with caching, will use cache (no API call)
     const line0ErrorsAfterEdit = await analyzer.checkSpecificLine(0);
-    
+
     // Should still have the error from cache
     assertEquals(line0ErrorsAfterEdit.length, 1);
-    
+
     // Verify no new API call was made for line 0 (cache hit)
     assertEquals(mockAPI.callLog.length, 1); // Only the line 1 check
-  }
+  },
 );
 
 Deno.test("Line-specific checking - Callback integration", async () => {
@@ -255,7 +257,7 @@ Deno.test("Line-specific checking - Callback integration", async () => {
 
   // Check that appropriate callbacks were triggered
   const errorFoundCalls = calls.filter(
-    (call) => call.method === "onErrorsFound"
+    (call) => call.method === "onErrorsFound",
   );
   assertEquals(errorFoundCalls.length, 1);
 
@@ -289,7 +291,7 @@ Deno.test("Line-specific checking - Performance comparison", async () => {
   // Performance should be reasonable (under 100ms for mock)
   assert(
     duration < 100,
-    `Line-specific check took ${duration}ms, expected < 100ms`
+    `Line-specific check took ${duration}ms, expected < 100ms`,
   );
 });
 
@@ -328,15 +330,15 @@ Deno.test(
     assertEquals(
       mockAPI.callLog.length,
       0,
-      "No additional API calls should be made after line-specific check"
+      "No additional API calls should be made after line-specific check",
     );
 
     // Verify performance is good
     assert(
       duration < 50,
-      `Line-specific check took ${duration}ms, should be very fast`
+      `Line-specific check took ${duration}ms, should be very fast`,
     );
-  }
+  },
 );
 
 Deno.test("Line-specific checking - State machine integration", async () => {
@@ -377,11 +379,11 @@ Deno.test("Line-specific checking - State machine integration", async () => {
   for (const call of mockAPI.callLog) {
     assert(
       call.text.length < 30,
-      "Should be line-specific calls, not full document"
+      "Should be line-specific calls, not full document",
     );
     assert(
       !call.text.includes("\n"),
-      "Should not contain newlines (line-specific only)"
+      "Should not contain newlines (line-specific only)",
     );
   }
 });

@@ -216,7 +216,9 @@ export class TextAnalyzer {
 
     try {
       // Use cache-aware checking
-      console.log(`🔍 About to call checkLineForStateManagement for line ${lineNumber}`);
+      console.log(
+        `🔍 About to call checkLineForStateManagement for line ${lineNumber}`,
+      );
       const errors = await this.checkLineForStateManagement(lineNumber);
       console.log(
         `✅ checkLineForStateManagement completed for line ${lineNumber}, found ${errors.length} errors`,
