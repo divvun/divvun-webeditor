@@ -134,38 +134,28 @@ export class TextChecker {
 
   /**
    * Handle detected edit operations
-   * With caching, we can simply check from the edited line to the end - cache hits make this fast
+   * Unified logic: check from the edited line onwards (cache makes this efficient)
    */
   public handleEditDetected(editType: EditType, editInfo: EditInfo): void {
     console.debug(`📝 Handling ${editType}:`, editInfo);
 
     try {
-      // Determine which line was edited
+      // Determine the starting line for checking
+      // Main principle: "the line where the edit started and onwards should be checked"
       let startLine: number | undefined;
 
-      switch (editType) {
-        case "single-line-edit":
-          startLine = editInfo.lineNumber;
-          break;
-        case "newline-creation":
-          // Check from the line where newline was created
-          startLine = editInfo.lineNumber;
-          break;
-        case "line-deletion":
-          // Check from the line before deletion (if it exists), otherwise from deletion point
-          startLine =
-            editInfo.lineNumber !== undefined && editInfo.lineNumber > 0
-              ? editInfo.lineNumber - 1
-              : editInfo.lineNumber;
-          break;
-        case "multi-line-edit":
-          startLine = editInfo.startLine;
-          break;
-        case "paste":
-        case "cut":
-          // For paste/cut, check everything
-          startLine = 0;
-          break;
+      // For line-deletion, check from the line before deletion (if exists)
+      if (editType === "line-deletion") {
+        startLine = editInfo.lineNumber !== undefined && editInfo.lineNumber > 0
+          ? editInfo.lineNumber - 1
+          : editInfo.lineNumber;
+      } // For paste/cut operations, check from beginning
+      else if (editType === "paste" || editType === "cut") {
+        startLine = 0;
+      } // For all other edits (single-line, multi-line, newline-creation):
+      // Check from the first affected line
+      else {
+        startLine = editInfo.lineNumber ?? editInfo.startLine;
       }
 
       if (startLine !== undefined) {
