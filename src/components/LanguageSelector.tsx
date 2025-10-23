@@ -27,8 +27,14 @@ export default function LanguageSelector() {
             select.appendChild(option);
           });
           
-          // Set default to 'se' (Northern Sami) if available
-          select.value = 'se';
+          // Get language from URL parameter or use default 'se'
+          const urlParams = new URLSearchParams(globalThis.location.search);
+          const urlLang = urlParams.get('lang') || urlParams.get('language');
+          const initialLanguage = urlLang && availableLanguages.some(l => l.code === urlLang) 
+            ? urlLang 
+            : 'se';
+          
+          select.value = initialLanguage;
           
         } catch (error) {
           console.warn('Failed to load languages, using fallback:', error);
@@ -45,7 +51,15 @@ export default function LanguageSelector() {
             option.textContent = language.name;
             select.appendChild(option);
           });
-          select.value = 'se';
+          
+          // Get language from URL parameter or use default 'se'
+          const urlParams = new URLSearchParams(globalThis.location.search);
+          const urlLang = urlParams.get('lang') || urlParams.get('language');
+          const initialLanguage = urlLang && fallbackOptions.some(l => l.code === urlLang) 
+            ? urlLang 
+            : 'se';
+          
+          select.value = initialLanguage;
         }
       }
       

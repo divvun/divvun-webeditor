@@ -47,9 +47,12 @@ export class ConfigManager {
   constructor(callbacks: ConfigurationCallbacks) {
     this.callbacks = callbacks;
 
+    // Get language from URL or use default
+    const urlLanguage = this.getLanguageFromURL();
+
     // Initialize default configuration
     this.config = {
-      language: "se",
+      language: urlLanguage,
       apiUrl: "https://api-giellalt.uit.no/grammar",
       autoCheckDelay: 600,
       maxRetries: 3,
@@ -60,6 +63,41 @@ export class ConfigManager {
 
     // Initialize DOM elements
     this.initializeDOMElements();
+  }
+
+  /**
+   * Extract language code from URL parameter
+   * Supports formats: ?lang=se or ?language=se
+   */
+  private getLanguageFromURL(): SupportedLanguage {
+    const urlParams = new URLSearchParams(globalThis.location.search);
+    const langParam = urlParams.get("lang") || urlParams.get("language");
+
+    if (langParam) {
+      // Validate that it's a supported language
+      const supportedLanguages: SupportedLanguage[] = [
+        "se",
+        "sma",
+        "smj",
+        "smn",
+        "sms",
+        "fo",
+        "ga",
+        "kl",
+        "nb",
+      ];
+
+      if (supportedLanguages.includes(langParam as SupportedLanguage)) {
+        console.log(`🌐 Language from URL: ${langParam}`);
+        return langParam as SupportedLanguage;
+      } else {
+        console.warn(
+          `⚠️ Invalid language code in URL: ${langParam}. Using default 'se'`,
+        );
+      }
+    }
+
+    return "se"; // Default language
   }
 
   /**
