@@ -70,6 +70,12 @@ export default function LanguageSelector() {
         
         select.addEventListener('change', function(e) {
           const selectedLanguage = e.target.value;
+          
+          // Update URL with the selected language
+          const url = new URL(globalThis.location.href);
+          url.searchParams.set('lang', selectedLanguage);
+          globalThis.history.pushState({}, '', url);
+          
           // Dispatch a custom event that main.ts can listen to
           const event = new CustomEvent('languageChanged', { 
             detail: { language: selectedLanguage }
