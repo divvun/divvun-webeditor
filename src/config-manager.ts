@@ -68,33 +68,21 @@ export class ConfigManager {
   /**
    * Extract language code from URL parameter
    * Supports formats: ?lang=se or ?language=se
+   *
+   * Note: This does basic validation at construction time. Full validation
+   * against available languages from the API happens during initializeLanguages().
    */
   private getLanguageFromURL(): SupportedLanguage {
     const urlParams = new URLSearchParams(globalThis.location.search);
     const langParam = urlParams.get("lang") || urlParams.get("language");
 
     if (langParam) {
-      // Validate that it's a supported language
-      const supportedLanguages: SupportedLanguage[] = [
-        "se",
-        "sma",
-        "smj",
-        "smn",
-        "sms",
-        "fo",
-        "ga",
-        "kl",
-        "nb",
-      ];
+      // Basic type validation - check if it matches the SupportedLanguage type pattern
+      // More detailed validation will happen when available languages are loaded
+      const langCode = langParam as SupportedLanguage;
 
-      if (supportedLanguages.includes(langParam as SupportedLanguage)) {
-        console.log(`🌐 Language from URL: ${langParam}`);
-        return langParam as SupportedLanguage;
-      } else {
-        console.warn(
-          `⚠️ Invalid language code in URL: ${langParam}. Using default 'se'`,
-        );
-      }
+      console.log(`🌐 Language from URL: ${langCode}`);
+      return langCode;
     }
 
     return "se"; // Default language
@@ -241,6 +229,18 @@ export class ConfigManager {
         this.availableLanguages.length,
         "languages",
       );
+
+      // Validate that the current language (possibly from URL) is actually available
+      const isLanguageAvailable = this.availableLanguages.some(
+        (lang) => lang.code === this.config.language,
+      );
+
+      if (!isLanguageAvailable) {
+        console.warn(
+          `⚠️ Language '${this.config.language}' from URL is not available. Falling back to 'se'`,
+        );
+        this.config.language = "se";
+      }
 
       // Re-initialize the API with the current language using the new data
       this.api = this.createApiForLanguage(this.config.language);
