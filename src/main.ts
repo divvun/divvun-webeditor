@@ -79,6 +79,9 @@ document.addEventListener("DOMContentLoaded", () => {
       },
     });
 
+    // Focus the editor when app starts
+    editor.focus();
+
     // Create the configuration manager with callbacks
     // Note: Callbacks reference textChecker methods, which we'll set up after instantiation
     let textCheckerInstance: TextChecker | null = null;
