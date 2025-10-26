@@ -164,13 +164,28 @@ export class ErrorHighlighter {
 
     // Highlight errors for a specific line without clearing existing highlights
     const savedSelection = this.cursorManager.saveCursorPosition();
+    // Save document length to detect if text changed during async highlighting
+    const savedDocLength = this.editor.getLength();
 
     try {
       if (this.isSafari) {
         this.performLineHighlightingOperations(errors, savedSelection);
       } else {
         requestAnimationFrame(() => {
-          this.performLineHighlightingOperations(errors, savedSelection);
+          // Check if document changed during async operation
+          const currentDocLength = this.editor.getLength();
+          const docChanged = currentDocLength !== savedDocLength;
+
+          if (docChanged) {
+            console.debug(
+              "🔄 Document changed during line highlighting, skipping cursor restoration",
+            );
+          }
+
+          this.performLineHighlightingOperations(
+            errors,
+            docChanged ? null : savedSelection,
+          );
           // Clear highlighting flag after line operations complete
           this.finishHighlighting();
         });
@@ -212,6 +227,8 @@ export class ErrorHighlighter {
 
     // Safari-specific approach: Completely disable all selection events during formatting
     const savedSelection = this.cursorManager.saveCursorPosition();
+    // Save document length to detect if text changed during async highlighting
+    const savedDocLength = this.editor.getLength();
 
     try {
       if (this.isSafari) {
@@ -221,7 +238,20 @@ export class ErrorHighlighter {
       } else {
         // Use standard approach for other browsers
         requestAnimationFrame(() => {
-          this.performHighlightingOperations(errors, savedSelection);
+          // Check if document changed during async operation
+          const currentDocLength = this.editor.getLength();
+          const docChanged = currentDocLength !== savedDocLength;
+
+          if (docChanged) {
+            console.debug(
+              "🔄 Document changed during highlighting, skipping cursor restoration",
+            );
+          }
+
+          this.performHighlightingOperations(
+            errors,
+            docChanged ? null : savedSelection,
+          );
           // Clear highlighting flag after operations complete
           this.finishHighlighting();
         });
