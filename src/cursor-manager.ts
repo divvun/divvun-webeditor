@@ -79,67 +79,83 @@ export class CursorManager {
   }
 
   /**
-   * Restore cursor position with Safari-specific retry logic
+   * Restore cursor position with Safari-specific retry logic using Promise-based approach
    * @param selection The cursor position to restore
+   * @returns Promise that resolves when restoration is complete
    */
-  restoreCursorPosition(selection: CursorPosition | null): void {
+  async restoreCursorPosition(
+    selection: CursorPosition | null,
+  ): Promise<void> {
     if (!selection) return;
 
+    const isSafari = /^((?!chrome|android).)*safari/i.test(
+      navigator.userAgent,
+    );
+
     try {
-      // Use multiple restoration attempts with different delays for Safari
-      const isSafari = /^((?!chrome|android).)*safari/i.test(
-        navigator.userAgent,
+      // Initial delay for Safari to allow DOM to settle
+      if (isSafari) {
+        await this.delay(15);
+      }
+
+      // Attempt restoration with retry logic
+      await this.attemptRestore(selection, isSafari, 0);
+    } catch (_err) {
+      // Silently fail - cursor restoration is non-critical
+    }
+  }
+
+  /**
+   * Helper to create a Promise-based delay
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Attempt to restore cursor position with retry logic for Safari
+   */
+  private async attemptRestore(
+    selection: CursorPosition,
+    isSafari: boolean,
+    attempt: number,
+  ): Promise<void> {
+    try {
+      if (!this.editor.setSelection) return;
+
+      // Ensure the selection is within document bounds
+      const docLength = this.editor.getLength();
+      const safeIndex = Math.min(selection.index, docLength - 1);
+      const safeLength = Math.min(selection.length, docLength - safeIndex);
+
+      this.editor.setSelection(
+        Math.max(0, safeIndex),
+        Math.max(0, safeLength),
       );
 
-      const restoreAttempt = (attempt: number = 0) => {
-        try {
-          if (this.editor.setSelection) {
-            // Ensure the selection is within document bounds
-            const docLength = this.editor.getLength();
-            const safeIndex = Math.min(selection.index, docLength - 1);
-            const safeLength = Math.min(
-              selection.length,
-              docLength - safeIndex,
-            );
+      // Verify the selection was actually set correctly (Safari needs this)
+      if (isSafari && attempt < 3) {
+        await this.delay(5);
 
-            this.editor.setSelection(
-              Math.max(0, safeIndex),
-              Math.max(0, safeLength),
-            );
-
-            // Verify the selection was actually set correctly
-            if (isSafari && attempt < 3) {
-              setTimeout(() => {
-                const currentSelection = this.editor.getSelection();
-                if (!currentSelection || currentSelection.index !== safeIndex) {
-                  restoreAttempt(attempt + 1);
-                }
-              }, 5);
-            }
-          }
-        } catch (_err) {
-          // If setSelection fails, try to at least focus the editor
-          if (attempt === 0) {
-            try {
-              this.editor.focus();
-              if (isSafari) {
-                setTimeout(() => restoreAttempt(1), 10);
-              }
-            } catch (_focusErr) {
-              // ignore
-            }
-          }
+        const currentSelection = this.editor.getSelection();
+        if (!currentSelection || currentSelection.index !== safeIndex) {
+          // Retry with next attempt
+          await this.attemptRestore(selection, isSafari, attempt + 1);
         }
-      };
-
-      // Initial attempt with delay for Safari
-      if (isSafari) {
-        setTimeout(() => restoreAttempt(0), 15);
-      } else {
-        restoreAttempt(0);
       }
     } catch (_err) {
-      // ignore
+      // If setSelection fails, try to at least focus the editor
+      if (attempt === 0) {
+        try {
+          this.editor.focus();
+          if (isSafari) {
+            await this.delay(10);
+            await this.attemptRestore(selection, isSafari, 1);
+          }
+        } catch (_focusErr) {
+          // ignore
+        }
+      }
     }
   }
 
@@ -176,8 +192,10 @@ export class CursorManager {
         }
       }
     } catch (_err) {
-      // Fallback: try regular restoration with delay for Safari
-      this.restoreCursorPosition(selection);
+      // Fallback: try regular restoration with delay for Safari (async, non-blocking)
+      this.restoreCursorPosition(selection).catch(() => {
+        // Silently ignore restoration failures
+      });
     }
   }
 }

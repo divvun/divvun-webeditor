@@ -182,7 +182,7 @@ Deno.test("CursorManager - handles valid and invalid positions", () => {
   assertEquals(restored?.length, 0);
 });
 
-Deno.test("CursorManager - handle edge cases", () => {
+Deno.test("CursorManager - handle edge cases", async () => {
   const editor = createMockEditor();
   const cursorManager = new CursorManager(editor);
 
@@ -193,8 +193,8 @@ Deno.test("CursorManager - handle edge cases", () => {
   assertExists(emptyPos);
   assertEquals(emptyPos.index, 0);
 
-  // Null selection - should not throw
-  cursorManager.restoreCursorPosition(null);
+  // Null selection - should not throw (now returns Promise)
+  await cursorManager.restoreCursorPosition(null);
   cursorManager.restoreCursorPositionImmediate(null);
 });
 

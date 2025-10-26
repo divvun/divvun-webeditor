@@ -257,8 +257,30 @@ export class CheckerStateMachine {
    * Signal that highlighting has completed
    */
   onHighlightingComplete(): void {
+    console.log(
+      `🏁 onHighlightingComplete called, currentState: ${this.currentState}`,
+    );
+
+    // Transition to idle if we're in highlighting state (normal case)
     if (this.currentState === "highlighting") {
+      console.log("✅ State is highlighting, transitioning to idle");
       this.transitionTo("idle", "highlighting-complete");
+    } // RACE CONDITION FIX: If we're still in "checking", it means the highlighting
+    // operation completed before the check->highlighting transition happened.
+    // Force transition to highlighting first, then to idle.
+    else if (this.currentState === "checking") {
+      console.log(
+        "⚠️ Race condition: highlighting completed before check->highlighting transition",
+      );
+      console.log("🔧 Forcing transition: checking -> highlighting -> idle");
+      this.transitionTo("highlighting", "late-highlighting-complete");
+      // Immediately transition to idle since highlighting is already done
+      this.transitionTo("idle", "highlighting-complete");
+    } // For any other state, just log it
+    else {
+      console.log(
+        `ℹ️ Highlighting completed but state is ${this.currentState}, no transition needed`,
+      );
     }
   }
 

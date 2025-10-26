@@ -10,10 +10,18 @@ import { ErrorHighlighter } from "../src/error-highlighter.ts";
 import { CursorManager } from "../src/cursor-manager.ts";
 import type { CheckerError } from "../src/types.ts";
 
-// Mock requestAnimationFrame for Deno environment
+// Mock requestAnimationFrame for Deno environment - allow callback to be triggered
+// We'll intercept this to simulate typing during highlighting
+let pendingAnimationFrameCallback: (() => void) | null = null;
 // deno-lint-ignore no-explicit-any
 (globalThis as any).requestAnimationFrame = (callback: () => void) => {
-  return setTimeout(callback, 0);
+  pendingAnimationFrameCallback = callback;
+  return setTimeout(() => {
+    if (pendingAnimationFrameCallback === callback) {
+      callback();
+      pendingAnimationFrameCallback = null;
+    }
+  }, 0);
 };
 
 // Mock editor that simulates document changes during highlighting
@@ -140,16 +148,17 @@ Deno.test("Cursor jump fix - cursor restoration skipped when document changes du
   console.log(`📍 Cursor before highlighting: ${savedCursorBefore}`);
   console.log(`📏 Document length before: ${savedDocLengthBefore}`);
 
-  // Trigger highlighting (async operation)
-  highlighter.highlightErrors(errors);
+  // Trigger highlighting - it will schedule via requestAnimationFrame
+  const highlightPromise = highlighter.highlightErrors(errors);
 
-  // Simulate user continuing to type during the async highlighting
-  setTimeout(() => {
-    editor.simulateTyping();
-  }, 10);
+  // Give the promise a tiny moment to schedule the requestAnimationFrame
+  await new Promise((resolve) => setTimeout(resolve, 5));
 
-  // Wait for async highlighting to complete
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  // Now simulate typing (this should happen while highlighting callback is pending or executing)
+  editor.simulateTyping();
+
+  // Wait for highlighting to complete
+  await highlightPromise;
 
   const cursorAfter = editor.getSelection()?.index ?? 0;
   const docLengthAfter = editor.getLength();
@@ -239,11 +248,8 @@ Deno.test("Cursor jump fix - cursor IS restored when document doesn't change", a
   console.log(`📍 Cursor before highlighting: ${savedCursorBefore}`);
   console.log(`📏 Document length before: ${docLengthBefore}`);
 
-  // Trigger highlighting
-  highlighter.highlightErrors(errors);
-
-  // Wait for async highlighting to complete
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  // Trigger highlighting and await completion directly (no typing simulation)
+  await highlighter.highlightErrors(errors);
 
   const cursorAfter = editor.getSelection()?.index ?? 0;
   const docLengthAfter = editor.getLength();
@@ -313,15 +319,16 @@ Deno.test("Cursor jump fix - line highlighting also skips cursor restoration on 
   editor.textToAddDuringHighlight = ".";
 
   // Trigger line highlighting
-  highlighter.highlightLineErrors(errors);
+  const highlightPromise = highlighter.highlightLineErrors(errors);
 
-  // Simulate user continuing to type during the async highlighting
-  setTimeout(() => {
-    editor.simulateTyping();
-  }, 10);
+  // Give the promise a tiny moment to schedule the requestAnimationFrame
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  // Now simulate typing (this should happen while highlighting is in progress)
+  editor.simulateTyping();
 
   // Wait for async highlighting to complete
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await highlightPromise;
 
   const cursorAfter = editor.getSelection()?.index ?? 0;
 

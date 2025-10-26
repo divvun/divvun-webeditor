@@ -25,6 +25,7 @@ export class TextChecker {
   public state: EditorState;
   public isHighlighting: boolean = false;
   private previousText: string = ""; // Track previous text for edit detection
+  private currentCheckId: number = 0; // Track checking operations to prevent stale progress callbacks
 
   // Configuration management
   private configManager: ConfigManager;
@@ -185,46 +186,52 @@ export class TextChecker {
 
     // Set a new debounce timer
     this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = undefined;
-
-      // Check if there's already a pending check
-      if (this.pendingCheck !== undefined) {
-        console.debug(
-          `⏸️ Check already in progress, skipping new check from line ${startLine}`,
-        );
-        return;
-      }
-
-      const currentText = this.editor.getText();
-      const lines = currentText.split("\n");
-      const endLine = lines.length - 1;
-
-      const checkPromise = this.checkLinesAndUpdateState(startLine, endLine);
-      this.pendingCheck = checkPromise;
-
-      checkPromise
-        .then(() => {
-          // Update EventManager with current errors for click handling
-          this.eventManager.updateErrors(this.state.errors);
-          this.updateErrorCount(this.state.errors.length);
-          // Notify state machine that check completed successfully
-          this.stateMachine.onCheckComplete();
-        })
-        .catch((error) => {
-          console.error(`Check from line ${startLine} failed:`, error);
-          // Notify state machine that check failed
-          this.stateMachine.onCheckFailed();
-          // Show error to user with retry button
-          this.updateStatus(
-            "Text check failed",
-            false,
-            true,
-          );
-        })
-        .finally(() => {
-          this.pendingCheck = undefined;
-        });
+      this.performDebouncedCheck(startLine);
     }, this.CHECK_DEBOUNCE_MS);
+  }
+
+  /**
+   * Perform the actual check after debounce delay
+   * Separated into async function for proper Promise handling
+   */
+  private async performDebouncedCheck(startLine: number): Promise<void> {
+    this.debounceTimer = undefined;
+
+    // Check if there's already a pending check
+    if (this.pendingCheck !== undefined) {
+      console.debug(
+        `⏸️ Check already in progress, skipping new check from line ${startLine}`,
+      );
+      return;
+    }
+
+    const currentText = this.editor.getText();
+    const lines = currentText.split("\n");
+    const endLine = lines.length - 1;
+
+    const checkPromise = this.checkLinesAndUpdateState(startLine, endLine);
+    this.pendingCheck = checkPromise;
+
+    try {
+      await checkPromise;
+      // Update EventManager with current errors for click handling
+      this.eventManager.updateErrors(this.state.errors);
+      this.updateErrorCount(this.state.errors.length);
+      // Notify state machine that check completed successfully
+      this.stateMachine.onCheckComplete();
+    } catch (error) {
+      console.error(`Check from line ${startLine} failed:`, error);
+      // Notify state machine that check failed
+      this.stateMachine.onCheckFailed();
+      // Show error to user with retry button
+      this.updateStatus(
+        "Text check failed",
+        false,
+        true,
+      );
+    } finally {
+      this.pendingCheck = undefined;
+    }
   }
 
   /**
@@ -235,20 +242,30 @@ export class TextChecker {
     startLine: number,
     endLine: number,
   ): Promise<void> {
+    const checkId = ++this.currentCheckId; // Generate new check ID
     // Delegate to TextAnalyzer for error state management
     this.state.errors = await this.textAnalyzer.checkLinesAndUpdateErrors(
       this.state.errors,
       startLine,
       endLine,
-      (message) => this.updateStatus(message, true),
+      (message) => {
+        // Only update status if this is still the current check operation
+        if (checkId === this.currentCheckId) {
+          this.updateStatus(message, true);
+        }
+      },
     );
 
-    // Re-highlight all errors
-    this.errorHighlighter.highlightErrors(this.state.errors);
-
-    console.debug(
-      `✅ Checked lines ${startLine}-${endLine}. Total: ${this.state.errors.length}`,
-    );
+    // Re-highlight all errors (must await to ensure state machine transitions correctly)
+    try {
+      await this.errorHighlighter.highlightErrors(this.state.errors);
+      console.debug(
+        `✅ Checked lines ${startLine}-${endLine}. Total: ${this.state.errors.length}`,
+      );
+    } catch (error) {
+      console.error("Error during highlighting:", error);
+      throw error; // Re-throw to trigger state machine error handling
+    }
   }
 
   public async handleIntelligentPasteCheck(
@@ -387,24 +404,30 @@ export class TextChecker {
       );
 
       // Step 3: Check only the affected lines using TextAnalyzer
+      const checkId = ++this.currentCheckId; // Generate new check ID
       const newErrorsFromLines = await this.textAnalyzer
         .checkMultipleLinesForStateManagement(
           linesToCheck.startLine,
           linesToCheck.endLine,
-          (message) => this.updateStatus(message, true),
+          (message) => {
+            // Only update status if this is still the current check operation
+            if (checkId === this.currentCheckId) {
+              this.updateStatus(message, true);
+            }
+          },
         );
 
-      // Highlight errors immediately
+      // Highlight errors immediately (await to ensure proper sequencing)
       if (newErrorsFromLines.length > 0) {
-        this.errorHighlighter.highlightLineErrors(newErrorsFromLines);
+        await this.errorHighlighter.highlightLineErrors(newErrorsFromLines);
       }
 
       // Step 4: Add new errors and update state
       this.state.errors = [...this.state.errors, ...newErrorsFromLines];
       this.state.lastCheckedContent = fullText;
 
-      // Re-highlight all errors to ensure proper display
-      this.errorHighlighter.highlightErrors(this.state.errors);
+      // Re-highlight all errors to ensure proper display (await for completion)
+      await this.errorHighlighter.highlightErrors(this.state.errors);
 
       const errorCount = this.state.errors.length;
       this.updateStatus("Ready", false);
@@ -436,8 +459,10 @@ export class TextChecker {
   }
 
   public onStateEntry(state: CheckerState): void {
+    console.log("🎯 onStateEntry called:", state);
     switch (state) {
       case "idle":
+        console.log("🎯 Setting status to Ready");
         this.updateStatus("Ready", false);
         this.textAnalyzer.clearCheckingContext();
         break;
@@ -452,20 +477,18 @@ export class TextChecker {
   }
 
   // Line-level caching methods
-  public performTextCheck(): void {
+  public async performTextCheck(): Promise<void> {
     // Set up checking context in text analyzer
     this.textAnalyzer.startCheckingContext();
 
     // Perform the actual text check
-    this.textAnalyzer
-      .checkText()
-      .then(() => {
-        this.stateMachine.onCheckComplete();
-      })
-      .catch((error) => {
-        console.warn("Text check failed:", error);
-        this.stateMachine.onCheckFailed();
-      });
+    try {
+      await this.textAnalyzer.checkText();
+      this.stateMachine.onCheckComplete();
+    } catch (error) {
+      console.warn("Text check failed:", error);
+      this.stateMachine.onCheckFailed();
+    }
   }
 
   public updateStatus(
@@ -651,7 +674,10 @@ export class TextChecker {
     );
 
     // Re-highlight all errors with adjusted positions
-    this.errorHighlighter.highlightErrors(this.state.errors);
+    this.errorHighlighter.highlightErrors(this.state.errors)
+      .catch((error) => {
+        console.error("Error during highlighting after correction:", error);
+      });
   }
 
   public async recheckModifiedLine(lineNumber: number): Promise<void> {
@@ -674,7 +700,7 @@ export class TextChecker {
 
       // Always re-highlight the entire error set to ensure removed errors are cleared
       // This is important when a line goes from having errors to having none
-      this.errorHighlighter.highlightErrors(this.state.errors);
+      await this.errorHighlighter.highlightErrors(this.state.errors);
 
       console.log(
         `Line ${lineNumber} recheck complete. Errors in state: ${this.state.errors.length}`,

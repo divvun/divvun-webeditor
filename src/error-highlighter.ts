@@ -51,6 +51,7 @@ export class ErrorHighlighter {
   private cursorManager: CursorManager;
   private callbacks: HighlightingCallbacks;
   private isHighlighting: boolean = false;
+  private currentHighlightId: number = 0;
   private isSafari: boolean;
   private static readonly FORMAT_TYPES = [
     "grammar-error",
@@ -147,8 +148,21 @@ export class ErrorHighlighter {
 
   /**
    * Highlight errors for a specific line without clearing existing highlights
+   * Returns a Promise that resolves when highlighting is complete
    */
-  highlightLineErrors(errors: CheckerError[]): void {
+  highlightLineErrors(errors: CheckerError[]): Promise<void> {
+    // Cancel any ongoing highlighting operation
+    if (this.isHighlighting) {
+      console.debug(
+        "🔄 Cancelling previous line highlighting to start new operation",
+      );
+      // Clear the flag to allow new operation
+      this.isHighlighting = false;
+    }
+
+    // Increment operation ID to track this specific highlighting operation
+    const operationId = ++this.currentHighlightId;
+
     // Set highlighting flag to prevent triggering text checks during line highlighting
     this.isHighlighting = true;
     this.callbacks.onHighlightingStart();
@@ -167,35 +181,37 @@ export class ErrorHighlighter {
     // Save document length to detect if text changed during async highlighting
     const savedDocLength = this.editor.getLength();
 
-    try {
-      if (this.isSafari) {
-        this.performLineHighlightingOperations(errors, savedSelection);
-      } else {
+    if (this.isSafari) {
+      // Safari uses synchronous path
+      this.performLineHighlightingOperations(errors, savedSelection);
+      this.finishHighlighting(operationId);
+      return Promise.resolve();
+    } else {
+      return new Promise((resolve) => {
         requestAnimationFrame(() => {
-          // Check if document changed during async operation
-          const currentDocLength = this.editor.getLength();
-          const docChanged = currentDocLength !== savedDocLength;
+          try {
+            // Check if document changed during async operation
+            const currentDocLength = this.editor.getLength();
+            const docChanged = currentDocLength !== savedDocLength;
 
-          if (docChanged) {
-            console.debug(
-              "🔄 Document changed during line highlighting, skipping cursor restoration",
+            if (docChanged) {
+              console.debug(
+                "🔄 Document changed during line highlighting, skipping cursor restoration",
+              );
+            }
+
+            this.performLineHighlightingOperations(
+              errors,
+              docChanged ? null : savedSelection,
             );
+          } catch (error) {
+            console.error("Error during line highlighting operations:", error);
+          } finally {
+            this.finishHighlighting(operationId);
+            resolve();
           }
-
-          this.performLineHighlightingOperations(
-            errors,
-            docChanged ? null : savedSelection,
-          );
-          // Clear highlighting flag after line operations complete
-          this.finishHighlighting();
         });
-        return; // Early return for async path
-      }
-    } finally {
-      // Clear highlighting flag for synchronous Safari path
-      if (this.isSafari) {
-        this.finishHighlighting();
-      }
+      });
     }
   }
 
@@ -211,15 +227,25 @@ export class ErrorHighlighter {
 
   /**
    * Highlight all errors in the document
+   * Returns a Promise that resolves when highlighting is complete
    */
-  highlightErrors(errors: CheckerError[], _changedLines?: number[]): void {
-    // Prevent multiple simultaneous highlighting operations
+  highlightErrors(
+    errors: CheckerError[],
+    _changedLines?: number[],
+  ): Promise<void> {
+    // Cancel any ongoing highlighting operation
     if (this.isHighlighting) {
       console.debug(
-        "🔄 Highlighting already in progress, skipping duplicate call",
+        "🔄 Cancelling previous highlighting to start new operation",
       );
-      return;
+      // Clear the flag to allow new operation
+      this.isHighlighting = false;
+      // Note: We don't call onHighlightingComplete here because we're
+      // immediately starting a new operation
     }
+
+    // Increment operation ID to track this specific highlighting operation
+    const operationId = ++this.currentHighlightId;
 
     // Set highlighting flag to prevent triggering text checks during highlighting
     this.isHighlighting = true;
@@ -230,36 +256,22 @@ export class ErrorHighlighter {
     // Save document length to detect if text changed during async highlighting
     const savedDocLength = this.editor.getLength();
 
-    try {
-      if (this.isSafari) {
-        // For Safari, use a more aggressive approach
-        this.performSafariSafeHighlighting(errors, savedSelection);
-        // Safari method handles its own finishHighlighting calls
-      } else {
-        // Use standard approach for other browsers
-        requestAnimationFrame(() => {
-          // Check if document changed during async operation
-          const currentDocLength = this.editor.getLength();
-          const docChanged = currentDocLength !== savedDocLength;
-
-          if (docChanged) {
-            console.debug(
-              "🔄 Document changed during highlighting, skipping cursor restoration",
-            );
-          }
-
-          this.performHighlightingOperations(
-            errors,
-            docChanged ? null : savedSelection,
-          );
-          // Clear highlighting flag after operations complete
-          this.finishHighlighting();
+    if (this.isSafari) {
+      // For Safari, use synchronous approach wrapped in Promise
+      return this.performSafariSafeHighlightingAsync(
+        errors,
+        savedSelection,
+        operationId,
+      );
+    } else {
+      // Use Promise-based approach for other browsers
+      return this.scheduleHighlighting(errors, savedSelection, savedDocLength)
+        .catch((error) => {
+          console.error("Error during highlighting operations:", error);
+        })
+        .finally(() => {
+          this.finishHighlighting(operationId);
         });
-      }
-    } catch (error) {
-      console.error("Error during highlighting:", error);
-      // Ensure highlighting flag is cleared even on error
-      this.finishHighlighting();
     }
   }
 
@@ -280,6 +292,84 @@ export class ErrorHighlighter {
     tooltips.forEach((tooltip) => tooltip.remove());
 
     this.callbacks.onErrorsCleared();
+  }
+
+  /**
+   * Schedule highlighting to run in the next animation frame
+   * Returns a Promise that resolves when highlighting is complete
+   */
+  private scheduleHighlighting(
+    errors: CheckerError[],
+    savedSelection: { index: number; length: number } | null,
+    savedDocLength: number,
+  ): Promise<void> {
+    console.log(
+      `📅 scheduleHighlighting: creating Promise for ${errors.length} errors`,
+    );
+    return new Promise((resolve) => {
+      console.log("📅 scheduleHighlighting: calling requestAnimationFrame");
+      requestAnimationFrame(() => {
+        console.log("🎬 Animation frame callback executing");
+        // Check if document changed during async operation
+        const currentDocLength = this.editor.getLength();
+        const docChanged = currentDocLength !== savedDocLength;
+
+        if (docChanged) {
+          console.debug(
+            "🔄 Document changed during highlighting, skipping cursor restoration",
+          );
+        }
+
+        this.performHighlightingOperations(
+          errors,
+          docChanged ? null : savedSelection,
+        );
+
+        console.log(
+          "✅ performHighlightingOperations complete, scheduling Promise resolution",
+        );
+        // Add a small delay to ensure state machine transitions complete
+        // before the Promise chain resolves. We need enough time for the
+        // state transition from "checking" to "highlighting" to be visible.
+        setTimeout(() => {
+          console.log("🎯 Resolving scheduleHighlighting Promise");
+          resolve();
+        }, 10);
+      });
+    });
+  }
+
+  /**
+   * Safari-specific highlighting wrapped in a Promise
+   */
+  private performSafariSafeHighlightingAsync(
+    errors: CheckerError[],
+    savedSelection: { index: number; length: number } | null,
+    operationId: number,
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      // Always use async completion to avoid race conditions
+      // Even successful DOM isolation needs to complete asynchronously
+      setTimeout(() => {
+        try {
+          // Try DOM isolation first for Safari
+          if (!this.trySafariDOMIsolation(errors, savedSelection)) {
+            // Fallback: Use standard highlighting
+            this.performHighlightingOperations(errors, savedSelection);
+          }
+        } catch (error) {
+          console.error("Error in Safari highlighting operations:", error);
+        } finally {
+          resolve();
+        }
+      }, 0);
+    })
+      .catch((error) => {
+        console.error("Error during Safari highlighting:", error);
+      })
+      .finally(() => {
+        this.finishHighlighting(operationId);
+      });
   }
 
   private performLineHighlightingOperations(
@@ -311,24 +401,6 @@ export class ErrorHighlighter {
         restoreHistory();
       }
     }
-  }
-
-  private performSafariSafeHighlighting(
-    errors: CheckerError[],
-    savedSelection: { index: number; length: number } | null,
-  ): void {
-    // Try DOM isolation first for Safari
-    if (this.trySafariDOMIsolation(errors, savedSelection)) {
-      // DOM isolation succeeded, highlighting is complete
-      this.finishHighlighting();
-      return;
-    }
-
-    // Fallback: Use standard highlighting with additional delays
-    setTimeout(() => {
-      this.performHighlightingOperations(errors, savedSelection);
-      this.finishHighlighting();
-    }, 10);
   }
 
   private trySafariDOMIsolation(
@@ -417,12 +489,9 @@ export class ErrorHighlighter {
         this.formatTextSilent(start, len, formatName, true);
       });
 
-      // Restore cursor position with a slight delay to ensure all formatting is complete
-      if (savedSelection && !this.isSafari) {
-        setTimeout(() => {
-          this.cursorManager.restoreCursorPositionImmediate(savedSelection);
-        }, 10);
-      } else if (savedSelection) {
+      // Restore cursor position immediately
+      // With Promise-based flow, we have explicit control and don't need setTimeout delays
+      if (savedSelection) {
         this.cursorManager.restoreCursorPositionImmediate(savedSelection);
       }
     } finally {
@@ -433,11 +502,26 @@ export class ErrorHighlighter {
     }
   }
 
-  private finishHighlighting(): void {
-    setTimeout(() => {
+  private finishHighlighting(operationId: number): void {
+    console.log(
+      `🏁 finishHighlighting called for operation ${operationId}, current: ${this.currentHighlightId}, isHighlighting: ${this.isHighlighting}`,
+    );
+
+    // Only finish if this is still the current operation
+    if (operationId !== this.currentHighlightId) {
+      console.debug(
+        `Skipping finishHighlighting - operation ${operationId} was superseded by ${this.currentHighlightId}`,
+      );
+      return;
+    }
+
+    if (this.isHighlighting) {
+      console.log("✅ Calling onHighlightingComplete callback");
       this.isHighlighting = false;
       this.callbacks.onHighlightingComplete();
-    }, 100); // Small delay to ensure all operations are complete
+    } else {
+      console.warn("⚠️ finishHighlighting called but isHighlighting is false!");
+    }
   }
 
   /**

@@ -132,7 +132,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const textAnalysisCallbacks: TextAnalysisCallbacks = {
       onErrorsFound: (errors: CheckerError[], lineNumber?: number) => {
         if (lineNumber !== undefined) {
-          textCheckerRef?.errorHighlighter.highlightLineErrors(errors);
+          textCheckerRef?.errorHighlighter.highlightLineErrors(errors)
+            .catch((error) => {
+              console.error("Error during line highlighting:", error);
+            });
         } else {
           if (textCheckerRef) {
             textCheckerRef.state.errors = errors;
