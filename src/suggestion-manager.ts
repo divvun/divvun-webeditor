@@ -165,6 +165,14 @@ export class SuggestionManager {
       menu.appendChild(title);
     }
 
+    if (error.description) {
+      const desc = document.createElement("div");
+      desc.className =
+        "px-3 py-2 text-xs text-gray-600 italic border-b border-gray-200";
+      desc.textContent = error.description;
+      menu.appendChild(desc);
+    }
+
     // Add suggestions
     if (error.suggestions && error.suggestions.length > 0) {
       // Show available suggestions
