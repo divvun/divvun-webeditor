@@ -386,3 +386,29 @@ document.addEventListener("DOMContentLoaded", () => {
     console.error("Error initializing text checker:", error);
   }
 });
+
+// TEMPORARY: Function to test the update notification dialog
+// This can be called from the browser console: testUpdateDialog()
+(globalThis as unknown as { testUpdateDialog?: () => void }).testUpdateDialog =
+  () => {
+    console.log("🧪 Showing test update notification...");
+
+    showUpdateNotification(
+      () => {
+        console.log("User clicked Reload Now");
+        alert("This is a test - page would reload here");
+      },
+      () => "Test editor content",
+    );
+
+    // Check if notification was created
+    setTimeout(() => {
+      const notifications = document.querySelectorAll('[id*="reload-btn"]');
+      if (notifications.length > 0) {
+        console.log("✅ Notification created successfully");
+        console.log("Found", notifications.length, "notification(s)");
+      } else {
+        console.error("❌ Notification was NOT created!");
+      }
+    }, 100);
+  };
