@@ -180,6 +180,9 @@ document.addEventListener("DOMContentLoaded", () => {
         );
         textCheckerRef?.handleEditDetected(editType, editInfo);
       },
+      onCancelCheck: () => {
+        textCheckerRef?.cancelPendingCheck();
+      },
     };
     const stateMachine = new CheckerStateMachine(
       configManager.getAutoCheckDelay(),

@@ -35,6 +35,9 @@ Deno.test("Line-specific edit detection integration test", async () => {
       detectedEdits.push({ type: editType, info: editInfo });
       stateTransitions.push(`edit:${editType}`);
     },
+    onCancelCheck: () => {
+      stateTransitions.push("cancel-check");
+    },
   };
 
   // Create state machine with short debounce for testing
@@ -103,6 +106,10 @@ Deno.test("Line-specific edit detection integration test", async () => {
 
   // Wait for state machine to return to idle
   await new Promise((resolve) => setTimeout(resolve, 100));
+  
+  // Complete any pending check to ensure we're in idle state
+  stateMachine.onCheckComplete();
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   stateMachine.handleEdit("Hello", "Hello\nWorld");
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -111,7 +118,7 @@ Deno.test("Line-specific edit detection integration test", async () => {
   console.log(`Newline test detected ${detectedEdits.length} edits`);
   if (detectedEdits.length > 0) {
     assertEquals(detectedEdits[0].type, "newline-creation");
-    assertEquals(detectedEdits[0].info.lineNumber, 0); // Line where newline was created
+    assertEquals(detectedEdits[0].info.lineNumber, 1); // Line number is now 1 (0-based, newline creates line 1)
   }
 
   // Test Case 3: Multi-line edit (after state machine resets)

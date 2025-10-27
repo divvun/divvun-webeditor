@@ -22,6 +22,8 @@ function createMockCallbacks() {
       calls.push({ method: "onEditDetected", args: [editType, editInfo] }),
     onCheckRequested: () =>
       calls.push({ method: "onCheckRequested", args: [] }),
+    onCancelCheck: () =>
+      calls.push({ method: "onCancelCheck", args: [] }),
   };
 
   return { callbacks, calls };
@@ -158,7 +160,7 @@ Deno.test("CheckerStateMachine - Debouncing Behavior", async () => {
   stateMachine.cleanup();
 });
 
-Deno.test("CheckerStateMachine - Ignore Edits During Busy States", async () => {
+Deno.test("CheckerStateMachine - Edit During Checking Cancels Check", async () => {
   const { callbacks, calls } = createMockCallbacks();
   const stateMachine = new CheckerStateMachine(50, callbacks); // Short delay for testing
 
@@ -171,12 +173,16 @@ Deno.test("CheckerStateMachine - Ignore Edits During Busy States", async () => {
   // Now state should be "checking" - clear calls
   calls.length = 0;
 
-  // Try to edit while in checking state
+  // Edit while in checking state - this should CANCEL the check and transition to editing
   stateMachine.handleEdit("Hello", "Hello World");
 
-  // Should not detect any edits while busy
+  // Should detect the edit (new behavior - no longer ignored)
   const editCalls = calls.filter((call) => call.method === "onEditDetected");
-  assertEquals(editCalls.length, 0);
+  assertEquals(editCalls.length, 1);
+
+  // Should also call onCancelCheck
+  const cancelCalls = calls.filter((call) => call.method === "onCancelCheck");
+  assertEquals(cancelCalls.length, 1);
 
   // Cleanup
   stateMachine.cleanup();
@@ -282,13 +288,13 @@ Deno.test(
 );
 
 Deno.test(
-  "CheckerStateMachine - Edits During Checking Phase Are Ignored",
+  "CheckerStateMachine - Edits During Checking Cancel The Check",
   async () => {
     const { callbacks, calls } = createMockCallbacks();
     const stateMachine = new CheckerStateMachine(100, callbacks); // Short delay for testing
 
     // With the simplified state machine, checking includes highlighting
-    // When user continues typing while checking is in progress, edits are ignored
+    // When user continues typing while checking is in progress, the check is cancelled
 
     // 1. Start with initial edit that will trigger checking
     stateMachine.handleEdit("", "Dqll");
@@ -299,18 +305,25 @@ Deno.test(
     // Clear calls to focus on what happens during checking
     calls.length = 0;
 
-    // 2. Try to edit while in checking state (this gets ignored)
+    // 2. Edit while in checking state - this CANCELS the check and processes the edit
     stateMachine.handleEdit("Dqll", "Dqll. Mun leat");
 
-    // Should ignore edits during checking (which includes highlighting)
+    // Should detect the edit (new behavior - no longer ignored)
     const editCalls = calls.filter((call) => call.method === "onEditDetected");
-    assertEquals(editCalls.length, 0); // Edit ignored
+    assertEquals(editCalls.length, 1); // Edit processed
 
-    // 3. Complete checking (which includes highlighting completion)
+    // Should also call onCancelCheck (at least once)
+    const cancelCalls = calls.filter((call) => call.method === "onCancelCheck");
+    assertEquals(cancelCalls.length >= 1, true, "Should have at least one cancel call");
+
+    // 3. Complete the cancelled check (should be ignored)
     stateMachine.onCheckComplete();
+    
+    // Clear calls to test next edit
+    calls.length = 0;
 
-    // 4. Now try editing again (should work)
-    stateMachine.handleEdit("Dqll", "Dqll. Mun leat stuoris.");
+    // 4. Now try editing again (should work as normal)
+    stateMachine.handleEdit("Dqll. Mun leat", "Dqll. Mun leat stuoris.");
 
     // This edit should be detected
     const finalEditCalls = calls.filter(
@@ -327,12 +340,11 @@ Deno.test(
   },
 );
 
-Deno.test("CheckerStateMachine - Checking State Isolation", async () => {
+Deno.test("CheckerStateMachine - Checking State Cancellation", async () => {
   const { callbacks, calls } = createMockCallbacks();
   const stateMachine = new CheckerStateMachine(50, callbacks); // Very short delay
 
-  // Test the specific issue: text changes during checking cause inconsistent state
-  // With simplified state machine, "checking" now includes highlighting
+  // Test the new behavior: edits during checking cancel the check and transition to editing
 
   // 1. User types quickly: "Dql" (triggers check)
   stateMachine.handleEdit("", "D");
@@ -342,7 +354,7 @@ Deno.test("CheckerStateMachine - Checking State Isolation", async () => {
   // Wait for debounce -> check starts
   await delay(60);
 
-  // At this point state should be "checking" (which includes highlighting)
+  // At this point state should be "checking"
   const stateAfterCheck = calls.filter(
     (call) => call.method === "onStateEntry" && call.args[0] === "checking",
   );
@@ -351,16 +363,23 @@ Deno.test("CheckerStateMachine - Checking State Isolation", async () => {
   // Clear calls
   calls.length = 0;
 
-  // 2. User continues typing during checking (real-world scenario)
-  stateMachine.handleEdit("Dql", "Dqll"); // This should be ignored
-  stateMachine.handleEdit("Dqll", "Dqll."); // This should be ignored
+  // 2. User continues typing during checking - these now CANCEL the check
+  stateMachine.handleEdit("Dql", "Dqll"); // Cancels check, processes edit
+  stateMachine.handleEdit("Dqll", "Dqll."); // Processes normally (already in editing)
 
-  // Edits during checking should be ignored
-  const ignoredEdits = calls.filter((call) => call.method === "onEditDetected");
-  assertEquals(ignoredEdits.length, 0); // Both edits ignored
+  // Edits during checking should now be processed (cancel behavior)
+  const processedEdits = calls.filter((call) => call.method === "onEditDetected");
+  assertEquals(processedEdits.length, 2); // Both edits processed
 
-  // 3. Complete checking (which includes highlighting)
+  // Should have called onCancelCheck (at least once when first edit cancelled the check)
+  const cancelCalls = calls.filter((call) => call.method === "onCancelCheck");
+  assertEquals(cancelCalls.length >= 1, true, "Should have at least one cancel call");
+
+  // 3. Complete the cancelled check (should be ignored)
   stateMachine.onCheckComplete();
+  
+  // Clear calls to test next edit
+  calls.length = 0;
 
   // 4. Subsequent edits should work normally
   stateMachine.handleEdit("Dqll.", "Dqll. Fixed");
@@ -373,11 +392,10 @@ Deno.test("CheckerStateMachine - Checking State Isolation", async () => {
 });
 
 Deno.test(
-  "CheckerStateMachine - PreviousText Baseline Maintenance During Highlighting",
+  "CheckerStateMachine - PreviousText Baseline Maintenance With Cancellation",
   async () => {
-    // This test verifies the fix for the bug where previousText wasn't updated
-    // during checking, causing stale state and incorrect edit detection
-    // With simplified state machine, checking now includes highlighting
+    // This test verifies that previousText is maintained correctly
+    // when edits cancel checking (new behavior)
 
     const { callbacks, calls } = createMockCallbacks();
 
@@ -386,13 +404,12 @@ Deno.test(
     const mockStateMachine = new CheckerStateMachine(50, callbacks); // Short delay
 
     const mockHandleTextChange = (currentText: string) => {
-      // With the simplified state machine, we always try to process edits
-      // The state machine itself will ignore edits during "checking"
+      // Process all edits - the state machine handles cancellation
       mockStateMachine.handleEdit(mockPreviousText, currentText);
       mockPreviousText = currentText;
     };
 
-    // Scenario: User types "Dql" → checking starts → user continues typing during checking
+    // Scenario: User types "Dql" → checking starts → user continues typing (cancels check)
 
     // 1. User types "Dql"
     mockHandleTextChange("Dql");
@@ -403,16 +420,16 @@ Deno.test(
     await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for debounce
     assertEquals(mockStateMachine.getCurrentState(), "checking");
 
-    // 3. User continues typing "Dqll. Mun leat..." DURING checking
+    // 3. User continues typing "Dqll. Mun leat..." DURING checking - this CANCELS the check
     mockHandleTextChange("Dqll. Mun leat...");
 
-    // 4. CRITICAL TEST: previousText should be updated even though edit was ignored
+    // 4. CRITICAL TEST: previousText should be updated AND state should be editing
     assertEquals(mockPreviousText, "Dqll. Mun leat...");
-    assertEquals(mockStateMachine.getCurrentState(), "checking"); // Still checking
+    assertEquals(mockStateMachine.getCurrentState(), "editing"); // Cancelled, now editing
 
-    // 5. Checking finishes (which includes highlighting)
+    // 5. The cancelled check completes (should be ignored since we're in editing state)
     mockStateMachine.onCheckComplete();
-    assertEquals(mockStateMachine.getCurrentState(), "idle");
+    assertEquals(mockStateMachine.getCurrentState(), "editing"); // Still editing (check was cancelled)
 
     // 6. User makes another edit - this should work correctly with updated baseline
     mockHandleTextChange("Dqll. Mun leat... and more");

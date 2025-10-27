@@ -10,6 +10,7 @@ export interface StateTransitionCallbacks {
   onStateExit: (state: CheckerState) => void;
   onCheckRequested: () => void;
   onEditDetected: (editType: EditType, editInfo: EditInfo) => void;
+  onCancelCheck?: () => void;
 }
 
 export type EditType =
@@ -54,10 +55,15 @@ export class CheckerStateMachine {
     currentText: string,
     cursorPosition?: number,
   ): void {
-    // Ignore edits if we're in a busy state (checking includes highlighting)
+    // If user edits during checking, cancel the check and go back to editing
+    // The check is now stale since the document changed
     if (this.currentState === "checking") {
-      console.log(`🚫 Edit ignored - state is ${this.currentState}`);
-      return;
+      console.log(
+        `⚠️ Edit during checking, canceling stale check and transitioning to editing`,
+      );
+      this.callbacks.onCancelCheck?.();
+      this.transitionTo("editing", "edit-during-check");
+      // Fall through to process this edit normally
     }
 
     // Analyze the edit

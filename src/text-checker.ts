@@ -159,11 +159,27 @@ export class TextChecker {
       // Store the start line for when state machine triggers the check
       this.pendingStartLine = startLine;
 
-      console.debug(`📋 Will check from line ${startLine} when state machine triggers`);
+      console.debug(
+        `📋 Will check from line ${startLine} when state machine triggers`,
+      );
     } catch (error) {
       console.error(`❌ Error in handleEditDetected:`, error);
       // Fallback to full check
       this.pendingStartLine = undefined;
+    }
+  }
+
+  /**
+   * Cancel any ongoing check operation
+   * Called when user edits during checking to invalidate the stale check
+   */
+  public cancelPendingCheck(): void {
+    if (this.pendingCheck !== undefined) {
+      console.log(`🚫 Canceling pending check (check will ignore results)`);
+      // Increment check ID to invalidate the ongoing check
+      // The check will complete but ignore its results
+      this.currentCheckId++;
+      this.pendingCheck = undefined;
     }
   }
 
