@@ -106,7 +106,7 @@ Deno.test("Line-specific edit detection integration test", async () => {
 
   // Wait for state machine to return to idle
   await new Promise((resolve) => setTimeout(resolve, 100));
-  
+
   // Complete any pending check to ensure we're in idle state
   stateMachine.onCheckComplete();
   await new Promise((resolve) => setTimeout(resolve, 50));

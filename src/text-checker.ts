@@ -147,9 +147,6 @@ export class TextChecker {
         startLine = editInfo.lineNumber !== undefined && editInfo.lineNumber > 0
           ? editInfo.lineNumber - 1
           : editInfo.lineNumber;
-      } // For paste/cut operations, check from beginning
-      else if (editType === "paste" || editType === "cut") {
-        startLine = 0;
       } // For all other edits (single-line, multi-line, newline-creation):
       // Check from the first affected line
       else {

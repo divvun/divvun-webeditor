@@ -17,9 +17,7 @@ export type EditType =
   | "single-line-edit" // Typing/deleting within one line
   | "newline-creation" // Pressing Enter, splitting a line
   | "line-deletion" // Backspace at line start, joining lines
-  | "multi-line-edit" // Selection spanning multiple lines
-  | "paste" // Paste operation
-  | "cut"; // Cut operation
+  | "multi-line-edit"; // Selection spanning multiple lines
 
 export interface EditInfo {
   lineNumber?: number; // Primary affected line

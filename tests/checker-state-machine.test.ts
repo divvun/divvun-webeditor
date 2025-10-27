@@ -22,8 +22,7 @@ function createMockCallbacks() {
       calls.push({ method: "onEditDetected", args: [editType, editInfo] }),
     onCheckRequested: () =>
       calls.push({ method: "onCheckRequested", args: [] }),
-    onCancelCheck: () =>
-      calls.push({ method: "onCancelCheck", args: [] }),
+    onCancelCheck: () => calls.push({ method: "onCancelCheck", args: [] }),
   };
 
   return { callbacks, calls };
@@ -314,11 +313,15 @@ Deno.test(
 
     // Should also call onCancelCheck (at least once)
     const cancelCalls = calls.filter((call) => call.method === "onCancelCheck");
-    assertEquals(cancelCalls.length >= 1, true, "Should have at least one cancel call");
+    assertEquals(
+      cancelCalls.length >= 1,
+      true,
+      "Should have at least one cancel call",
+    );
 
     // 3. Complete the cancelled check (should be ignored)
     stateMachine.onCheckComplete();
-    
+
     // Clear calls to test next edit
     calls.length = 0;
 
@@ -368,16 +371,22 @@ Deno.test("CheckerStateMachine - Checking State Cancellation", async () => {
   stateMachine.handleEdit("Dqll", "Dqll."); // Processes normally (already in editing)
 
   // Edits during checking should now be processed (cancel behavior)
-  const processedEdits = calls.filter((call) => call.method === "onEditDetected");
+  const processedEdits = calls.filter((call) =>
+    call.method === "onEditDetected"
+  );
   assertEquals(processedEdits.length, 2); // Both edits processed
 
   // Should have called onCancelCheck (at least once when first edit cancelled the check)
   const cancelCalls = calls.filter((call) => call.method === "onCancelCheck");
-  assertEquals(cancelCalls.length >= 1, true, "Should have at least one cancel call");
+  assertEquals(
+    cancelCalls.length >= 1,
+    true,
+    "Should have at least one cancel call",
+  );
 
   // 3. Complete the cancelled check (should be ignored)
   stateMachine.onCheckComplete();
-  
+
   // Clear calls to test next edit
   calls.length = 0;
 
