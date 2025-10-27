@@ -51,10 +51,9 @@ export class TextChecker {
   // Error highlighting
   public errorHighlighter: ErrorHighlighter;
 
-  // Debounce timer and pending check tracking (simplified to single values)
-  private debounceTimer: number | undefined = undefined;
+  // Debounce timer removed - state machine now controls when to check
   private pendingCheck: Promise<void> | undefined = undefined;
-  private readonly CHECK_DEBOUNCE_MS = 500; // Wait 500ms after last keystroke
+  private pendingStartLine: number | undefined = undefined; // Store which line to check from
 
   // ConfigManager now handles API creation
   /**
@@ -133,7 +132,7 @@ export class TextChecker {
 
   /**
    * Handle detected edit operations
-   * Unified logic: check from the edited line onwards (cache makes this efficient)
+   * Store the edit info so we know which line to check when state machine triggers checking
    */
   public handleEditDetected(editType: EditType, editInfo: EditInfo): void {
     console.debug(`📝 Handling ${editType}:`, editInfo);
@@ -157,51 +156,34 @@ export class TextChecker {
         startLine = editInfo.lineNumber ?? editInfo.startLine;
       }
 
-      if (startLine !== undefined) {
-        this.checkFromLineToEnd(startLine);
-      } else {
-        console.warn(`No line number for ${editType}, doing full check`);
-        this.textAnalyzer.checkText();
-      }
+      // Store the start line for when state machine triggers the check
+      this.pendingStartLine = startLine;
+
+      console.debug(`📋 Will check from line ${startLine} when state machine triggers`);
     } catch (error) {
       console.error(`❌ Error in handleEditDetected:`, error);
-      // Fallback to full check if something goes wrong
-      this.textAnalyzer.checkText();
+      // Fallback to full check
+      this.pendingStartLine = undefined;
     }
-  }
-  /**
-   * Check from a specific line to the end of the document
-   * With caching, unchanged lines will be cache hits (fast), only changed lines call the API
-   */
-  private checkFromLineToEnd(startLine: number): void {
-    console.debug(`📋 Checking from line ${startLine} to end`);
-
-    // Clear any existing debounce timer
-    if (this.debounceTimer !== undefined) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = undefined;
-    }
-
-    // Set a new debounce timer
-    this.debounceTimer = setTimeout(() => {
-      this.performDebouncedCheck(startLine);
-    }, this.CHECK_DEBOUNCE_MS);
   }
 
   /**
-   * Perform the actual check after debounce delay
-   * Separated into async function for proper Promise handling
+   * Perform the actual check - called by state machine when debounce expires
+   * Uses the stored pendingStartLine to do smart line-based checking
    */
-  private async performDebouncedCheck(startLine: number): Promise<void> {
-    this.debounceTimer = undefined;
-
+  private async performCheckFromStoredLine(): Promise<void> {
     // Check if there's already a pending check
     if (this.pendingCheck !== undefined) {
       console.debug(
-        `⏸️ Check already in progress, skipping new check from line ${startLine}`,
+        `⏸️ Check already in progress, skipping new check`,
       );
       return;
     }
+
+    const startLine = this.pendingStartLine ?? 0; // Default to full check from line 0
+    this.pendingStartLine = undefined; // Clear for next edit
+
+    console.debug(`📋 Performing check from line ${startLine} to end`);
 
     const currentText = this.editor.getText();
     const lines = currentText.split("\n");
@@ -492,12 +474,16 @@ export class TextChecker {
 
   // Line-level caching methods
   public async performTextCheck(): Promise<void> {
+    // Called by state machine when debounce timer expires
+    // Use smart line-based checking based on the stored edit info
+    console.debug("🔍 performTextCheck called by state machine");
+
     // Set up checking context in text analyzer
     this.textAnalyzer.startCheckingContext();
 
-    // Perform the actual text check
+    // Perform the smart line-based check
     try {
-      await this.textAnalyzer.checkText();
+      await this.performCheckFromStoredLine();
       this.stateMachine.onCheckComplete();
     } catch (error) {
       console.warn("Text check failed:", error);

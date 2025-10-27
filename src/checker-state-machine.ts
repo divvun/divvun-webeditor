@@ -85,8 +85,11 @@ export class CheckerStateMachine {
       this.transitionTo("editing", "edit-detected");
       // Start debounced checking
       this.startEditDebounce();
+    } else {
+      // Already in editing state - reset the debounce timer
+      // This ensures rapid typing doesn't trigger premature checking
+      this.startEditDebounce();
     }
-    // If already editing, the existing debounce timer continues running
   }
 
   /**
