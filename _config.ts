@@ -73,5 +73,6 @@ site.add("style.css");
 
 // Copy static JavaScript files (non-TypeScript)
 site.copy("quill-bridge.js");
+site.copy("service-worker.js");
 
 export default site;

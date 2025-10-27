@@ -29,6 +29,10 @@ import {
 import { QuillBridge, registerQuillBlots } from "./quill-bridge-instance.ts";
 import { TextChecker } from "./text-checker.ts";
 import { LRUCache } from "./lru-cache.ts";
+import {
+  showUpdateNotification,
+  VersionChecker,
+} from "./version-checker.ts";
 
 /**
  * Maximum number of items to store in the text analysis cache
@@ -307,7 +311,47 @@ document.addEventListener("DOMContentLoaded", () => {
     (
       globalThis as unknown as { textChecker?: TextChecker }
     ).textChecker = textChecker;
+
+    // Initialize version checker
+    const versionChecker = new VersionChecker();
+    versionChecker.startChecking(() => {
+      showUpdateNotification(() => {
+        versionChecker.reloadPage();
+      });
+    });
   } catch (error) {
     console.error("Error initializing text checker:", error);
+  }
+
+  // Register service worker for offline support and version management
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker
+      .register("/service-worker.js")
+      .then((registration) => {
+        console.log("Service Worker registered:", registration);
+
+        // Check for updates when a new service worker is waiting
+        registration.addEventListener("updatefound", () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener("statechange", () => {
+              if (
+                newWorker.state === "installed" &&
+                navigator.serviceWorker.controller
+              ) {
+                // New service worker available, show update notification
+                showUpdateNotification(() => {
+                  // Tell the new service worker to skip waiting
+                  newWorker.postMessage({ type: "SKIP_WAITING" });
+                  globalThis.location.reload();
+                });
+              }
+            });
+          }
+        });
+      })
+      .catch((error) => {
+        console.warn("Service Worker registration failed:", error);
+      });
   }
 });
