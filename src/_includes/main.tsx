@@ -6,13 +6,17 @@ export default function MainLayout({
   children,
   git,
 }: LayoutProps) {
+  // Use git hash for cache-busting to ensure users get latest version
+  // Fallback to timestamp if git info is not available
+  const version = git?.shortHash || Date.now().toString();
+
   return (
     <html>
       <head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>{title}</title>
-        <link rel="stylesheet" href="/style.css" />
+        <link rel="stylesheet" href={`/style.css?v=${version}`} />
         <link
           href="https://cdn.quilljs.com/1.3.7/quill.snow.css"
           rel="stylesheet"
