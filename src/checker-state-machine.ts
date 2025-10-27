@@ -54,11 +54,8 @@ export class CheckerStateMachine {
     currentText: string,
     cursorPosition?: number,
   ): void {
-    // Ignore edits if we're in a busy state
-    if (
-      this.currentState === "checking" ||
-      this.currentState === "highlighting"
-    ) {
+    // Ignore edits if we're in a busy state (checking includes highlighting)
+    if (this.currentState === "checking") {
       console.log(`🚫 Edit ignored - state is ${this.currentState}`);
       return;
     }
@@ -230,8 +227,10 @@ export class CheckerStateMachine {
    * Signal that checking has completed successfully
    */
   onCheckComplete(): void {
+    // Checking is now done - this includes both API call and highlighting
+    // Transition directly to idle since highlighting is part of the checking state
     if (this.currentState === "checking") {
-      this.transitionTo("highlighting", "check-complete");
+      this.transitionTo("idle", "check-complete");
     }
   }
 
@@ -255,45 +254,56 @@ export class CheckerStateMachine {
 
   /**
    * Signal that highlighting has completed
+   * NOTE: With the simplified state machine, highlighting is part of checking state
+   * This method is kept for backwards compatibility but now just ensures we're in idle state
    */
   onHighlightingComplete(): void {
     console.log(
       `🏁 onHighlightingComplete called, currentState: ${this.currentState}`,
     );
 
-    // Transition to idle if we're in highlighting state (normal case)
-    if (this.currentState === "highlighting") {
-      console.log("✅ State is highlighting, transitioning to idle");
-      this.transitionTo("idle", "highlighting-complete");
-    } // RACE CONDITION FIX: If we're still in "checking", it means the highlighting
-    // operation completed before the check->highlighting transition happened.
-    // Force transition to highlighting first, then to idle.
-    else if (this.currentState === "checking") {
+    // If we're still in checking state, transition to idle (checking includes highlighting)
+    if (this.currentState === "checking") {
       console.log(
-        "⚠️ Race condition: highlighting completed before check->highlighting transition",
+        "✅ Checking complete (includes highlighting), transitioning to idle",
       );
-      console.log("🔧 Forcing transition: checking -> highlighting -> idle");
-      this.transitionTo("highlighting", "late-highlighting-complete");
-      // Immediately transition to idle since highlighting is already done
-      this.transitionTo("idle", "highlighting-complete");
-    } // RACE CONDITION FIX: If we're still in "editing", it means the highlighting
-    // operation completed before the editing->checking->highlighting transitions happened.
-    // This can happen when line-specific highlighting completes very quickly.
-    // Force the complete transition sequence.
-    else if (this.currentState === "editing") {
-      console.log(
-        "⚠️ Race condition: highlighting completed while still in editing state",
-      );
-      console.log(
-        "🔧 Forcing transition: editing -> checking -> highlighting -> idle",
-      );
-      this.transitionTo("checking", "late-highlighting-in-editing");
-      this.transitionTo("highlighting", "late-highlighting-complete");
-      this.transitionTo("idle", "highlighting-complete");
-    } // For any other state, just log it
+      this.transitionTo("idle", "checking-complete");
+    } // If we're already in idle or another state, just log it
     else {
       console.log(
         `ℹ️ Highlighting completed but state is ${this.currentState}, no transition needed`,
+      );
+    }
+  }
+
+  /**
+   * Signal that highlighting was aborted due to document changes
+   * This means the highlighting operation detected that the document changed
+   * during the async highlighting process, making the error positions stale.
+   * We need to re-check with the current document state.
+   */
+  onHighlightingAborted(): void {
+    console.log(
+      `🚫 onHighlightingAborted called, currentState: ${this.currentState}`,
+    );
+
+    // Clear highlighting flag and force a fresh check
+    // The highlighting was aborted because the document changed,
+    // so we need to start a new check cycle
+    if (
+      this.currentState === "checking" ||
+      this.currentState === "editing"
+    ) {
+      console.log(
+        "🔄 Highlighting aborted due to document change, forcing re-check",
+      );
+      // Transition to editing state to trigger a new debounced check
+      this.transitionTo("editing", "highlighting-aborted");
+      // Start a new check cycle immediately (no debounce since document already changed)
+      this.startEditDebounce();
+    } else {
+      console.log(
+        `ℹ️ Highlighting aborted but state is ${this.currentState}, no action needed`,
       );
     }
   }
@@ -366,8 +376,8 @@ export class CheckerStateMachine {
           this.checkTimeout = null;
         }
         break;
-      case "highlighting":
-        // No cleanup needed for highlighting
+      case "failed":
+        // No cleanup needed for failed
         break;
     }
 
@@ -385,13 +395,12 @@ export class CheckerStateMachine {
         // Editing state entered - debouncing will be handled by startEditDebounce
         break;
       case "checking":
-        // Request text check to be performed
-        console.log(`🔍 Requesting text check...`);
+        // Request text check to be performed (includes highlighting)
+        console.log(`🔍 Requesting text check (includes highlighting)...`);
         this.callbacks.onCheckRequested();
         break;
-      case "highlighting":
-        // Highlighting state entered - no immediate action needed
-        console.log(`🎨 Starting highlighting...`);
+      case "failed":
+        // Failed state - awaiting retry
         break;
     }
 

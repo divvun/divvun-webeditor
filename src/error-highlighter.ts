@@ -43,6 +43,7 @@ interface EditorHighlightInterface {
 export interface HighlightingCallbacks {
   onHighlightingStart: () => void;
   onHighlightingComplete: () => void;
+  onHighlightingAborted: () => void; // New: called when highlighting is aborted due to stale data
   onErrorsCleared: () => void;
 }
 
@@ -196,13 +197,18 @@ export class ErrorHighlighter {
 
             if (docChanged) {
               console.debug(
-                "🔄 Document changed during line highlighting, skipping cursor restoration",
+                `🔄 Document changed during line highlighting (${savedDocLength} → ${currentDocLength}), aborting stale highlight operation`,
               );
+              // Don't highlight with stale error positions - abort and notify callbacks
+              this.callbacks.onHighlightingAborted();
+              this.finishHighlighting(operationId);
+              resolve();
+              return;
             }
 
             this.performLineHighlightingOperations(
               errors,
-              docChanged ? null : savedSelection,
+              savedSelection,
             );
           } catch (error) {
             console.error("Error during line highlighting operations:", error);
@@ -316,13 +322,17 @@ export class ErrorHighlighter {
 
         if (docChanged) {
           console.debug(
-            "🔄 Document changed during highlighting, skipping cursor restoration",
+            `🔄 Document changed during highlighting (${savedDocLength} → ${currentDocLength}), aborting stale highlight operation`,
           );
+          // Don't highlight with stale error positions - abort and notify callbacks
+          this.callbacks.onHighlightingAborted();
+          resolve();
+          return;
         }
 
         this.performHighlightingOperations(
           errors,
-          docChanged ? null : savedSelection,
+          savedSelection,
         );
 
         console.log(

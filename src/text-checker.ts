@@ -112,15 +112,13 @@ export class TextChecker {
   }
 
   public handleTextChange(_source: string, currentText: string): void {
-    // Skip processing during highlighting or if a check is pending
-    const shouldProcessEdit =
-      this.stateMachine.getCurrentState() !== "highlighting" &&
-      this.pendingCheck === undefined;
+    // Skip processing if a check is pending (checking now includes highlighting)
+    const shouldProcessEdit = this.pendingCheck === undefined;
 
     if (!shouldProcessEdit) {
       // Skip processing but still update previousText to prevent stale state
       console.debug(
-        `🔄 Text change while ${this.stateMachine.getCurrentState()} or check pending, ignoring edit processing but updating baseline`,
+        `🔄 Text change while check pending (state: ${this.stateMachine.getCurrentState()}), ignoring edit processing but updating baseline`,
       );
       this.previousText = currentText;
       return;
@@ -243,8 +241,12 @@ export class TextChecker {
     endLine: number,
   ): Promise<void> {
     const checkId = ++this.currentCheckId; // Generate new check ID
+
+    // Capture the document text at the START of the check
+    const textAtCheckStart = this.editor.getText();
+
     // Delegate to TextAnalyzer for error state management
-    this.state.errors = await this.textAnalyzer.checkLinesAndUpdateErrors(
+    const updatedErrors = await this.textAnalyzer.checkLinesAndUpdateErrors(
       this.state.errors,
       startLine,
       endLine,
@@ -255,6 +257,21 @@ export class TextChecker {
         }
       },
     );
+
+    // CRITICAL: Validate document hasn't changed during the check
+    const textAfterCheck = this.editor.getText();
+    if (textAtCheckStart !== textAfterCheck) {
+      console.warn(
+        `🚫 Document changed during check (${textAtCheckStart.length} → ${textAfterCheck.length} chars), aborting check`,
+      );
+      // Document changed - the check results are stale
+      // Trigger a re-check by notifying the state machine that highlighting was aborted
+      this.stateMachine.onHighlightingAborted();
+      return;
+    }
+
+    // Only update errors if document hasn't changed
+    this.state.errors = updatedErrors;
 
     // Re-highlight all errors (must await to ensure state machine transitions correctly)
     try {
@@ -469,9 +486,6 @@ export class TextChecker {
       case "checking":
         this.state.isChecking = true;
         this.updateStatus("Checking...", true);
-        break;
-      case "highlighting":
-        this.updateStatus("Updating highlights...", true);
         break;
     }
   }

@@ -265,6 +265,19 @@ document.addEventListener("DOMContentLoaded", () => {
           textCheckerRef.stateMachine.onHighlightingComplete();
         }
       },
+      onHighlightingAborted: () => {
+        if (textCheckerRef) {
+          // Highlighting was aborted due to document changes during async operation
+          // We need to re-check with the current document state
+          console.debug(
+            "🔄 Highlighting aborted, triggering immediate re-check",
+          );
+          textCheckerRef.isHighlighting = false;
+          textCheckerRef.eventManager.setHighlightingState(false);
+          // Signal state machine that highlighting was aborted
+          textCheckerRef.stateMachine.onHighlightingAborted();
+        }
+      },
       onErrorsCleared: () => {
         if (textCheckerRef) {
           textCheckerRef.state.errors = [];

@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "jsr:@deno/loader@0.3.6": "0.3.6",
+    "jsr:@std/assert@*": "1.0.15",
     "jsr:@std/assert@1": "1.0.15",
     "jsr:@std/cli@1.0.22": "1.0.22",
     "jsr:@std/cli@^1.0.21": "1.0.22",

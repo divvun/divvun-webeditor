@@ -103,6 +103,7 @@ Deno.test("Cursor jump fix - cursor restoration skipped when document changes du
       highlightingCompleteCount++;
     },
     onErrorsCleared: () => {},
+    onHighlightingAborted: () => {},
   };
 
   // deno-lint-ignore no-explicit-any
@@ -213,6 +214,7 @@ Deno.test("Cursor jump fix - cursor IS restored when document doesn't change", a
       highlightingCompleteCount++;
     },
     onErrorsCleared: () => {},
+    onHighlightingAborted: () => {},
   };
 
   // deno-lint-ignore no-explicit-any
@@ -288,6 +290,7 @@ Deno.test("Cursor jump fix - line highlighting also skips cursor restoration on 
     onHighlightingStart: () => {},
     onHighlightingComplete: () => {},
     onErrorsCleared: () => {},
+    onHighlightingAborted: () => {},
   };
 
   // deno-lint-ignore no-explicit-any

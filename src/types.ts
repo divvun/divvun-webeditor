@@ -75,8 +75,7 @@ export interface EditorState {
 export type CheckerState =
   | "idle" // Ready for user input
   | "editing" // User is making changes (debouncing)
-  | "checking" // Performing text check
-  | "highlighting" // Updating visual highlights
+  | "checking" // Performing text check AND highlighting (atomic operation)
   | "failed"; // Text check failed, awaiting retry
 
 export interface CheckingContext {
