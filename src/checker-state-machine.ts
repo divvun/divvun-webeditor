@@ -276,6 +276,20 @@ export class CheckerStateMachine {
       this.transitionTo("highlighting", "late-highlighting-complete");
       // Immediately transition to idle since highlighting is already done
       this.transitionTo("idle", "highlighting-complete");
+    } // RACE CONDITION FIX: If we're still in "editing", it means the highlighting
+    // operation completed before the editing->checking->highlighting transitions happened.
+    // This can happen when line-specific highlighting completes very quickly.
+    // Force the complete transition sequence.
+    else if (this.currentState === "editing") {
+      console.log(
+        "⚠️ Race condition: highlighting completed while still in editing state",
+      );
+      console.log(
+        "🔧 Forcing transition: editing -> checking -> highlighting -> idle",
+      );
+      this.transitionTo("checking", "late-highlighting-in-editing");
+      this.transitionTo("highlighting", "late-highlighting-complete");
+      this.transitionTo("idle", "highlighting-complete");
     } // For any other state, just log it
     else {
       console.log(
