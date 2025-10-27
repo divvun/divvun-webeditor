@@ -3,56 +3,62 @@
  * Handles caching strategy and version updates
  */
 
-const CACHE_NAME = 'divvun-editor-v1';
+const CACHE_NAME = "divvun-editor-v1";
 const ASSETS_TO_CACHE = [
-  '/',
-  '/style.css',
-  '/main.js',
-  '/quill-bridge.js',
-  'https://cdn.quilljs.com/1.3.7/quill.min.js',
-  'https://cdn.quilljs.com/1.3.7/quill.snow.css',
+  "/",
+  "/style.css",
+  "/main.js",
+  "/quill-bridge.js",
+  "https://cdn.quilljs.com/1.3.7/quill.min.js",
+  "https://cdn.quilljs.com/1.3.7/quill.snow.css",
 ];
 
 // Install event - cache assets
-self.addEventListener('install', (event) => {
-  console.log('Service Worker: Installing...');
+self.addEventListener("install", (event) => {
+  console.log("Service Worker: Installing...");
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('Service Worker: Caching assets');
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => {
-      // Force activation immediately
-      return self.skipWaiting();
-    })
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => {
+        console.log("Service Worker: Caching assets");
+        return cache.addAll(ASSETS_TO_CACHE);
+      })
+      .then(() => {
+        // Force activation immediately
+        return self.skipWaiting();
+      })
   );
 });
 
 // Activate event - clean up old caches
-self.addEventListener('activate', (event) => {
-  console.log('Service Worker: Activating...');
+self.addEventListener("activate", (event) => {
+  console.log("Service Worker: Activating...");
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Service Worker: Clearing old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => {
-      // Take control of all clients immediately
-      return self.clients.claim();
-    })
+    caches
+      .keys()
+      .then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME) {
+              console.log("Service Worker: Clearing old cache:", cacheName);
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      })
+      .then(() => {
+        // Take control of all clients immediately
+        return self.clients.claim();
+      })
   );
 });
 
 // Fetch event - network first, then cache
-self.addEventListener('fetch', (event) => {
+self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  
+
   // For HTML pages, always go network first to check for new versions
-  if (event.request.mode === 'navigate' || url.pathname === '/') {
+  if (event.request.mode === "navigate" || url.pathname === "/") {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
@@ -73,7 +79,7 @@ self.addEventListener('fetch', (event) => {
 
   // For versioned assets (with ?v= parameter), cache first is fine
   // since new versions have different URLs
-  if (url.search.includes('v=')) {
+  if (url.search.includes("v=")) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
         if (cachedResponse) {
@@ -108,8 +114,8 @@ self.addEventListener('fetch', (event) => {
 });
 
 // Listen for messages from the client
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
 });

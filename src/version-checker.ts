@@ -2,6 +2,9 @@
  * Version Checker - Detects when a new version is available
  */
 
+const STORAGE_KEY = "divvun-editor-content-backup";
+const RESTORE_FLAG_KEY = "divvun-editor-restore-pending";
+
 export class VersionChecker {
   private currentVersion: string | null = null;
   private checkInterval: number = 5 * 60 * 1000; // Check every 5 minutes
@@ -17,7 +20,7 @@ export class VersionChecker {
   private extractVersion(): string | null {
     const scripts = document.querySelectorAll('script[src*="?v="]');
     for (const script of scripts) {
-      const match = script.getAttribute('src')?.match(/v=([^&]+)/);
+      const match = script.getAttribute("src")?.match(/v=([^&]+)/);
       if (match) {
         return match[1];
       }
@@ -26,15 +29,57 @@ export class VersionChecker {
   }
 
   /**
+   * Save editor content to localStorage before reload
+   */
+  static saveEditorContent(content: string): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, content);
+      localStorage.setItem(RESTORE_FLAG_KEY, "true");
+      console.log("💾 Editor content saved for version upgrade");
+    } catch (error) {
+      console.error("Failed to save editor content:", error);
+    }
+  }
+
+  /**
+   * Check if there's content to restore after a version upgrade
+   */
+  static hasContentToRestore(): boolean {
+    return localStorage.getItem(RESTORE_FLAG_KEY) === "true";
+  }
+
+  /**
+   * Restore editor content from localStorage after version upgrade
+   */
+  static restoreEditorContent(): string | null {
+    try {
+      const content = localStorage.getItem(STORAGE_KEY);
+      // Clear the restore flag and saved content
+      localStorage.removeItem(RESTORE_FLAG_KEY);
+      if (content) {
+        console.log("♻️ Editor content restored after version upgrade");
+        // Keep the backup for a bit in case of issues
+        setTimeout(() => {
+          localStorage.removeItem(STORAGE_KEY);
+        }, 60000); // Clear after 1 minute
+      }
+      return content;
+    } catch (error) {
+      console.error("Failed to restore editor content:", error);
+      return null;
+    }
+  }
+
+  /**
    * Check if a new version is available
    */
   async checkForUpdate(): Promise<boolean> {
     try {
       // Fetch the HTML page with cache-busting
-      const response = await fetch('/', {
-        cache: 'no-cache',
+      const response = await fetch("/", {
+        cache: "no-cache",
         headers: {
-          'Cache-Control': 'no-cache',
+          "Cache-Control": "no-cache",
         },
       });
 
@@ -43,19 +88,24 @@ export class VersionChecker {
       }
 
       const html = await response.text();
-      
+
       // Extract version from the HTML
       const match = html.match(/v=([a-z0-9]+)/);
       const latestVersion = match ? match[1] : null;
 
-      if (latestVersion && this.currentVersion && latestVersion !== this.currentVersion) {
-        console.log(`🆕 New version available: ${latestVersion} (current: ${this.currentVersion})`);
+      if (
+        latestVersion && this.currentVersion &&
+        latestVersion !== this.currentVersion
+      ) {
+        console.log(
+          `🆕 New version available: ${latestVersion} (current: ${this.currentVersion})`,
+        );
         return true;
       }
 
       return false;
     } catch (error) {
-      console.error('Error checking for updates:', error);
+      console.error("Error checking for updates:", error);
       return false;
     }
   }
@@ -101,9 +151,13 @@ export class VersionChecker {
 /**
  * Show a notification to the user about a new version
  */
-export function showUpdateNotification(onReload: () => void): void {
-  const notification = document.createElement('div');
-  notification.className = 'fixed bottom-4 right-4 bg-blue-600 text-white px-6 py-4 rounded-lg shadow-2xl z-50 max-w-sm animate-slide-up';
+export function showUpdateNotification(
+  onReload: () => void,
+  getEditorContent?: () => string,
+): void {
+  const notification = document.createElement("div");
+  notification.className =
+    "fixed bottom-4 right-4 bg-blue-600 text-white px-6 py-4 rounded-lg shadow-2xl z-50 max-w-sm animate-slide-up";
   notification.innerHTML = `
     <div class="flex items-start gap-3">
       <div class="flex-shrink-0">
@@ -113,7 +167,8 @@ export function showUpdateNotification(onReload: () => void): void {
       </div>
       <div class="flex-1">
         <h3 class="font-semibold mb-1">New Version Available</h3>
-        <p class="text-sm text-blue-100 mb-3">A new version of the editor is available. Reload to get the latest features and fixes.</p>
+        <p class="text-sm text-blue-100 mb-1">A new version of the editor is available.</p>
+        <p class="text-sm text-blue-50 font-medium mb-3">Your text will be automatically preserved</p>
         <div class="flex gap-2">
           <button id="reload-btn" class="px-4 py-1.5 bg-white text-blue-600 font-medium rounded hover:bg-blue-50 transition-colors text-sm">
             Reload Now
@@ -129,12 +184,17 @@ export function showUpdateNotification(onReload: () => void): void {
   document.body.appendChild(notification);
 
   // Handle reload button
-  notification.querySelector('#reload-btn')?.addEventListener('click', () => {
+  notification.querySelector("#reload-btn")?.addEventListener("click", () => {
+    // Save editor content before reloading
+    if (getEditorContent) {
+      const content = getEditorContent();
+      VersionChecker.saveEditorContent(content);
+    }
     onReload();
   });
 
   // Handle dismiss button
-  notification.querySelector('#dismiss-btn')?.addEventListener('click', () => {
+  notification.querySelector("#dismiss-btn")?.addEventListener("click", () => {
     notification.remove();
   });
 }
