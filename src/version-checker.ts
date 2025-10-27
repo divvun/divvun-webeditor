@@ -156,24 +156,56 @@ export function showUpdateNotification(
   getEditorContent?: () => string,
 ): void {
   const notification = document.createElement("div");
-  notification.className =
-    "fixed bottom-4 right-4 bg-blue-600 text-white px-6 py-4 rounded-lg shadow-2xl z-50 max-w-sm animate-slide-up";
+  notification.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: #2563eb;
+    color: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    z-index: 9999;
+    max-width: 400px;
+    animation: slide-up 0.3s ease-out;
+  `;
+
   notification.innerHTML = `
-    <div class="flex items-start gap-3">
-      <div class="flex-shrink-0">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div style="display: flex; gap: 1rem; align-items: flex-start;">
+      <div style="flex-shrink: 0;">
+        <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
       </div>
-      <div class="flex-1">
-        <h3 class="font-semibold mb-1">New Version Available</h3>
-        <p class="text-sm text-blue-100 mb-1">A new version of the editor is available.</p>
-        <p class="text-sm text-blue-50 font-medium mb-3">Your text will be automatically preserved</p>
-        <div class="flex gap-2">
-          <button id="reload-btn" class="px-4 py-1.5 bg-white text-blue-600 font-medium rounded hover:bg-blue-50 transition-colors text-sm">
+      <div style="flex: 1;">
+        <h3 style="font-weight: 600; margin-bottom: 0.5rem; font-size: 1.125rem;">New Version Available</h3>
+        <p style="font-size: 0.875rem; color: #dbeafe; margin-bottom: 0.25rem;">A new version of the editor is available.</p>
+        <p style="font-size: 0.875rem; color: #eff6ff; font-weight: 500; margin-bottom: 1rem;">Your text will be automatically preserved</p>
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="reload-btn" style="
+            padding: 0.5rem 1rem;
+            background-color: white;
+            color: #2563eb;
+            font-weight: 500;
+            border-radius: 0.375rem;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background-color 0.2s;
+          ">
             Reload Now
           </button>
-          <button id="dismiss-btn" class="px-4 py-1.5 bg-blue-700 text-white font-medium rounded hover:bg-blue-800 transition-colors text-sm">
+          <button id="dismiss-btn" style="
+            padding: 0.5rem 1rem;
+            background-color: #1d4ed8;
+            color: white;
+            font-weight: 500;
+            border-radius: 0.375rem;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background-color 0.2s;
+          ">
             Later
           </button>
         </div>
@@ -183,18 +215,40 @@ export function showUpdateNotification(
 
   document.body.appendChild(notification);
 
-  // Handle reload button
-  notification.querySelector("#reload-btn")?.addEventListener("click", () => {
-    // Save editor content before reloading
-    if (getEditorContent) {
-      const content = getEditorContent();
-      VersionChecker.saveEditorContent(content);
-    }
-    onReload();
-  });
+  // Add hover effects
+  const reloadBtn = notification.querySelector(
+    "#reload-btn",
+  ) as HTMLButtonElement;
+  const dismissBtn = notification.querySelector(
+    "#dismiss-btn",
+  ) as HTMLButtonElement;
 
-  // Handle dismiss button
-  notification.querySelector("#dismiss-btn")?.addEventListener("click", () => {
-    notification.remove();
-  });
+  if (reloadBtn) {
+    reloadBtn.addEventListener("mouseenter", () => {
+      reloadBtn.style.backgroundColor = "#eff6ff";
+    });
+    reloadBtn.addEventListener("mouseleave", () => {
+      reloadBtn.style.backgroundColor = "white";
+    });
+    reloadBtn.addEventListener("click", () => {
+      // Save editor content before reloading
+      if (getEditorContent) {
+        const content = getEditorContent();
+        VersionChecker.saveEditorContent(content);
+      }
+      onReload();
+    });
+  }
+
+  if (dismissBtn) {
+    dismissBtn.addEventListener("mouseenter", () => {
+      dismissBtn.style.backgroundColor = "#1e40af";
+    });
+    dismissBtn.addEventListener("mouseleave", () => {
+      dismissBtn.style.backgroundColor = "#1d4ed8";
+    });
+    dismissBtn.addEventListener("click", () => {
+      notification.remove();
+    });
+  }
 }
