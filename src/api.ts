@@ -9,7 +9,7 @@ import type {
 } from "./types.ts";
 
 export class GrammarCheckerAPI implements CheckerApi {
-  private readonly baseUrl = "https://api-giellalt.uit.no/grammar";
+  private readonly baseUrl = "https://api.giellalt.org/grammar";
   private readonly timeout = 10000; // 10 seconds
 
   async checkText(
@@ -86,7 +86,7 @@ export class GrammarCheckerAPI implements CheckerApi {
 }
 
 export class SpellCheckerAPI implements CheckerApi {
-  private readonly baseUrl = "https://api-giellalt.uit.no/speller";
+  private readonly baseUrl = "https://api.giellalt.org/speller";
   private readonly timeout = 10000; // 10 seconds
 
   async checkText(
@@ -191,7 +191,7 @@ export class SpellCheckerAPI implements CheckerApi {
  */
 export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
   try {
-    const response = await fetch("https://api-giellalt.uit.no/languages");
+    const response = await fetch("https://api.giellalt.org/languages");
     if (!response.ok) {
       throw new Error(`Failed to fetch languages: ${response.status}`);
     }
