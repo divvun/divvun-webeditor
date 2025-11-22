@@ -4,5 +4,9 @@
   "editor.formatOnSave": true,
   "[typescript]": {
     "editor.defaultFormatter": "denoland.vscode-deno"
-  }
+  },
+  "css.lint.unknownAtRules": "ignore",
+  "tailwindCSS.experimental.classRegex": [
+    ["className\\s*=\\s*['\"`]([^'\"`]*)['\"`]", "([^\\s]+)"]
+  ]
 }
