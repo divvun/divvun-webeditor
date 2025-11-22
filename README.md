@@ -1,7 +1,8 @@
 # Divvun TextChecker Webeditor
 
-A static site with a Quill editor integrated with the Divvun Grammar API for
-real-time grammar checking in Sami languages and Faroese.
+A static site with a Quill editor integrated with the Divvun Grammar and Spell
+Checker API for real-time grammar and spell checking for many of the
+[GiellaLT](https://giellalt.github.io/LanguageModels.html) languages.
 
 ## Features
 
@@ -9,7 +10,6 @@ real-time grammar checking in Sami languages and Faroese.
 - Real-time grammar checking with wavy underlines (red for typos, blue for other
   errors)
 - Custom context menu with correction suggestions
-- Support for Northern Sami, Southern Sami, Lule Sami, and Faroese
 - Check-as-you-type with 800ms debounce
 - Disabled native spellcheck
 
@@ -47,7 +47,7 @@ This is equivalent to the build command, running Lume's CLI.
 1. Run `deno task serve` to start the development server.
 2. Open the editor page in your browser.
 3. Select a language from the dropdown.
-4. Start typing - grammar errors will be highlighted in real-time.
+4. Start typing - grammar and spelling errors will be highlighted in real-time.
 5. Right-click on highlighted errors to see correction suggestions.
 6. Use the "Clear" button to reset.
 
@@ -57,4 +57,4 @@ This is equivalent to the build command, running Lume's CLI.
 
 ## API
 
-Uses the [Divvun Grammar API](https://api-giellalt.uit.no/#grammar)
+Uses the [Divvun API](https://api-giellalt.uit.no/)
