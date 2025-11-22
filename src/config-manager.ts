@@ -35,6 +35,8 @@ export class ConfigManager {
   private api: CheckerApi;
   private availableLanguages: AvailableLanguage[] = [];
   private callbacks: ConfigurationCallbacks;
+  private currentEnvironment: import("./types.ts").ApiEnvironment = "stable";
+  private currentCheckerType: import("./types.ts").CheckerType = "grammar";
 
   // DOM Elements managed by ConfigManager
   private languageSelect!: HTMLSelectElement;
@@ -151,49 +153,57 @@ export class ConfigManager {
   }
 
   /**
-   * Create appropriate API instance for the given language
+   * Create appropriate API instance for the given language, environment, and checker type
    */
-  private createApiForLanguage(language: SupportedLanguage): CheckerApi {
-    // Find the language in our available languages list
-    const languageInfo = this.availableLanguages.find(
-      (lang) => lang.code === language,
-    );
+  private createApiForLanguage(
+    _language: SupportedLanguage,
+    environment?: import("./types.ts").ApiEnvironment,
+    checkerType?: import("./types.ts").CheckerType,
+  ): CheckerApi {
+    // Use provided parameters or fall back to current values
+    const env = environment || this.currentEnvironment;
+    const type = checkerType || this.currentCheckerType;
 
-    if (languageInfo) {
-      // Use the API type specified by the server
-      if (languageInfo.type === "speller") {
-        return new SpellCheckerAPI();
-      } else {
-        return new GrammarCheckerAPI();
-      }
-    }
+    // Update current values
+    this.currentEnvironment = env;
+    this.currentCheckerType = type;
 
-    // Fallback logic if language not found in API data
-    // SMS uses spell checker, all others use grammar checker
-    if (language === "sms") {
-      return new SpellCheckerAPI();
+    // Create API based on type and environment
+    if (type === "speller") {
+      return new SpellCheckerAPI(env);
     } else {
-      return new GrammarCheckerAPI();
+      return new GrammarCheckerAPI(env);
     }
   }
 
   /**
    * Set the current language and update API accordingly
+   * Optionally specify environment and checker type
    */
-  setLanguage(language: SupportedLanguage): void {
-    console.debug("🔧 ConfigManager: Setting language to", language);
+  setLanguage(
+    language: SupportedLanguage,
+    environment?: import("./types.ts").ApiEnvironment,
+    checkerType?: import("./types.ts").CheckerType,
+  ): void {
+    console.debug(
+      "🔧 ConfigManager: Setting language to",
+      language,
+      environment || this.currentEnvironment,
+      checkerType || this.currentCheckerType,
+    );
 
     const previousLanguage = this.config.language;
     this.config.language = language;
 
-    // Create appropriate API for the new language
-    this.api = this.createApiForLanguage(language);
+    // Create appropriate API for the new language, environment, and type
+    this.api = this.createApiForLanguage(language, environment, checkerType);
 
     console.debug(
       "🔧 ConfigManager: Language changed from",
       previousLanguage,
       "to",
       language,
+      `(${this.currentEnvironment} ${this.currentCheckerType})`,
     );
 
     // Notify callback about language change

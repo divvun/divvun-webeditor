@@ -725,8 +725,12 @@ export class TextChecker {
     }
   }
 
-  setLanguage(language: SupportedLanguage): void {
-    this.configManager.setLanguage(language);
+  setLanguage(
+    language: SupportedLanguage,
+    environment?: import("./types.ts").ApiEnvironment,
+    checkerType?: import("./types.ts").CheckerType,
+  ): void {
+    this.configManager.setLanguage(language, environment, checkerType);
   }
 
   handleLanguageChange(language: SupportedLanguage, api: CheckerApi): void {

@@ -93,8 +93,17 @@ export interface ApiLanguageResponse {
   };
 }
 
+export type ApiEnvironment = "stable" | "beta" | "dev";
+
+export type CheckerType = "grammar" | "speller";
+
 export interface AvailableLanguage {
   code: SupportedLanguage;
   name: string;
-  type: "grammar" | "speller";
+  type: CheckerType;
+  environment: ApiEnvironment;
 }
+
+// Helper type for the selector value format: "code|environment|type"
+// e.g., "se|stable|grammar" or "sms|beta|speller"
+export type LanguageSelectorValue = string;

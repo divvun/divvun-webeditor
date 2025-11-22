@@ -9,8 +9,17 @@ import type {
 } from "./types.ts";
 
 export class GrammarCheckerAPI implements CheckerApi {
-  private readonly baseUrl = "https://api.giellalt.org/grammar";
+  private readonly baseUrl: string;
   private readonly timeout = 10000; // 10 seconds
+
+  constructor(environment: import("./types.ts").ApiEnvironment = "stable") {
+    const baseUrls = {
+      stable: "https://api.giellalt.org/grammar",
+      beta: "https://beta.api.giellalt.org/grammar",
+      dev: "https://dev.api.giellalt.org/grammar",
+    };
+    this.baseUrl = baseUrls[environment];
+  }
 
   async checkText(
     text: string,
@@ -86,8 +95,17 @@ export class GrammarCheckerAPI implements CheckerApi {
 }
 
 export class SpellCheckerAPI implements CheckerApi {
-  private readonly baseUrl = "https://api.giellalt.org/speller";
+  private readonly baseUrl: string;
   private readonly timeout = 10000; // 10 seconds
+
+  constructor(environment: import("./types.ts").ApiEnvironment = "stable") {
+    const baseUrls = {
+      stable: "https://api.giellalt.org/speller",
+      beta: "https://beta.api.giellalt.org/speller",
+      dev: "https://dev.api.giellalt.org/speller",
+    };
+    this.baseUrl = baseUrls[environment];
+  }
 
   async checkText(
     text: string,
@@ -184,60 +202,115 @@ export class SpellCheckerAPI implements CheckerApi {
 }
 
 /**
- * Fetch available languages from the API server and process them according to business rules:
- * 1. Exclude SMS from grammar checking (SMS grammar doesn't work right now)
- * 2. If a language has both grammar and speller, prefer grammar
- * 3. Return the filtered and processed language list
+ * Fetch languages from a specific API environment
+ */
+async function fetchLanguagesFromEnvironment(
+  environment: import("./types.ts").ApiEnvironment,
+): Promise<AvailableLanguage[]> {
+  const baseUrls = {
+    stable: "https://api.giellalt.org",
+    beta: "https://beta.api.giellalt.org",
+    dev: "https://dev.api.giellalt.org",
+  };
+
+  const baseUrl = baseUrls[environment];
+  const response = await fetch(`${baseUrl}/languages`);
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch languages from ${environment}: ${response.status}`,
+    );
+  }
+
+  const data: ApiLanguageResponse = await response.json();
+  const languages: AvailableLanguage[] = [];
+
+  // Process grammar languages (exclude SMS from grammar as it doesn't work)
+  Object.entries(data.available.grammar).forEach(([code, name]) => {
+    if (code !== "sms") {
+      languages.push({
+        code: code as SupportedLanguage,
+        name: name,
+        type: "grammar",
+        environment,
+      });
+    }
+  });
+
+  // Process speller languages (include all speller languages)
+  Object.entries(data.available.speller).forEach(([code, name]) => {
+    languages.push({
+      code: code as SupportedLanguage,
+      name: name,
+      type: "speller",
+      environment,
+    });
+  });
+
+  return languages;
+}
+
+/**
+ * Fetch available languages from all API environments (stable, beta, dev)
+ * Returns a comprehensive list organized by language, then by environment and checker type
  */
 export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
-  try {
-    const response = await fetch("https://api.giellalt.org/languages");
-    if (!response.ok) {
-      throw new Error(`Failed to fetch languages: ${response.status}`);
+  const allLanguages: AvailableLanguage[] = [];
+
+  // Fetch from all three environments in parallel
+  const environmentPromises = (
+    ["stable", "beta", "dev"] as import("./types.ts").ApiEnvironment[]
+  ).map(async (environment) => {
+    try {
+      return await fetchLanguagesFromEnvironment(environment);
+    } catch (error) {
+      console.warn(`Failed to fetch from ${environment}:`, error);
+      return []; // Return empty array on failure, don't block other environments
     }
+  });
 
-    const data: ApiLanguageResponse = await response.json();
-    const languages: AvailableLanguage[] = [];
+  const results = await Promise.all(environmentPromises);
 
-    // Process grammar languages (exclude SMS as per requirements)
-    Object.entries(data.available.grammar).forEach(([code, name]) => {
-      if (code !== "sms") {
-        // Exclude SMS from grammar as it doesn't work
-        languages.push({
-          code: code as SupportedLanguage,
-          name: name,
-          type: "grammar",
-        });
-      }
-    });
+  // Flatten all results
+  results.forEach((languageList) => {
+    allLanguages.push(...languageList);
+  });
 
-    // Process speller languages
-    Object.entries(data.available.speller).forEach(([code, name]) => {
-      // Only add speller languages that don't already have grammar support
-      const hasGrammar = languages.some((lang) => lang.code === code);
-      if (!hasGrammar) {
-        languages.push({
-          code: code as SupportedLanguage,
-          name: name,
-          type: "speller",
-        });
-      }
-      // If a language has both grammar and speller, grammar takes precedence (already added above)
-    });
+  // Sort by: language code, then environment priority (stable > beta > dev), then type (grammar > speller)
+  const envPriority = { stable: 0, beta: 1, dev: 2 };
+  const typePriority = { grammar: 0, speller: 1 };
 
-    // Sort by language code for consistent ordering
-    languages.sort((a, b) => a.code.localeCompare(b.code));
+  allLanguages.sort((a, b) => {
+    // First sort by language code
+    if (a.code !== b.code) {
+      return a.code.localeCompare(b.code);
+    }
+    // Then by environment
+    if (a.environment !== b.environment) {
+      return envPriority[a.environment] - envPriority[b.environment];
+    }
+    // Finally by type
+    return typePriority[a.type] - typePriority[b.type];
+  });
 
-    return languages;
-  } catch (error) {
-    console.warn(
-      "Failed to fetch languages from API, falling back to defaults:",
-      error,
-    );
-    // Fallback to some default languages if API fails
+  // If all fetches failed, return fallback
+  if (allLanguages.length === 0) {
+    console.warn("All API environments failed, using fallback languages");
     return [
-      { code: "se", name: "Davvisámegiella (Northern sami)", type: "grammar" },
-      { code: "sms", name: "Nuõrttsääʹmǩiõll (Skolt sami)", type: "speller" },
+      {
+        code: "se",
+        name: "Davvisámegiella (Northern sami)",
+        type: "grammar",
+        environment: "stable",
+      },
+      {
+        code: "sms",
+        name: "Nuõrttsääʹmǩiõll (Skolt sami)",
+        type: "speller",
+        environment: "stable",
+      },
     ];
   }
+
+  return allLanguages;
 }

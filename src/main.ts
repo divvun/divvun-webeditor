@@ -194,8 +194,12 @@ document.addEventListener("DOMContentLoaded", () => {
       onTextChange: (source: string, currentText: string) => {
         textCheckerRef?.handleTextChange(source, currentText);
       },
-      onLanguageChange: (language: SupportedLanguage) => {
-        textCheckerRef?.setLanguage(language);
+      onLanguageChange: (
+        language: SupportedLanguage,
+        environment: import("./types.ts").ApiEnvironment,
+        checkerType: import("./types.ts").CheckerType,
+      ) => {
+        textCheckerRef?.setLanguage(language, environment, checkerType);
       },
       onClearEditor: () => {
         textCheckerRef?.clearEditor();

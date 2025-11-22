@@ -20,7 +20,11 @@ interface EditorEventInterface {
 
 export interface EventCallbacks {
   onTextChange: (source: string, currentText: string) => void;
-  onLanguageChange: (language: SupportedLanguage) => void;
+  onLanguageChange: (
+    language: SupportedLanguage,
+    environment: import("./types.ts").ApiEnvironment,
+    checkerType: import("./types.ts").CheckerType,
+  ) => void;
   onClearEditor: () => void;
   onRetryCheck: () => void;
   onErrorClick: (
@@ -153,7 +157,11 @@ export class EventManager {
     globalThis.addEventListener("languageChanged", (e) => {
       const customEvent = e as CustomEvent;
       const language = customEvent.detail.language as SupportedLanguage;
-      this.callbacks.onLanguageChange(language);
+      const environment = customEvent.detail
+        .environment as import("./types.ts").ApiEnvironment;
+      const checkerType = customEvent.detail
+        .checkerType as import("./types.ts").CheckerType;
+      this.callbacks.onLanguageChange(language, environment, checkerType);
     });
 
     // Clear button
