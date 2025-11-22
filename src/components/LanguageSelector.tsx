@@ -53,16 +53,46 @@ export default function LanguageSelector() {
             select.appendChild(optgroup);
           });
           
-          // Get language from URL parameter or use default
+          // Get language from URL parameters with smart defaults
           const urlParams = new URLSearchParams(globalThis.location.search);
-          const urlValue = urlParams.get('lang');
+          const urlLang = urlParams.get('lang') || urlParams.get('language');
+          const urlEnv = urlParams.get('environment');
+          const urlType = urlParams.get('checkerType');
           
-          // Try to find matching option, default to first stable grammar checker
-          let initialValue = 'se|stable|grammar'; // default
-          if (urlValue) {
-            const matchingOption = Array.from(select.options).find(opt => opt.value === urlValue);
-            if (matchingOption) {
-              initialValue = urlValue;
+          let initialValue = 'se|stable|grammar'; // default fallback
+          
+          if (urlLang) {
+            // Filter options for this language
+            const langOptions = availableLanguages.filter(l => l.code === urlLang);
+            
+            if (langOptions.length > 0) {
+              let selectedOption = null;
+              
+              // If all params specified, try exact match
+              if (urlEnv && urlType) {
+                selectedOption = langOptions.find(l => 
+                  l.environment === urlEnv && l.type === urlType
+                );
+              }
+              
+              // If not found or partial params, apply preferences
+              if (!selectedOption) {
+                // Preference order: stable > beta > dev, grammar > speller
+                const envPriority = { stable: 0, beta: 1, dev: 2 };
+                const typePriority = { grammar: 0, speller: 1 };
+                
+                langOptions.sort((a, b) => {
+                  const envDiff = envPriority[a.environment] - envPriority[b.environment];
+                  if (envDiff !== 0) return envDiff;
+                  return typePriority[a.type] - typePriority[b.type];
+                });
+                
+                selectedOption = langOptions[0];
+              }
+              
+              if (selectedOption) {
+                initialValue = \`\${selectedOption.code}|\${selectedOption.environment}|\${selectedOption.type}\`;
+              }
             }
           }
           
@@ -101,13 +131,15 @@ export default function LanguageSelector() {
         select.addEventListener('change', function(e) {
           const selectedValue = e.target.value;
           
-          // Update URL with the selected language configuration
-          const url = new URL(globalThis.location.href);
-          url.searchParams.set('lang', selectedValue);
-          globalThis.history.pushState({}, '', url);
-          
           // Parse the value format: "code|environment|type"
           const [code, environment, type] = selectedValue.split('|');
+          
+          // Update URL with separate parameters
+          const url = new URL(globalThis.location.href);
+          url.searchParams.set('lang', code);
+          url.searchParams.set('environment', environment);
+          url.searchParams.set('checkerType', type);
+          globalThis.history.pushState({}, '', url);
           
           // Dispatch a custom event that main.ts can listen to
           const event = new CustomEvent('languageChanged', { 
