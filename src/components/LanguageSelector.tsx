@@ -42,10 +42,10 @@ export default function LanguageSelector() {
               // Value format: "code|environment|type"
               option.value = \`\${variant.code}|\${variant.environment}|\${variant.type}\`;
               
-              // Display format: "  ↳ stable grammar checker"
+              // Display format: "Language Name - stable grammar checker"
               const envLabel = variant.environment === 'stable' ? 'stable' : variant.environment;
               const typeLabel = variant.type === 'grammar' ? 'grammar checker' : 'spell checker';
-              option.textContent = \`  ↳ \${envLabel} \${typeLabel}\`;
+              option.textContent = \`\${variant.name} - \${envLabel} \${typeLabel}\`;
               
               optgroup.appendChild(option);
             });
@@ -77,7 +77,7 @@ export default function LanguageSelector() {
           optgroup.label = 'Davvisámegiella (Northern sami)';
           const option1 = document.createElement('option');
           option1.value = 'se|stable|grammar';
-          option1.textContent = '  ↳ stable grammar checker';
+          option1.textContent = 'Davvisámegiella (Northern sami) - stable grammar checker';
           optgroup.appendChild(option1);
           select.appendChild(optgroup);
           
@@ -85,7 +85,7 @@ export default function LanguageSelector() {
           optgroup2.label = 'Nuõrttsääʹmǩiõll (Skolt sami)';
           const option2 = document.createElement('option');
           option2.value = 'sms|stable|speller';
-          option2.textContent = '  ↳ stable spell checker';
+          option2.textContent = 'Nuõrttsääʹmǩiõll (Skolt sami) - stable spell checker';
           optgroup2.appendChild(option2);
           select.appendChild(optgroup2);
           
