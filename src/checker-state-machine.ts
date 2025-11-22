@@ -260,6 +260,20 @@ export class CheckerStateMachine {
   }
 
   /**
+   * Force an immediate check (e.g., after language change)
+   */
+  forceCheck(): void {
+    console.log(`🔄 Forcing immediate check from ${this.currentState} state`);
+    // Clear any pending debounce timers
+    if (this.checkTimeout) {
+      clearTimeout(this.checkTimeout);
+      this.checkTimeout = null;
+    }
+    // Transition to checking state regardless of current state
+    this.transitionTo("checking", "force-check");
+  }
+
+  /**
    * Signal that highlighting has completed
    * NOTE: With the simplified state machine, highlighting is part of checking state
    * This method is kept for backwards compatibility but now just ensures we're in idle state

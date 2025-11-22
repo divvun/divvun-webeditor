@@ -744,7 +744,10 @@ export class TextChecker {
     // Re-check with new language if there's content
     const text = this.getText();
     if (text && text.trim()) {
-      this.textAnalyzer.checkText();
+      // Force an immediate check with the new language
+      // Reset pending line to check entire document
+      this.pendingStartLine = undefined;
+      this.stateMachine.forceCheck();
     }
   }
 
