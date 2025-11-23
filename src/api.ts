@@ -83,19 +83,6 @@ export class GrammarCheckerAPI implements CheckerApi {
       throw new Error(`Grammar check failed: ${String(error)}`);
     }
   }
-
-  getSupportedLanguages(): Array<{ code: SupportedLanguage; name: string }> {
-    return [
-      { code: "se", name: "Davvisámegiella (Northern sami)" },
-      { code: "sma", name: "Åarjelsaemien (Southern sami)" },
-      { code: "smj", name: "Julevsámegiella (Lule sami)" },
-      { code: "smn", name: "Anarâškielâ (Inari sami)" },
-      { code: "fo", name: "Føroyskt (Faroese)" },
-      { code: "ga", name: "Gaeilge (Irish)" },
-      { code: "kl", name: "Kalaallisut (Greenlandic)" },
-      { code: "nb", name: "Norsk bokmål (Norwegian bokmål)" },
-    ];
-  }
 }
 
 export class SpellCheckerAPI implements CheckerApi {
@@ -192,11 +179,6 @@ export class SpellCheckerAPI implements CheckerApi {
 
       throw new Error(`Spell check failed: ${String(error)}`);
     }
-  }
-
-  getSupportedLanguages(): Array<{ code: SupportedLanguage; name: string }> {
-    // Return only SMS for spell checker
-    return [{ code: "sms", name: "Nuõrttsääʹmǩiõll (Skolt sami)" }];
   }
 }
 
