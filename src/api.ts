@@ -341,6 +341,14 @@ export async function getAvailableCheckerCombinations(): Promise<
     `✅ ${workingCheckerCombinations.length} checker combinations are working and available`,
   );
 
+  // If no working languages found, return empty array (UI will show error state)
+  if (workingCheckerCombinations.length === 0) {
+    console.error(
+      "❌ No working checker combinations found - API may be down or unreachable",
+    );
+    return [];
+  }
+
   // Sort by: language code, then environment priority (stable > beta > dev), then type (grammar > speller)
   const envPriority = { stable: 0, beta: 1, dev: 2 };
   const typePriority = { grammar: 0, speller: 1 };
@@ -357,27 +365,6 @@ export async function getAvailableCheckerCombinations(): Promise<
     // Finally by type
     return typePriority[a.type] - typePriority[b.type];
   });
-
-  // If no working languages found, return fallback
-  if (workingCheckerCombinations.length === 0) {
-    console.warn(
-      "⚠️ No working checker combinations found, using fallback languages",
-    );
-    return [
-      {
-        code: "se",
-        name: "Davvisámegiella (Northern sami)",
-        type: "grammar",
-        environment: "stable",
-      },
-      {
-        code: "sms",
-        name: "Nuõrttsääʹmǩiõll (Skolt sami)",
-        type: "speller",
-        environment: "stable",
-      },
-    ];
-  }
 
   return workingCheckerCombinations;
 }

@@ -12,10 +12,15 @@ export default function LanguageSelector() {
         if (!select) return;
         
         try {
-          // Import the getAvailableLanguages function dynamically
+          // Import the getAvailableCheckerCombinations function dynamically
           // Note: This function validates each checker combination and only returns working ones
-          const { getAvailableLanguages } = await import('/api.js');
-          availableLanguages = await getAvailableLanguages();
+          const { getAvailableCheckerCombinations } = await import('/api.js');
+          availableLanguages = await getAvailableCheckerCombinations();
+          
+          // Check if we got any valid combinations
+          if (availableLanguages.length === 0) {
+            throw new Error('No working checker combinations available');
+          }
           
           // Clear existing options
           select.innerHTML = '';
@@ -100,27 +105,44 @@ export default function LanguageSelector() {
           select.value = initialValue;
           
         } catch (error) {
-          console.warn('Failed to load languages, using fallback:', error);
-          // Fallback options
+          console.error('Failed to load languages:', error);
+          
+          // Show error state - no fallback
           select.innerHTML = '';
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = '❌ No checkers available';
+          option.disabled = true;
+          select.appendChild(option);
+          select.disabled = true;
           
-          const optgroup = document.createElement('optgroup');
-          optgroup.label = 'Davvisámegiella (Northern sami)';
-          const option1 = document.createElement('option');
-          option1.value = 'se|stable|grammar';
-          option1.textContent = 'Davvisámegiella (Northern sami) - stable grammar checker';
-          optgroup.appendChild(option1);
-          select.appendChild(optgroup);
+          // Display error message to user
+          const statusText = document.getElementById('status-text');
+          if (statusText) {
+            statusText.innerHTML = '<strong>⚠️ No checker combinations available</strong>';
+          }
           
-          const optgroup2 = document.createElement('optgroup');
-          optgroup2.label = 'Nuõrttsääʹmǩiõll (Skolt sami)';
-          const option2 = document.createElement('option');
-          option2.value = 'sms|stable|speller';
-          option2.textContent = 'Nuõrttsääʹmǩiõll (Skolt sami) - stable spell checker';
-          optgroup2.appendChild(option2);
-          select.appendChild(optgroup2);
-          
-          select.value = 'se|stable|grammar';
+          // Add detailed error below status bar
+          const statusDisplay = document.getElementById('status-display');
+          if (statusDisplay && statusDisplay.parentElement) {
+            const existingWarning = document.getElementById('api-warning');
+            if (!existingWarning) {
+              const warning = document.createElement('div');
+              warning.id = 'api-warning';
+              warning.className = 'mt-3 p-4 bg-red-50 border border-red-200 rounded-lg text-sm';
+              warning.innerHTML = \`
+                <p class="font-semibold text-red-800 mb-2">⚠️ Grammar and spell checking is unavailable</p>
+                <p class="text-red-700 mb-2">No working checker combinations could be reached. This may be due to:</p>
+                <ul class="list-disc list-inside text-red-700 space-y-1 mb-2">
+                  <li>Network connectivity issues</li>
+                  <li>API services are temporarily down</li>
+                  <li>Firewall or proxy blocking access</li>
+                </ul>
+                <p class="text-red-700"><strong>Suggested actions:</strong> Check your internet connection, try refreshing the page, or visit <a href="https://api.giellalt.org" target="_blank" class="underline">api.giellalt.org</a> to check API status.</p>
+              \`;
+              statusDisplay.parentElement.appendChild(warning);
+            }
+          }
         }
       }
       
