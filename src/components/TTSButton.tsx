@@ -38,6 +38,9 @@ export default function TTSButton() {
           if (currentVoice) {
             showTTSButton();
             
+            // Initialize voice selector
+            updateVoiceSelector(currentLang);
+            
             // Create TTS reader with callbacks
             ttsReader = new TTSReader(
               highlightLine,
@@ -269,11 +272,13 @@ export default function TTSButton() {
         const btnStop = document.getElementById('tts-stop-btn');
         const btnContinue = document.getElementById('tts-continue-btn');
         const btnRestart = document.getElementById('tts-restart-btn');
+        const voiceSelector = document.getElementById('tts-voice-selector');
         
         if (btnRead) btnRead.addEventListener('click', onReadClick);
         if (btnStop) btnStop.addEventListener('click', onStopClick);
         if (btnContinue) btnContinue.addEventListener('click', onContinueClick);
         if (btnRestart) btnRestart.addEventListener('click', onRestartClick);
+        if (voiceSelector) voiceSelector.addEventListener('change', onVoiceChange);
       }
       
       // Initialize on DOM ready
@@ -287,16 +292,71 @@ export default function TTSButton() {
         initializeTTS();
       }
       
+      // Update voice selector dropdown
+      function updateVoiceSelector(language) {
+        const selector = document.getElementById('tts-voice-selector');
+        if (!selector) return;
+        
+        // Get voices for current language
+        const voicesForLang = availableVoices.filter(v => v.code === language);
+        
+        // Clear and rebuild options
+        selector.innerHTML = '';
+        
+        if (voicesForLang.length === 0) {
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = 'No voices available';
+          selector.appendChild(option);
+          selector.disabled = true;
+          return;
+        }
+        
+        voicesForLang.forEach(voice => {
+          const option = document.createElement('option');
+          option.value = \`\${voice.code}:\${voice.voice}\`;
+          option.textContent = voice.voiceLabel;
+          if (currentVoice && voice.code === currentVoice.code && voice.voice === currentVoice.voice) {
+            option.selected = true;
+          }
+          selector.appendChild(option);
+        });
+        
+        selector.disabled = false;
+      }
+      
+      // Handle voice selection change
+      function onVoiceChange(event) {
+        const value = event.target.value;
+        if (!value) return;
+        
+        const [code, voice] = value.split(':');
+        const selectedVoice = availableVoices.find(v => v.code === code && v.voice === voice);
+        
+        if (selectedVoice) {
+          currentVoice = selectedVoice;
+          console.log(\`🔊 Selected TTS voice: \${selectedVoice.voiceLabel} (\${selectedVoice.code})\`);
+          
+          // Clear cache when voice changes since audio will be different
+          if (ttsReader) {
+            ttsReader.clearCache();
+          }
+        }
+      }
+      
       // Listen for language changes
       globalThis.addEventListener('languageChanged', (event) => {
         const detail = event.detail;
         const newLang = detail.language;
         
-        // Find voice for new language
-        const newVoice = availableVoices.find(v => v.code === newLang);
-        if (newVoice) {
-          currentVoice = newVoice;
-          console.log(\`🔊 Switched TTS voice to \${newVoice.voiceLabel} (\${newLang})\`);
+        // Update voice selector with voices for new language
+        updateVoiceSelector(newLang);
+        
+        // Find voice for new language (prefer first voice)
+        const voicesForLang = availableVoices.filter(v => v.code === newLang);
+        if (voicesForLang.length > 0) {
+          currentVoice = voicesForLang[0];
+          console.log(\`🔊 Switched TTS voice to \${currentVoice.voiceLabel} (\${newLang})\`);
           
           // Clear cache when language changes
           if (ttsReader) {
@@ -316,6 +376,14 @@ export default function TTSButton() {
         className="flex items-center gap-2"
         style={{ display: "none" }}
       >
+        <select
+          id="tts-voice-selector"
+          className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          title="Select voice"
+        >
+          <option value="">Select voice...</option>
+        </select>
+
         <button
           type="button"
           id="tts-read-btn"
