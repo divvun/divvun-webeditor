@@ -1,15 +1,7 @@
 // Type definitions for the Divvun Text Checker
 
-export type SupportedLanguage =
-  | "se"
-  | "sma"
-  | "smj"
-  | "smn"
-  | "sms"
-  | "fo"
-  | "ga"
-  | "kl"
-  | "nb";
+// The api provides language codes as strings
+export type SupportedLanguage = string;
 
 export interface CheckerError {
   error_text: string;
