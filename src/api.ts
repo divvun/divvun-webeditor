@@ -6,6 +6,8 @@ import type {
   CheckerResponse,
   SpellCheckerResponse,
   SupportedLanguage,
+  TTSRequest,
+  TTSVoice,
 } from "./types.ts";
 
 /**
@@ -349,4 +351,202 @@ export async function getAvailableCheckerCombinations(): Promise<
   });
 
   return workingCheckerCombinations;
+}
+
+/**
+ * Text-to-Speech API for converting text to audio
+ */
+export class TextToSpeechAPI {
+  private readonly baseUrl = "https://api-giellalt.uit.no/tts";
+  private readonly timeout = 30000; // 30 seconds for audio generation
+
+  /**
+   * Synthesize speech from text
+   * @param text The text to convert to speech
+   * @param language The language code (e.g., 'se', 'sma', 'smj')
+   * @param voice The voice name (e.g., 'biret', 'mahtte', 'sunna')
+   * @returns Audio data as a Blob (MP3 format)
+   */
+  async synthesize(
+    text: string,
+    language: SupportedLanguage,
+    voice: string,
+  ): Promise<Blob> {
+    if (!text.trim()) {
+      throw new Error("Text cannot be empty");
+    }
+
+    console.debug(
+      `🔊 Synthesizing speech for ${language}/${voice} (${text.length} chars)`,
+    );
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/${language}/${voice}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "audio/mpeg", // Request MP3 format
+        },
+        body: JSON.stringify({ text }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(
+            `Voice "${voice}" for language "${language}" is not available`,
+          );
+        } else if (response.status >= 500) {
+          throw new Error("TTS API server error. Please try again later.");
+        } else {
+          throw new Error(`TTS request failed with status ${response.status}`);
+        }
+      }
+
+      const audioBlob = await response.blob();
+      console.debug(
+        `✅ Synthesized ${audioBlob.size} bytes of audio (${audioBlob.type})`,
+      );
+
+      return audioBlob;
+    } catch (error: unknown) {
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error) {
+        if (error.name === "AbortError") {
+          throw new Error(
+            `Request timeout: The TTS synthesis took longer than ${this.timeout}ms`,
+          );
+        }
+        throw error;
+      }
+
+      throw new Error(`TTS synthesis failed: ${String(error)}`);
+    }
+  }
+}
+
+/**
+ * Validate if a specific TTS voice combination works
+ */
+async function validateTTSVoice(voice: TTSVoice): Promise<boolean> {
+  const url = `https://api-giellalt.uit.no/tts/${voice.code}/${voice.voice}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
+      },
+      body: JSON.stringify({ text: "test" }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    return response.ok;
+  } catch (_error) {
+    return false;
+  }
+}
+
+/**
+ * Get all available TTS voices from all environments
+ * Returns only voices that are actually callable
+ */
+export async function getAvailableTTSVoices(): Promise<TTSVoice[]> {
+  // Hardcoded list from API documentation
+  const potentialVoices: TTSVoice[] = [
+    // Northern Sami
+    {
+      code: "se",
+      name: "davvisámegiella",
+      voice: "biret",
+      voiceLabel: "Biret",
+      gender: "female",
+    },
+    {
+      code: "se",
+      name: "davvisámegiella",
+      voice: "mahtte",
+      voiceLabel: "Máhtte",
+      gender: "male",
+    },
+    {
+      code: "se",
+      name: "davvisámegiella",
+      voice: "sunna",
+      voiceLabel: "Sunná",
+      gender: "female",
+    },
+    // Southern Sami
+    {
+      code: "sma",
+      name: "Åarjelsaemien gïele",
+      voice: "aanna",
+      voiceLabel: "Aanna",
+      gender: "female",
+    },
+    // Lule Sami
+    {
+      code: "smj",
+      name: "julevsámegiella",
+      voice: "abmut",
+      voiceLabel: "Ábmut",
+      gender: "male",
+    },
+    {
+      code: "smj",
+      name: "julevsámegiella",
+      voice: "nihkol",
+      voiceLabel: "Nihkol",
+      gender: "male",
+    },
+    {
+      code: "smj",
+      name: "julevsámegiella",
+      voice: "sigga",
+      voiceLabel: "Siggá",
+      gender: "female",
+    },
+  ];
+
+  console.log(`🔍 Validating ${potentialVoices.length} TTS voices...`);
+
+  // Validate each voice in parallel
+  const validationResults = await Promise.all(
+    potentialVoices.map(async (voice) => ({
+      voice,
+      isValid: await validateTTSVoice(voice),
+    })),
+  );
+
+  // Filter to only working voices
+  const workingVoices = validationResults
+    .filter((result) => result.isValid)
+    .map((result) => result.voice);
+
+  // Log failures
+  const failedVoices = validationResults.filter((result) => !result.isValid);
+  if (failedVoices.length > 0) {
+    console.warn(`⚠️ ${failedVoices.length} TTS voices are not callable:`);
+    failedVoices.forEach(({ voice }) => {
+      console.warn(`  ❌ ${voice.code}/${voice.voice}: ${voice.voiceLabel}`);
+    });
+  }
+
+  console.log(
+    `✅ ${workingVoices.length} TTS voices are working and available`,
+  );
+
+  return workingVoices;
 }

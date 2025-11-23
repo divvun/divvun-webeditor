@@ -98,3 +98,16 @@ export interface CheckerCombination {
 // Helper type for the selector value format: "code|environment|type"
 // e.g., "se|stable|grammar" or "sms|beta|speller"
 export type LanguageSelectorValue = string;
+
+// Text-to-Speech Types
+export interface TTSVoice {
+  code: SupportedLanguage;
+  name: string;
+  voice: string;
+  voiceLabel: string;
+  gender?: "male" | "female";
+}
+
+export interface TTSRequest {
+  text: string;
+}

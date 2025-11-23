@@ -247,28 +247,30 @@ export class ConfigManager {
         console.warn(
           `⚠️ Language '${this.config.language}' from URL is not available. Falling back to 'se'`,
         );
-        
+
         // Find the best fallback variant (prefer 'se' with stable/grammar)
         const fallbackVariant = this.availableLanguages.find(
-          (lang) => lang.code === "se" && lang.environment === "stable" && lang.type === "grammar"
+          (lang) =>
+            lang.code === "se" && lang.environment === "stable" &&
+            lang.type === "grammar",
         ) || this.availableLanguages.find(
-          (lang) => lang.code === "se"
+          (lang) => lang.code === "se",
         ) || this.availableLanguages[0];
-        
+
         if (fallbackVariant) {
           this.config.language = fallbackVariant.code;
           this.currentEnvironment = fallbackVariant.environment;
           this.currentCheckerType = fallbackVariant.type;
-          
+
           // Update URL to reflect the fallback variant
           const url = new URL(globalThis.location.href);
           url.searchParams.set("lang", fallbackVariant.code);
           url.searchParams.set("environment", fallbackVariant.environment);
           url.searchParams.set("checkerType", fallbackVariant.type);
           globalThis.history.replaceState({}, "", url);
-          
+
           console.log(
-            `✅ Updated URL to fallback: ${fallbackVariant.code}|${fallbackVariant.environment}|${fallbackVariant.type}`
+            `✅ Updated URL to fallback: ${fallbackVariant.code}|${fallbackVariant.environment}|${fallbackVariant.type}`,
           );
         } else {
           // No variants available at all - use default 'se'
