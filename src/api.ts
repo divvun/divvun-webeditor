@@ -433,8 +433,9 @@ export class TextToSpeechAPI {
 
 /**
  * Validate if a specific TTS voice combination works
+ * Currently unused - validation is skipped to avoid startup errors
  */
-async function validateTTSVoice(voice: TTSVoice): Promise<boolean> {
+async function _validateTTSVoice(voice: TTSVoice): Promise<boolean> {
   const url = `https://api-giellalt.uit.no/tts/${voice.code}/${voice.voice}`;
 
   try {
@@ -461,9 +462,9 @@ async function validateTTSVoice(voice: TTSVoice): Promise<boolean> {
 
 /**
  * Get all available TTS voices from all environments
- * Returns only voices that are actually callable
+ * Returns all known voices (validation skipped to avoid startup errors)
  */
-export async function getAvailableTTSVoices(): Promise<TTSVoice[]> {
+export function getAvailableTTSVoices(): TTSVoice[] {
   // Hardcoded list from API documentation
   const potentialVoices: TTSVoice[] = [
     // Northern Sami
@@ -520,33 +521,11 @@ export async function getAvailableTTSVoices(): Promise<TTSVoice[]> {
     },
   ];
 
-  console.log(`🔍 Validating ${potentialVoices.length} TTS voices...`);
-
-  // Validate each voice in parallel
-  const validationResults = await Promise.all(
-    potentialVoices.map(async (voice) => ({
-      voice,
-      isValid: await validateTTSVoice(voice),
-    })),
-  );
-
-  // Filter to only working voices
-  const workingVoices = validationResults
-    .filter((result) => result.isValid)
-    .map((result) => result.voice);
-
-  // Log failures
-  const failedVoices = validationResults.filter((result) => !result.isValid);
-  if (failedVoices.length > 0) {
-    console.warn(`⚠️ ${failedVoices.length} TTS voices are not callable:`);
-    failedVoices.forEach(({ voice }) => {
-      console.warn(`  ❌ ${voice.code}/${voice.voice}: ${voice.voiceLabel}`);
-    });
-  }
-
+  // Skip validation to avoid API errors when TTS service is down
+  // Return all voices and let actual usage fail gracefully if needed
   console.log(
-    `✅ ${workingVoices.length} TTS voices are working and available`,
+    `✅ ${potentialVoices.length} TTS voices available (validation skipped)`,
   );
 
-  return workingVoices;
+  return potentialVoices;
 }

@@ -12,8 +12,8 @@ export default function TTSButton() {
           const { getAvailableTTSVoices } = await import('/api.js');
           const { TTSReader } = await import('/tts-reader.js');
           
-          // Get available voices
-          availableVoices = await getAvailableTTSVoices();
+          // Get available voices (no longer async)
+          availableVoices = getAvailableTTSVoices();
           
           if (availableVoices.length === 0) {
             console.warn('No TTS voices available');
@@ -70,28 +70,29 @@ export default function TTSButton() {
         }
       }
       
-      // Get text lines from editor
+      // Get text lines from text checker (checked/analyzed text)
       function getEditorLines() {
-        const editor = globalThis.editor;
-        if (!editor) {
-          console.error('Editor not available');
+        const textChecker = globalThis.textChecker;
+        if (!textChecker) {
+          console.error('TextChecker not available');
           return [];
         }
         
-        const text = editor.getText();
+        const text = textChecker.getText();
         return text.split('\\n').filter(line => line.trim().length > 0);
       }
       
       // Highlight a specific line
       function highlightLine(lineIndex) {
         const editor = globalThis.editor;
-        if (!editor) return;
+        const textChecker = globalThis.textChecker;
+        if (!editor || !textChecker) return;
         
         // Remove previous highlight
         removeLineHighlight();
         
         // Add highlight to current line
-        const text = editor.getText();
+        const text = textChecker.getText();
         const lines = text.split('\\n');
         
         let startIndex = 0;
@@ -101,8 +102,8 @@ export default function TTSButton() {
         
         const lineLength = lines[lineIndex].length;
         
-        // Format the line with a highlight color
-        editor.formatText(startIndex, lineLength, 'background', '#FFEB3B');
+        // Format the line with a highlight color (use 'silent' to not trigger text-change events)
+        editor.formatText(startIndex, lineLength, 'background', '#FFEB3B', 'silent');
         
         console.log(\`🎯 Highlighting line \${lineIndex}\`);
       }
@@ -110,10 +111,11 @@ export default function TTSButton() {
       // Remove line highlight
       function removeLineHighlight() {
         const editor = globalThis.editor;
-        if (!editor) return;
+        const textChecker = globalThis.textChecker;
+        if (!editor || !textChecker) return;
         
-        const text = editor.getText();
-        editor.formatText(0, text.length, 'background', false);
+        const text = textChecker.getText();
+        editor.formatText(0, text.length, 'background', false, 'silent');
       }
       
       // Reading complete callback
@@ -273,6 +275,7 @@ export default function TTSButton() {
         style={{ display: "none" }}
       >
         <button
+          type="button"
           id="tts-read-btn"
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
           title="Read this text aloud"
@@ -294,6 +297,7 @@ export default function TTSButton() {
         </button>
 
         <button
+          type="button"
           id="tts-stop-btn"
           className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2"
           style={{ display: "none" }}
@@ -316,6 +320,7 @@ export default function TTSButton() {
         </button>
 
         <button
+          type="button"
           id="tts-continue-btn"
           className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
           style={{ display: "none" }}
@@ -344,6 +349,7 @@ export default function TTSButton() {
         </button>
 
         <button
+          type="button"
           id="tts-restart-btn"
           className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
           style={{ display: "none" }}

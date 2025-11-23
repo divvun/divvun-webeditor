@@ -83,16 +83,14 @@ export class TTSReader {
   /**
    * Read a single line
    */
-  private async readLine(
+  private readLine(
     text: string,
     language: SupportedLanguage,
     voice: string,
   ): Promise<void> {
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        // Get audio (cached or fresh)
-        const audioBlob = await this.getAudioForLine(text, language, voice);
-
+    return new Promise<void>((resolve, reject) => {
+      // Get audio (cached or fresh)
+      this.getAudioForLine(text, language, voice).then((audioBlob) => {
         // Create audio element
         const audio = new Audio(URL.createObjectURL(audioBlob));
         this.currentAudio = audio;
@@ -107,14 +105,41 @@ export class TTSReader {
         audio.onerror = () => {
           URL.revokeObjectURL(audio.src);
           this.currentAudio = null;
-          reject(new Error("Audio playback failed"));
+
+          // Check if it was aborted (user stopped reading)
+          if (audio.error?.code === MediaError.MEDIA_ERR_ABORTED) {
+            console.debug("⏸️ Audio playback aborted");
+            resolve(); // Resolve instead of reject for user-initiated stops
+          } else {
+            reject(
+              new Error(
+                `Audio playback failed: ${
+                  audio.error?.message || "Unknown error"
+                }`,
+              ),
+            );
+          }
+        };
+
+        // Handle abort event specifically
+        audio.onabort = () => {
+          URL.revokeObjectURL(audio.src);
+          this.currentAudio = null;
+          console.debug("⏸️ Audio playback aborted");
+          resolve(); // User stopped, not an error
         };
 
         // Play the audio
-        await audio.play();
-      } catch (error) {
-        reject(error);
-      }
+        audio.play().catch((error) => {
+          // Check if it's an abort exception
+          if (error instanceof DOMException && error.name === "AbortError") {
+            console.debug("⏸️ Audio play aborted");
+            resolve(); // User stopped, not an error
+          } else {
+            reject(error);
+          }
+        });
+      }).catch(reject);
     });
   }
 

@@ -185,11 +185,29 @@ export class ConfigManager {
     environment?: import("./types.ts").ApiEnvironment,
     checkerType?: import("./types.ts").CheckerType,
   ): void {
+    const targetEnv = environment || this.currentEnvironment;
+    const targetType = checkerType || this.currentCheckerType;
+
+    // Prevent unnecessary language changes (guard against recursion)
+    if (
+      this.config.language === language &&
+      this.currentEnvironment === targetEnv &&
+      this.currentCheckerType === targetType
+    ) {
+      console.debug(
+        "🔧 ConfigManager: Language already set to",
+        language,
+        targetEnv,
+        targetType,
+      );
+      return;
+    }
+
     console.debug(
       "🔧 ConfigManager: Setting language to",
       language,
-      environment || this.currentEnvironment,
-      checkerType || this.currentCheckerType,
+      targetEnv,
+      targetType,
     );
 
     const previousLanguage = this.config.language;
@@ -209,16 +227,18 @@ export class ConfigManager {
     // Notify callback about language change
     this.callbacks.onLanguageChanged(language, this.api);
 
-    // Dispatch custom event for TTS and other features
-    globalThis.dispatchEvent(
-      new CustomEvent("languageChanged", {
-        detail: {
-          language,
-          environment: this.currentEnvironment,
-          checkerType: this.currentCheckerType,
-        },
-      }),
-    );
+    // Dispatch custom event for TTS and other features (use setTimeout to break recursion)
+    setTimeout(() => {
+      globalThis.dispatchEvent(
+        new CustomEvent("languageChanged", {
+          detail: {
+            language,
+            environment: this.currentEnvironment,
+            checkerType: this.currentCheckerType,
+          },
+        }),
+      );
+    }, 0);
   }
 
   /**
