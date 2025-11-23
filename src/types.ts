@@ -97,7 +97,7 @@ export type ApiEnvironment = "stable" | "beta" | "dev";
 
 export type CheckerType = "grammar" | "speller";
 
-export interface AvailableLanguage {
+export interface CheckerCombination {
   code: SupportedLanguage;
   name: string;
   type: CheckerType;

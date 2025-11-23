@@ -1,11 +1,11 @@
 import {
-  getAvailableLanguages,
+  getAvailableCheckerCombinations,
   GrammarCheckerAPI,
   SpellCheckerAPI,
 } from "./api.ts";
 import {
-  AvailableLanguage,
   CheckerApi,
+  CheckerCombination,
   SupportedLanguage,
   TextCheckerConfig,
 } from "./types.ts";
@@ -33,7 +33,7 @@ export interface ConfigurationCallbacks {
 export class ConfigManager {
   private config: TextCheckerConfig;
   private api: CheckerApi;
-  private availableLanguages: AvailableLanguage[] = [];
+  private availableLanguages: CheckerCombination[] = [];
   private callbacks: ConfigurationCallbacks;
   private currentEnvironment: import("./types.ts").ApiEnvironment = "stable";
   private currentCheckerType: import("./types.ts").CheckerType = "grammar";
@@ -134,7 +134,7 @@ export class ConfigManager {
   /**
    * Get available languages list
    */
-  getAvailableLanguages(): AvailableLanguage[] {
+  getAvailableLanguages(): CheckerCombination[] {
     return [...this.availableLanguages];
   }
 
@@ -232,7 +232,7 @@ export class ConfigManager {
 
     try {
       // Fetch available languages from API (already validated and filtered)
-      this.availableLanguages = await getAvailableLanguages();
+      this.availableLanguages = await getAvailableCheckerCombinations();
 
       console.log(
         `🔧 ConfigManager: ${this.availableLanguages.length} working checker combinations loaded`,

@@ -1,7 +1,7 @@
 import type {
   ApiLanguageResponse,
-  AvailableLanguage,
   CheckerApi,
+  CheckerCombination,
   CheckerError,
   CheckerResponse,
   SpellCheckerResponse,
@@ -204,9 +204,9 @@ export class SpellCheckerAPI implements CheckerApi {
 /**
  * Fetch languages from a specific API environment
  */
-async function fetchLanguagesFromEnvironment(
+async function fetchCheckerCombinationsFromEnvironment(
   environment: import("./types.ts").ApiEnvironment,
-): Promise<AvailableLanguage[]> {
+): Promise<CheckerCombination[]> {
   const baseUrls = {
     stable: "https://api.giellalt.org",
     beta: "https://beta.api.giellalt.org",
@@ -223,12 +223,12 @@ async function fetchLanguagesFromEnvironment(
   }
 
   const data: ApiLanguageResponse = await response.json();
-  const languages: AvailableLanguage[] = [];
+  const checkerCombinations: CheckerCombination[] = [];
 
   // Process grammar languages (exclude SMS from grammar as it doesn't work)
   Object.entries(data.available.grammar).forEach(([code, name]) => {
     if (code !== "sms") {
-      languages.push({
+      checkerCombinations.push({
         code: code as SupportedLanguage,
         name: name,
         type: "grammar",
@@ -239,7 +239,7 @@ async function fetchLanguagesFromEnvironment(
 
   // Process speller languages (include all speller languages)
   Object.entries(data.available.speller).forEach(([code, name]) => {
-    languages.push({
+    checkerCombinations.push({
       code: code as SupportedLanguage,
       name: name,
       type: "speller",
@@ -247,7 +247,7 @@ async function fetchLanguagesFromEnvironment(
     });
   });
 
-  return languages;
+  return checkerCombinations;
 }
 
 /**
@@ -255,7 +255,7 @@ async function fetchLanguagesFromEnvironment(
  * Makes a small test request to verify the endpoint is callable
  */
 async function validateCheckerCombination(
-  lang: AvailableLanguage,
+  lang: CheckerCombination,
 ): Promise<boolean> {
   const baseUrls = {
     stable: "https://api.giellalt.org",
@@ -295,15 +295,17 @@ async function validateCheckerCombination(
  * Returns a comprehensive list organized by language, then by environment and checker type
  * Only includes checker combinations that are actually callable
  */
-export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
-  const allLanguages: AvailableLanguage[] = [];
+export async function getAvailableCheckerCombinations(): Promise<
+  CheckerCombination[]
+> {
+  const allCheckerCombinations: CheckerCombination[] = [];
 
   // Fetch from all three environments in parallel
   const environmentPromises = (
     ["stable", "beta", "dev"] as import("./types.ts").ApiEnvironment[]
   ).map(async (environment) => {
     try {
-      return await fetchLanguagesFromEnvironment(environment);
+      return await fetchCheckerCombinationsFromEnvironment(environment);
     } catch (error) {
       console.warn(`Failed to fetch from ${environment}:`, error);
       return []; // Return empty array on failure, don't block other environments
@@ -314,34 +316,36 @@ export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
 
   // Flatten all results
   results.forEach((languageList) => {
-    allLanguages.push(...languageList);
+    allCheckerCombinations.push(...languageList);
   });
 
   console.log(
-    `🔍 Found ${allLanguages.length} checker combinations from API endpoints`,
+    `🔍 Found ${allCheckerCombinations.length} checker combinations from API endpoints`,
   );
 
   // Validate each combination in parallel
   console.log("🔍 Validating checker combinations...");
   const validationResults = await Promise.all(
-    allLanguages.map(async (lang) => ({
+    allCheckerCombinations.map(async (lang) => ({
       lang,
       isValid: await validateCheckerCombination(lang),
     })),
   );
 
   // Filter to only working combinations
-  const workingLanguages = validationResults
+  const workingCheckerCombinations = validationResults
     .filter((result) => result.isValid)
     .map((result) => result.lang);
 
   // Log which ones failed
-  const failedLanguages = validationResults.filter((result) => !result.isValid);
-  if (failedLanguages.length > 0) {
+  const failedCheckerCombinations = validationResults.filter((result) =>
+    !result.isValid
+  );
+  if (failedCheckerCombinations.length > 0) {
     console.warn(
-      `⚠️ ${failedLanguages.length} checker combinations are not callable:`,
+      `⚠️ ${failedCheckerCombinations.length} checker combinations are not callable:`,
     );
-    failedLanguages.forEach(({ lang }) => {
+    failedCheckerCombinations.forEach(({ lang }) => {
       console.warn(
         `  ❌ ${lang.code} (${lang.environment} ${lang.type}): ${lang.name}`,
       );
@@ -349,14 +353,14 @@ export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
   }
 
   console.log(
-    `✅ ${workingLanguages.length} checker combinations are working and available`,
+    `✅ ${workingCheckerCombinations.length} checker combinations are working and available`,
   );
 
   // Sort by: language code, then environment priority (stable > beta > dev), then type (grammar > speller)
   const envPriority = { stable: 0, beta: 1, dev: 2 };
   const typePriority = { grammar: 0, speller: 1 };
 
-  workingLanguages.sort((a, b) => {
+  workingCheckerCombinations.sort((a, b) => {
     // First sort by language code
     if (a.code !== b.code) {
       return a.code.localeCompare(b.code);
@@ -370,7 +374,7 @@ export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
   });
 
   // If no working languages found, return fallback
-  if (workingLanguages.length === 0) {
+  if (workingCheckerCombinations.length === 0) {
     console.warn(
       "⚠️ No working checker combinations found, using fallback languages",
     );
@@ -390,5 +394,5 @@ export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
     ];
   }
 
-  return workingLanguages;
+  return workingCheckerCombinations;
 }
