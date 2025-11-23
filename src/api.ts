@@ -218,16 +218,14 @@ async function fetchCheckerCombinationsFromEnvironment(
   const data: ApiLanguageResponse = await response.json();
   const checkerCombinations: CheckerCombination[] = [];
 
-  // Process grammar languages (exclude SMS from grammar as it doesn't work)
+  // Process grammar languages
   Object.entries(data.available.grammar).forEach(([code, name]) => {
-    if (code !== "sms") {
-      checkerCombinations.push({
-        code: code as SupportedLanguage,
-        name: name,
-        type: "grammar",
-        environment,
-      });
-    }
+    checkerCombinations.push({
+      code: code as SupportedLanguage,
+      name: name,
+      type: "grammar",
+      environment,
+    });
   });
 
   // Process speller languages (include all speller languages)
