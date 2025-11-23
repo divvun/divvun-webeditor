@@ -92,13 +92,23 @@ export class TTSReader {
     return new Promise<void>((resolve, reject) => {
       // Get audio (cached or fresh)
       this.getAudioForLine(text, language, voice).then((audioBlob) => {
-        // Create audio element
-        const audio = new Audio(URL.createObjectURL(audioBlob));
+        // Stop any currently playing audio first
+        if (this.currentAudio) {
+          this.currentAudio.pause();
+          this.currentAudio = null;
+        }
+
+        // Create audio element with blob URL
+        const blobUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(blobUrl);
+
+        // Preload the audio to ensure it's ready
+        audio.preload = "auto";
 
         // Set up event listeners BEFORE playing
         audio.onended = () => {
           console.debug("✅ Audio playback completed");
-          URL.revokeObjectURL(audio.src);
+          URL.revokeObjectURL(blobUrl);
           if (this.currentAudio === audio) {
             this.currentAudio = null;
           }
@@ -106,7 +116,7 @@ export class TTSReader {
         };
 
         audio.onerror = () => {
-          URL.revokeObjectURL(audio.src);
+          URL.revokeObjectURL(blobUrl);
           if (this.currentAudio === audio) {
             this.currentAudio = null;
           }
@@ -128,7 +138,7 @@ export class TTSReader {
 
         // Handle abort event specifically
         audio.onabort = () => {
-          URL.revokeObjectURL(audio.src);
+          URL.revokeObjectURL(blobUrl);
           if (this.currentAudio === audio) {
             this.currentAudio = null;
           }
@@ -136,40 +146,48 @@ export class TTSReader {
           resolve(); // User stopped, not an error
         };
 
-        // Play the audio - await the play promise to ensure it starts
-        audio.play()
-          .then(() => {
-            console.debug(
-              "▶️ Audio playback started, waiting for completion...",
-            );
-            // Only set as current audio after play() succeeds
-            this.currentAudio = audio;
+        // Wait for audio to be loaded before playing
+        audio.oncanplaythrough = () => {
+          console.debug("🎵 Audio loaded and ready to play");
 
-            // Call the callback when playback actually starts
-            if (onPlaybackStart) {
-              console.debug("🎯 Calling highlight callback");
-              onPlaybackStart();
-            }
-            // The resolve() will be called by onended when playback finishes
-          })
-          .catch((error) => {
-            // Clean up and handle play errors
-            console.debug("⚠️ Audio play() failed:", error);
-            URL.revokeObjectURL(audio.src);
-            if (this.currentAudio === audio) {
-              this.currentAudio = null;
-            }
+          // Now play the audio since it's fully loaded
+          audio.play()
+            .then(() => {
+              console.debug(
+                "▶️ Audio playback started, waiting for completion...",
+              );
+              // Only set as current audio after play() succeeds
+              this.currentAudio = audio;
 
-            // Check if it's an abort exception
-            if (
-              error instanceof DOMException && error.name === "AbortError"
-            ) {
-              console.debug("⏸️ Audio play aborted");
-              resolve(); // User stopped, not an error
-            } else {
-              reject(error);
-            }
-          });
+              // Call the callback when playback actually starts
+              if (onPlaybackStart) {
+                console.debug("🎯 Calling highlight callback");
+                onPlaybackStart();
+              }
+              // The resolve() will be called by onended when playback finishes
+            })
+            .catch((error) => {
+              // Clean up and handle play errors
+              console.debug("⚠️ Audio play() failed:", error);
+              URL.revokeObjectURL(blobUrl);
+              if (this.currentAudio === audio) {
+                this.currentAudio = null;
+              }
+
+              // Check if it's an abort exception
+              if (
+                error instanceof DOMException && error.name === "AbortError"
+              ) {
+                console.debug("⏸️ Audio play aborted");
+                resolve(); // User stopped, not an error
+              } else {
+                reject(error);
+              }
+            });
+        };
+
+        // Load the audio - this will trigger oncanplaythrough when ready
+        audio.load();
       }).catch(reject);
     });
   }
