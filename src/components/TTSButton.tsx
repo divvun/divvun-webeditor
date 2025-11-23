@@ -30,11 +30,6 @@ export default function TTSButton() {
           // Find matching voice for current language
           currentVoice = availableVoices.find(v => v.code === currentLang);
           
-          if (!currentVoice) {
-            // Use first available voice as fallback
-            currentVoice = availableVoices[0];
-          }
-          
           if (currentVoice) {
             showTTSButton();
             
@@ -49,7 +44,17 @@ export default function TTSButton() {
               onReadingError
             );
           } else {
+            // No voice for this language - hide TTS controls
+            console.warn(\`No TTS voice available for language: \${currentLang}\`);
             hideTTSButton();
+            
+            // Still create TTS reader in case language changes later
+            ttsReader = new TTSReader(
+              highlightLine,
+              onReadingComplete,
+              onReadingStop,
+              onReadingError
+            );
           }
         } catch (error) {
           console.error('Failed to initialize TTS:', error);
@@ -355,14 +360,17 @@ export default function TTSButton() {
         const detail = event.detail;
         const newLang = detail.language;
         
-        // Update voice selector with voices for new language
-        updateVoiceSelector(newLang);
-        
         // Find voice for new language (prefer first voice)
         const voicesForLang = availableVoices.filter(v => v.code === newLang);
         if (voicesForLang.length > 0) {
           currentVoice = voicesForLang[0];
           console.log(\`🔊 Switched TTS voice to \${currentVoice.voiceLabel} (\${newLang})\`);
+          
+          // Update voice selector with voices for new language
+          updateVoiceSelector(newLang);
+          
+          // Show TTS controls since we have a voice
+          showTTSButton();
           
           // Clear cache when language changes
           if (ttsReader) {
@@ -370,6 +378,9 @@ export default function TTSButton() {
           }
         } else {
           console.warn(\`No TTS voice available for language: \${newLang}\`);
+          // Hide TTS controls when no voice is available
+          hideTTSButton();
+          currentVoice = null;
         }
       });
     })();
