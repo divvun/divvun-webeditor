@@ -6,7 +6,9 @@
     "editor.defaultFormatter": "denoland.vscode-deno"
   },
   "css.lint.unknownAtRules": "ignore",
+  "tailwindCSS.classAttributes": ["className"],
   "tailwindCSS.experimental.classRegex": [
     ["className\\s*=\\s*['\"`]([^'\"`]*)['\"`]", "([^\\s]+)"]
-  ]
+  ],
+  "tailwindCSS.experimental.configFile": null
 }

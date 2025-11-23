@@ -37,9 +37,30 @@ export default {
     // Content classes
     "space-y-6",
     "editor-wrapper",
-    // Button color classes
+    // Button background colors
+    "bg-green-500",
+    "bg-blue-600",
+    "bg-red-500",
+    "bg-purple-500",
+    // Button hover states
     "hover:bg-green-600",
     "hover:bg-blue-500",
+    "hover:bg-red-600",
+    "hover:bg-purple-600",
+    // Utility classes used in components
+    "px-3",
+    "px-4",
+    "py-1",
+    "py-2",
+    "text-white",
+    "text-sm",
+    "text-xs",
+    "rounded-lg",
+    "gap-2",
+    "gap-3",
+    "gap-4",
+    "font-medium",
+    "shadow-sm",
   ],
   theme: {
     extend: {},

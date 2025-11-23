@@ -62,10 +62,7 @@ export default function TTSButton() {
         const selector = document.getElementById('tts-voice-selector');
         const btnRead = document.getElementById('tts-read-btn');
         if (selector) selector.style.display = 'block';
-        if (btnRead) {
-          btnRead.style.display = 'inline-flex';
-          btnRead.style.backgroundColor = '#2563eb';
-        }
+        if (btnRead) btnRead.style.display = 'inline-flex';
       }
       
       // Hide TTS controls
@@ -393,7 +390,7 @@ export default function TTSButton() {
         <button
           type="button"
           id="tts-read-btn"
-          className="px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
           title="Read this text aloud"
           style={{ display: "none" }}
         >
