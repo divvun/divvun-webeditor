@@ -106,7 +106,6 @@ Deno.test("Cursor jump fix - cursor restoration skipped when document changes du
     onHighlightingAborted: () => {},
   };
 
-  // deno-lint-ignore no-explicit-any
   const highlighter = new ErrorHighlighter(
     // deno-lint-ignore no-explicit-any
     editor as any,
@@ -217,7 +216,6 @@ Deno.test("Cursor jump fix - cursor IS restored when document doesn't change", a
     onHighlightingAborted: () => {},
   };
 
-  // deno-lint-ignore no-explicit-any
   const highlighter = new ErrorHighlighter(
     // deno-lint-ignore no-explicit-any
     editor as any,
@@ -293,7 +291,6 @@ Deno.test("Cursor jump fix - line highlighting also skips cursor restoration on 
     onHighlightingAborted: () => {},
   };
 
-  // deno-lint-ignore no-explicit-any
   const highlighter = new ErrorHighlighter(
     // deno-lint-ignore no-explicit-any
     editor as any,
