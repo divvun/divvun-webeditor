@@ -161,10 +161,16 @@ export class TextChecker {
       }
 
       // Store the start line for when state machine triggers the check
-      this.pendingStartLine = startLine;
+      // Keep track of the EARLIEST line that needs checking (minimum of all pending edits)
+      if (
+        this.pendingStartLine === undefined ||
+        (startLine !== undefined && startLine < this.pendingStartLine)
+      ) {
+        this.pendingStartLine = startLine;
+      }
 
       console.debug(
-        `📋 Will check from line ${startLine} when state machine triggers`,
+        `📋 Will check from line ${this.pendingStartLine} when state machine triggers (edit was on line ${startLine})`,
       );
     } catch (error) {
       console.error(`❌ Error in handleEditDetected:`, error);
