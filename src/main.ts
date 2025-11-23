@@ -322,10 +322,10 @@ document.addEventListener("DOMContentLoaded", () => {
     textChecker
       .initializeLanguages()
       .then(() => {
-        console.log("Languages initialized successfully");
+        console.log("✅ Languages initialized successfully");
       })
       .catch((error) => {
-        console.warn("Language initialization failed:", error);
+        console.error("❌ Language initialization failed:", error);
       });
 
     // Make it available globally for debugging

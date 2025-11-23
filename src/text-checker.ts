@@ -107,7 +107,14 @@ export class TextChecker {
   }
 
   async initializeLanguages(): Promise<void> {
-    return await this.configManager.initializeLanguages();
+    this.updateStatus("Initializing languages...", true);
+    try {
+      await this.configManager.initializeLanguages();
+      this.updateStatus("Ready", false);
+    } catch (error) {
+      this.updateStatus("Initialization failed", false, true);
+      throw error;
+    }
   }
 
   public handleTextChange(_source: string, currentText: string): void {
