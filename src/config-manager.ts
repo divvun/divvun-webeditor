@@ -231,13 +231,11 @@ export class ConfigManager {
     console.debug("🔧 ConfigManager: Initializing available languages");
 
     try {
-      // Fetch available languages from API
+      // Fetch available languages from API (already validated and filtered)
       this.availableLanguages = await getAvailableLanguages();
 
-      console.debug(
-        "🔧 ConfigManager: Loaded",
-        this.availableLanguages.length,
-        "languages",
+      console.log(
+        `🔧 ConfigManager: ${this.availableLanguages.length} working checker combinations loaded`,
       );
 
       // Validate that the current language (possibly from URL) is actually available

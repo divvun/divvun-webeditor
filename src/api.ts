@@ -251,8 +251,49 @@ async function fetchLanguagesFromEnvironment(
 }
 
 /**
+ * Validate if a specific checker combination actually works
+ * Makes a small test request to verify the endpoint is callable
+ */
+async function validateCheckerCombination(
+  lang: AvailableLanguage,
+): Promise<boolean> {
+  const baseUrls = {
+    stable: "https://api.giellalt.org",
+    beta: "https://beta.api.giellalt.org",
+    dev: "https://dev.api.giellalt.org",
+  };
+
+  const endpoint = lang.type === "grammar" ? "grammar" : "speller";
+  const url = `${baseUrls[lang.environment]}/${endpoint}/${lang.code}`;
+
+  try {
+    // Make a small test request with minimal text
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text: "test" }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    // Consider 200-299 as success, 404/500+ as failure
+    return response.ok;
+  } catch (_error) {
+    // Any error (timeout, network, etc.) means this combination doesn't work
+    return false;
+  }
+}
+
+/**
  * Fetch available languages from all API environments (stable, beta, dev)
  * Returns a comprehensive list organized by language, then by environment and checker type
+ * Only includes checker combinations that are actually callable
  */
 export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
   const allLanguages: AvailableLanguage[] = [];
@@ -276,11 +317,46 @@ export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
     allLanguages.push(...languageList);
   });
 
+  console.log(
+    `🔍 Found ${allLanguages.length} checker combinations from API endpoints`,
+  );
+
+  // Validate each combination in parallel
+  console.log("🔍 Validating checker combinations...");
+  const validationResults = await Promise.all(
+    allLanguages.map(async (lang) => ({
+      lang,
+      isValid: await validateCheckerCombination(lang),
+    })),
+  );
+
+  // Filter to only working combinations
+  const workingLanguages = validationResults
+    .filter((result) => result.isValid)
+    .map((result) => result.lang);
+
+  // Log which ones failed
+  const failedLanguages = validationResults.filter((result) => !result.isValid);
+  if (failedLanguages.length > 0) {
+    console.warn(
+      `⚠️ ${failedLanguages.length} checker combinations are not callable:`,
+    );
+    failedLanguages.forEach(({ lang }) => {
+      console.warn(
+        `  ❌ ${lang.code} (${lang.environment} ${lang.type}): ${lang.name}`,
+      );
+    });
+  }
+
+  console.log(
+    `✅ ${workingLanguages.length} checker combinations are working and available`,
+  );
+
   // Sort by: language code, then environment priority (stable > beta > dev), then type (grammar > speller)
   const envPriority = { stable: 0, beta: 1, dev: 2 };
   const typePriority = { grammar: 0, speller: 1 };
 
-  allLanguages.sort((a, b) => {
+  workingLanguages.sort((a, b) => {
     // First sort by language code
     if (a.code !== b.code) {
       return a.code.localeCompare(b.code);
@@ -293,9 +369,11 @@ export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
     return typePriority[a.type] - typePriority[b.type];
   });
 
-  // If all fetches failed, return fallback
-  if (allLanguages.length === 0) {
-    console.warn("All API environments failed, using fallback languages");
+  // If no working languages found, return fallback
+  if (workingLanguages.length === 0) {
+    console.warn(
+      "⚠️ No working checker combinations found, using fallback languages",
+    );
     return [
       {
         code: "se",
@@ -312,5 +390,5 @@ export async function getAvailableLanguages(): Promise<AvailableLanguage[]> {
     ];
   }
 
-  return allLanguages;
+  return workingLanguages;
 }

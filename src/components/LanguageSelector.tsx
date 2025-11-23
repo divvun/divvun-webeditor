@@ -13,6 +13,7 @@ export default function LanguageSelector() {
         
         try {
           // Import the getAvailableLanguages function dynamically
+          // Note: This function validates each checker combination and only returns working ones
           const { getAvailableLanguages } = await import('/api.js');
           availableLanguages = await getAvailableLanguages();
           
