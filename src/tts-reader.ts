@@ -95,8 +95,9 @@ export class TTSReader {
         const audio = new Audio(URL.createObjectURL(audioBlob));
         this.currentAudio = audio;
 
-        // Set up event listeners
+        // Set up event listeners BEFORE playing
         audio.onended = () => {
+          console.debug("✅ Audio playback completed");
           URL.revokeObjectURL(audio.src);
           this.currentAudio = null;
           resolve();
@@ -129,8 +130,15 @@ export class TTSReader {
           resolve(); // User stopped, not an error
         };
 
-        // Play the audio
-        audio.play().catch((error) => {
+        // Play the audio - await the play promise to ensure it starts
+        audio.play().then(() => {
+          console.debug("▶️ Audio playback started, waiting for completion...");
+          // The resolve() will be called by onended when playback finishes
+        }).catch((error) => {
+          // Clean up and handle play errors
+          URL.revokeObjectURL(audio.src);
+          this.currentAudio = null;
+
           // Check if it's an abort exception
           if (error instanceof DOMException && error.name === "AbortError") {
             console.debug("⏸️ Audio play aborted");
