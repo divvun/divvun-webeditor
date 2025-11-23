@@ -67,6 +67,7 @@ export type CheckerState =
   | "idle" // Ready for user input
   | "editing" // User is making changes (debouncing)
   | "checking" // Performing text check AND highlighting (atomic operation)
+  | "reading" // Text-to-speech is reading the text (prevents checker transitions)
   | "failed"; // Text check failed, awaiting retry
 
 export interface CheckingContext {

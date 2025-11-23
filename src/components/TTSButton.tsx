@@ -123,12 +123,21 @@ export default function TTSButton() {
         console.log('✅ Reading completed');
         removeLineHighlight();
         updateButtonState('idle');
+        
+        // Notify state machine that TTS has stopped
+        const textChecker = globalThis.textChecker;
+        if (textChecker && textChecker.stateMachine) {
+          textChecker.stateMachine.stopReading();
+        }
       }
       
       // Reading stopped callback
       function onReadingStop() {
         console.log('⏸️ Reading stopped');
         updateButtonState('paused');
+        
+        // Note: stateMachine.stopReading() is already called in onStopClick()
+        // before this callback is triggered, so we don't need to call it here
       }
       
       // Error callback
@@ -136,6 +145,13 @@ export default function TTSButton() {
         console.error('❌ Reading error:', error);
         removeLineHighlight();
         updateButtonState('idle');
+        
+        // Notify state machine that TTS has stopped
+        const textChecker = globalThis.textChecker;
+        if (textChecker && textChecker.stateMachine) {
+          textChecker.stateMachine.stopReading();
+        }
+        
         alert('Failed to read text: ' + error.message);
       }
       
@@ -178,6 +194,12 @@ export default function TTSButton() {
           return;
         }
         
+        // Notify state machine that TTS is starting
+        const textChecker = globalThis.textChecker;
+        if (textChecker && textChecker.stateMachine) {
+          textChecker.stateMachine.startReading();
+        }
+        
         updateButtonState('playing');
         
         try {
@@ -191,6 +213,12 @@ export default function TTSButton() {
       function onStopClick() {
         if (!ttsReader) return;
         ttsReader.stop();
+        
+        // Notify state machine that TTS has stopped
+        const textChecker = globalThis.textChecker;
+        if (textChecker && textChecker.stateMachine) {
+          textChecker.stateMachine.stopReading();
+        }
       }
       
       // Continue button click
@@ -198,6 +226,13 @@ export default function TTSButton() {
         if (!ttsReader || !currentVoice) return;
         
         const lines = getEditorLines();
+        
+        // Notify state machine that TTS is starting
+        const textChecker = globalThis.textChecker;
+        if (textChecker && textChecker.stateMachine) {
+          textChecker.stateMachine.startReading();
+        }
+        
         updateButtonState('playing');
         
         try {
@@ -212,6 +247,13 @@ export default function TTSButton() {
         if (!ttsReader || !currentVoice) return;
         
         const lines = getEditorLines();
+        
+        // Notify state machine that TTS is starting
+        const textChecker = globalThis.textChecker;
+        if (textChecker && textChecker.stateMachine) {
+          textChecker.stateMachine.startReading();
+        }
+        
         updateButtonState('playing');
         
         try {

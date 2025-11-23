@@ -236,8 +236,13 @@ export class CheckerStateMachine {
   onCheckComplete(): void {
     // Checking is now done - this includes both API call and highlighting
     // Transition directly to idle since highlighting is part of the checking state
+    // But don't transition if we're in reading state (TTS is active)
     if (this.currentState === "checking") {
       this.transitionTo("idle", "check-complete");
+    } else if (this.currentState === "reading") {
+      console.log(
+        "⏭️ Check completed during TTS reading, staying in reading state",
+      );
     }
   }
 
@@ -347,6 +352,24 @@ export class CheckerStateMachine {
   }
 
   /**
+   * Start TTS reading - transitions to reading state to prevent checker interference
+   */
+  startReading(): void {
+    console.log(`📖 Starting TTS reading from ${this.currentState} state`);
+    this.transitionTo("reading", "tts-start");
+  }
+
+  /**
+   * Stop TTS reading - transitions back to idle state
+   */
+  stopReading(): void {
+    console.log(`📕 Stopping TTS reading from ${this.currentState} state`);
+    if (this.currentState === "reading") {
+      this.transitionTo("idle", "tts-stop");
+    }
+  }
+
+  /**
    * Force transition to idle state (for cleanup)
    */
   forceIdle(): void {
@@ -397,6 +420,9 @@ export class CheckerStateMachine {
           this.checkTimeout = null;
         }
         break;
+      case "reading":
+        // No cleanup needed for reading (TTS handles its own state)
+        break;
       case "failed":
         // No cleanup needed for failed
         break;
@@ -419,6 +445,10 @@ export class CheckerStateMachine {
         // Request text check to be performed (includes highlighting)
         console.log(`🔍 Requesting text check (includes highlighting)...`);
         this.callbacks.onCheckRequested();
+        break;
+      case "reading":
+        // TTS reading state - prevents checker from interfering
+        console.log(`📖 Entered reading state - checker transitions blocked`);
         break;
       case "failed":
         // Failed state - awaiting retry

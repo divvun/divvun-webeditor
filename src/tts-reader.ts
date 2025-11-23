@@ -87,25 +87,29 @@ export class TTSReader {
     text: string,
     language: SupportedLanguage,
     voice: string,
+    onPlaybackStart?: () => void,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       // Get audio (cached or fresh)
       this.getAudioForLine(text, language, voice).then((audioBlob) => {
         // Create audio element
         const audio = new Audio(URL.createObjectURL(audioBlob));
-        this.currentAudio = audio;
 
         // Set up event listeners BEFORE playing
         audio.onended = () => {
           console.debug("✅ Audio playback completed");
           URL.revokeObjectURL(audio.src);
-          this.currentAudio = null;
+          if (this.currentAudio === audio) {
+            this.currentAudio = null;
+          }
           resolve();
         };
 
         audio.onerror = () => {
           URL.revokeObjectURL(audio.src);
-          this.currentAudio = null;
+          if (this.currentAudio === audio) {
+            this.currentAudio = null;
+          }
 
           // Check if it was aborted (user stopped reading)
           if (audio.error?.code === MediaError.MEDIA_ERR_ABORTED) {
@@ -125,28 +129,47 @@ export class TTSReader {
         // Handle abort event specifically
         audio.onabort = () => {
           URL.revokeObjectURL(audio.src);
-          this.currentAudio = null;
+          if (this.currentAudio === audio) {
+            this.currentAudio = null;
+          }
           console.debug("⏸️ Audio playback aborted");
           resolve(); // User stopped, not an error
         };
 
         // Play the audio - await the play promise to ensure it starts
-        audio.play().then(() => {
-          console.debug("▶️ Audio playback started, waiting for completion...");
-          // The resolve() will be called by onended when playback finishes
-        }).catch((error) => {
-          // Clean up and handle play errors
-          URL.revokeObjectURL(audio.src);
-          this.currentAudio = null;
+        audio.play()
+          .then(() => {
+            console.debug(
+              "▶️ Audio playback started, waiting for completion...",
+            );
+            // Only set as current audio after play() succeeds
+            this.currentAudio = audio;
 
-          // Check if it's an abort exception
-          if (error instanceof DOMException && error.name === "AbortError") {
-            console.debug("⏸️ Audio play aborted");
-            resolve(); // User stopped, not an error
-          } else {
-            reject(error);
-          }
-        });
+            // Call the callback when playback actually starts
+            if (onPlaybackStart) {
+              console.debug("🎯 Calling highlight callback");
+              onPlaybackStart();
+            }
+            // The resolve() will be called by onended when playback finishes
+          })
+          .catch((error) => {
+            // Clean up and handle play errors
+            console.debug("⚠️ Audio play() failed:", error);
+            URL.revokeObjectURL(audio.src);
+            if (this.currentAudio === audio) {
+              this.currentAudio = null;
+            }
+
+            // Check if it's an abort exception
+            if (
+              error instanceof DOMException && error.name === "AbortError"
+            ) {
+              console.debug("⏸️ Audio play aborted");
+              resolve(); // User stopped, not an error
+            } else {
+              reject(error);
+            }
+          });
       }).catch(reject);
     });
   }
@@ -185,11 +208,11 @@ export class TTSReader {
 
         this.state.currentLine = i;
 
-        // Highlight current line
-        this.onLineHighlight?.(i);
-
-        // Read the line
-        await this.readLine(line, language, voice);
+        // Read the line - highlight when playback actually starts
+        await this.readLine(line, language, voice, () => {
+          // Highlight when audio starts playing
+          this.onLineHighlight?.(i);
+        });
       }
 
       // Completed successfully
