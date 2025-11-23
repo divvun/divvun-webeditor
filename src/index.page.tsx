@@ -4,6 +4,7 @@ import {
   EditorContainer,
   LanguageSelector,
   StatusBar,
+  TTSButton,
 } from "./components/index.ts";
 
 export const title = "Divvun Grammar and Spell Checker";
@@ -17,6 +18,7 @@ export default function TextCheckerEditor() {
       <Controls>
         <LanguageSelector />
         <ClearButton />
+        <TTSButton />
       </Controls>
       <EditorContainer />
       <StatusBar />

@@ -26,7 +26,11 @@ import {
   ConfigManager,
   type ConfigurationCallbacks,
 } from "./config-manager.ts";
-import { QuillBridge, registerQuillBlots } from "./quill-bridge-instance.ts";
+import {
+  QuillBridge,
+  type QuillBridgeInstance,
+  registerQuillBlots,
+} from "./quill-bridge-instance.ts";
 import { TextChecker } from "./text-checker.ts";
 import { LRUCache } from "./lru-cache.ts";
 import { showUpdateNotification, VersionChecker } from "./version-checker.ts";
@@ -326,8 +330,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Make it available globally for debugging
     (
-      globalThis as unknown as { textChecker?: TextChecker }
+      globalThis as unknown as {
+        textChecker?: TextChecker;
+        editor?: QuillBridgeInstance;
+      }
     ).textChecker = textChecker;
+
+    // Make editor available globally for TTS and other features
+    (
+      globalThis as unknown as { editor?: QuillBridgeInstance }
+    ).editor = editor;
 
     // Restore editor content if this is after a version upgrade
     if (VersionChecker.hasContentToRestore()) {

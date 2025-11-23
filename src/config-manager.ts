@@ -208,6 +208,17 @@ export class ConfigManager {
 
     // Notify callback about language change
     this.callbacks.onLanguageChanged(language, this.api);
+
+    // Dispatch custom event for TTS and other features
+    globalThis.dispatchEvent(
+      new CustomEvent("languageChanged", {
+        detail: {
+          language,
+          environment: this.currentEnvironment,
+          checkerType: this.currentCheckerType,
+        },
+      }),
+    );
   }
 
   /**

@@ -6,6 +6,7 @@ export { default as ClearButton } from "./ClearButton.tsx";
 export { default as RetryButton } from "./RetryButton.tsx";
 export { default as StatusBar } from "./StatusBar.tsx";
 export { default as EditorContainer } from "./EditorContainer.tsx";
+export { default as TTSButton } from "./TTSButton.tsx";
 
 // Export types
 export type { ControlsProps } from "./Controls.tsx";
