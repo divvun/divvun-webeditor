@@ -57,6 +57,14 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
+  // Skip service worker for API requests - always go directly to network
+  if (
+    url.hostname.includes("api.giellalt.org") ||
+    url.hostname.includes("api-giellalt.uit.no")
+  ) {
+    return; // Don't intercept, let the request go through normally
+  }
+
   // For HTML pages, always go network first to check for new versions
   if (event.request.mode === "navigate" || url.pathname === "/") {
     event.respondWith(
