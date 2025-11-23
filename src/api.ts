@@ -8,17 +8,21 @@ import type {
   SupportedLanguage,
 } from "./types.ts";
 
+/**
+ * Base URLs for all API environments
+ */
+const API_BASE_URLS = {
+  stable: "https://api.giellalt.org",
+  beta: "https://beta.api.giellalt.org",
+  dev: "https://dev.api.giellalt.org",
+} as const;
+
 export class GrammarCheckerAPI implements CheckerApi {
   private readonly baseUrl: string;
   private readonly timeout = 10000; // 10 seconds
 
   constructor(environment: import("./types.ts").ApiEnvironment = "stable") {
-    const baseUrls = {
-      stable: "https://api.giellalt.org/grammar",
-      beta: "https://beta.api.giellalt.org/grammar",
-      dev: "https://dev.api.giellalt.org/grammar",
-    };
-    this.baseUrl = baseUrls[environment];
+    this.baseUrl = `${API_BASE_URLS[environment]}/grammar`;
   }
 
   async checkText(
@@ -99,12 +103,7 @@ export class SpellCheckerAPI implements CheckerApi {
   private readonly timeout = 10000; // 10 seconds
 
   constructor(environment: import("./types.ts").ApiEnvironment = "stable") {
-    const baseUrls = {
-      stable: "https://api.giellalt.org/speller",
-      beta: "https://beta.api.giellalt.org/speller",
-      dev: "https://dev.api.giellalt.org/speller",
-    };
-    this.baseUrl = baseUrls[environment];
+    this.baseUrl = `${API_BASE_URLS[environment]}/speller`;
   }
 
   async checkText(
@@ -207,13 +206,7 @@ export class SpellCheckerAPI implements CheckerApi {
 async function fetchCheckerCombinationsFromEnvironment(
   environment: import("./types.ts").ApiEnvironment,
 ): Promise<CheckerCombination[]> {
-  const baseUrls = {
-    stable: "https://api.giellalt.org",
-    beta: "https://beta.api.giellalt.org",
-    dev: "https://dev.api.giellalt.org",
-  };
-
-  const baseUrl = baseUrls[environment];
+  const baseUrl = API_BASE_URLS[environment];
   const response = await fetch(`${baseUrl}/languages`);
 
   if (!response.ok) {
@@ -257,14 +250,8 @@ async function fetchCheckerCombinationsFromEnvironment(
 async function validateCheckerCombination(
   lang: CheckerCombination,
 ): Promise<boolean> {
-  const baseUrls = {
-    stable: "https://api.giellalt.org",
-    beta: "https://beta.api.giellalt.org",
-    dev: "https://dev.api.giellalt.org",
-  };
-
   const endpoint = lang.type === "grammar" ? "grammar" : "speller";
-  const url = `${baseUrls[lang.environment]}/${endpoint}/${lang.code}`;
+  const url = `${API_BASE_URLS[lang.environment]}/${endpoint}/${lang.code}`;
 
   try {
     // Make a small test request with minimal text
