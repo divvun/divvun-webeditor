@@ -37,6 +37,9 @@ export default {
     // Content classes
     "space-y-6",
     "editor-wrapper",
+    // Button color classes
+    "hover:bg-green-600",
+    "hover:bg-blue-500",
   ],
   theme: {
     extend: {},
