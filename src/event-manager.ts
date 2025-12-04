@@ -229,6 +229,111 @@ export class EventManager {
         // ignore
       }
     });
+
+    // Touch support for mobile devices
+    let touchStartTime = 0;
+    let touchStartTarget: EventTarget | null = null;
+
+    this.editor.root.addEventListener("touchstart", (e: TouchEvent) => {
+      touchStartTime = Date.now();
+      touchStartTarget = e.target;
+    });
+
+    this.editor.root.addEventListener("touchend", (e: TouchEvent) => {
+      const touchDuration = Date.now() - touchStartTime;
+      const target = e.target as HTMLElement;
+
+      // Check if this was a tap (not a long press or scroll)
+      if (touchDuration < 500 && touchStartTarget === e.target) {
+        const errorNode = target.closest(
+          ".grammar-typo, .grammar-other",
+        ) as HTMLElement;
+        if (!errorNode) return;
+
+        // Use Quill's blot find to determine index and length
+        try {
+          const blot = this.editor.findBlot
+            ? this.editor.findBlot(errorNode)
+            : undefined;
+          const index = this.editor.getIndex && blot !== undefined
+            ? this.editor.getIndex(blot)
+            : 0;
+          const maybeLength =
+            blot && typeof (blot as { length?: unknown }).length === "function"
+              ? (blot as { length: () => number }).length()
+              : 0;
+          const length = maybeLength ?? 0;
+
+          // Find matching error by index
+          const matching = this.errors.find(
+            (err) =>
+              err.start_index === index &&
+              err.end_index - err.start_index === length,
+          );
+          if (matching) {
+            // Convert touch event to have clientX/clientY like MouseEvent
+            const touch = e.changedTouches[0];
+            const syntheticEvent = {
+              clientX: touch.clientX,
+              clientY: touch.clientY,
+              preventDefault: () => e.preventDefault(),
+              stopPropagation: () => e.stopPropagation(),
+            } as MouseEvent;
+
+            this.callbacks.onErrorClick(
+              errorNode,
+              matching,
+              index,
+              length,
+              syntheticEvent,
+            );
+          }
+        } catch (_err) {
+          // ignore
+        }
+      }
+    });
+
+    // Long press for context menu on mobile
+    let longPressTimer: number | undefined;
+    let longPressTarget: EventTarget | null = null;
+
+    this.editor.root.addEventListener("touchstart", (e: TouchEvent) => {
+      longPressTarget = e.target;
+      const touch = e.touches[0];
+
+      longPressTimer = setTimeout(() => {
+        const target = e.target as HTMLElement;
+        const matchingError = this.findErrorAtPosition({
+          target,
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+        } as MouseEvent);
+
+        if (matchingError) {
+          e.preventDefault(); // Prevent text selection
+          this.callbacks.onErrorRightClick(
+            touch.clientX,
+            touch.clientY,
+            matchingError,
+          );
+        }
+      }, 500); // 500ms for long press
+    }, { passive: false });
+
+    this.editor.root.addEventListener("touchmove", () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = undefined;
+      }
+    });
+
+    this.editor.root.addEventListener("touchend", () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = undefined;
+      }
+    });
   }
 
   private isUndoOperation(currentText: string, source: string): boolean {
