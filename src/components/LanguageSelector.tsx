@@ -216,7 +216,7 @@ export default function LanguageSelector() {
       </label>
       <select
         id="language-select"
-        className="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm min-w-0 flex-shrink-0"
+        className="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm min-w-0 shrink-0"
       >
         {/* Options will be populated dynamically */}
         <option value="se">Loading...</option>

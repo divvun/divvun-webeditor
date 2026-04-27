@@ -6,7 +6,6 @@ import type {
   CheckerResponse,
   SpellCheckerResponse,
   SupportedLanguage,
-  TTSRequest,
   TTSVoice,
 } from "./types.ts";
 
