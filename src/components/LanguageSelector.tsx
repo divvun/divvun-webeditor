@@ -12,10 +12,13 @@ export default function LanguageSelector() {
         if (!select) return;
         
         try {
-          // Import the getAvailableCheckerCombinations function dynamically
-          // Note: This function validates each checker combination and only returns working ones
-          const { getAvailableCheckerCombinations } = await import('/api.js');
-          availableLanguages = await getAvailableCheckerCombinations();
+          // Fetch the pre-built language list generated at build time.
+          // This avoids hitting the upstream giellalt APIs from every client.
+          const resp = await fetch('/languages.json');
+          if (!resp.ok) {
+            throw new Error(\`Failed to fetch languages: \${resp.status}\`);
+          }
+          availableLanguages = await resp.json();
           
           // Check if we got any valid combinations
           if (availableLanguages.length === 0) {
